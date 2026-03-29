@@ -1,36 +1,6 @@
 {
   "devices": [
     {
-      "ip": "192.168.1.50",
-      "name": "Pi-Hole",
-      "notes": "AV Control",
-      "type": "generic",
-      "vlan": "Home Network"
-    },
-    {
-      "ip": "192.168.1.101",
-      "name": "Chris-XPS.local",
-      "notes": "Discovered from subnet scan",
-      "type": "generic",
-      "vlan": "Home Network"
-    },
-    {
-      "ip": "192.168.1.1",
-      "mac": "\u2014",
-      "name": "\u2014",
-      "notes": "Auto-discovered ()",
-      "type": "windows-host",
-      "vendor": "",
-      "vlan": "Home Network"
-    },
-    {
-      "ip": "192.168.1.145",
-      "name": "NV21-01",
-      "notes": "",
-      "type": "qsys",
-      "vlan": "Home Network"
-    },
-    {
       "ip": "10.110.50.108",
       "mac": "",
       "name": "CCU-SR-CORE.local",
@@ -65,6 +35,42 @@
       "type": "web-device",
       "vendor": "",
       "vlan": "AV_Control"
+    },
+    {
+      "ip": "10.110.50.115",
+      "mac": "",
+      "name": "pi.hole",
+      "notes": "Auto-discovered",
+      "type": "network-device",
+      "vendor": "",
+      "vlan": ""
+    },
+    {
+      "ip": "10.110.50.1",
+      "mac": "\u2014",
+      "name": "switch.local",
+      "notes": "Auto-discovered ()",
+      "type": "telnet-device",
+      "vendor": "",
+      "vlan": ""
+    },
+    {
+      "ip": "10.110.50.102",
+      "mac": "\u2014",
+      "name": "QSYS-TP-01",
+      "notes": "Q-SYS touchpanel",
+      "type": "qsys-touchpanel",
+      "vendor": "",
+      "vlan": ""
+    },
+    {
+      "ip": "10.110.50.254",
+      "mac": "\u2014",
+      "name": "\u2014",
+      "notes": "Auto-discovered ()",
+      "type": "telnet-device",
+      "vendor": "",
+      "vlan": ""
     }
   ]
 }
