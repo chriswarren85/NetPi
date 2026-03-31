@@ -742,3 +742,13 @@ ame as the saved label
   - Repaired the Devices page Validate All regression after the VLAN UI cleanup by restoring a valid backend response shape
   - Fingerprinting now persists updated device types for matching saved devices when a weak stored type can be safely promoted to a stronger inferred type
   - Diagnostics fingerprint follow-up now reports how many saved device type updates were written during the run
+
+### Last Update
+- Feature: guessed_type now follows fingerprint platform
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Updated /tools/api/fingerprint_host so guessed_type now derives from ingerprint.platform when a strong platform is identified
+  - Preserved the existing fallback guess logic for cases where fingerprint platform remains unknown
+  - Left the existing saved-device persistence logic unchanged so type promotion now works naturally once guessed_type is stronger

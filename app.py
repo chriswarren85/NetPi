@@ -6,7 +6,7 @@ from checks.devices import run_device_checks
 import io
 import ipaddress
 import re
-from checks.validation import run_validation, run_validation_for_all
+from checks.validation import run_validation, run_validation_for_all, infer_fingerprint
 
 app = Flask(__name__)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
@@ -1013,6 +1013,11 @@ def fingerprint_host():
             guessed = 'projector'
         elif ('axis' in vendor or 'hikvision' in vendor or 'dahua' in vendor) and has_any(80, 443, 554, 8554):
             guessed = 'camera'
+
+        fingerprint = infer_fingerprint(guessed, open_ports, {})
+        fingerprint_platform = normalize_platform_name((fingerprint or {}).get("platform"))
+        if fingerprint_platform and fingerprint_platform != "unknown":
+            guessed = fingerprint_platform
 
         devices = load_devices()
         updated_device = None
