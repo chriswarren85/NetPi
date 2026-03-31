@@ -334,10 +334,6 @@ Added backend cross-device readiness validation for AV systems.
 - `crestron_uc_to_touchpanel`
   - checks whether a Crestron UC engine and touch panel both validate successfully
   - requires target ports `41795` and `443`
-- `qsys_to_touchpanel`
-  - lightweight mixed-system readiness check
-  - requires target secure web path on touch panel
-
 ### Important limitation
 These are readiness / inference checks based on NetPi observations.
 They do **not** yet prove a source-initiated session from the actual AV endpoint itself.
@@ -440,7 +436,6 @@ Date: 2026-03-30
   - `crestron_control_to_qsys`
   - `crestron_control_to_biamp`
   - `crestron_uc_to_touchpanel`
-  - `qsys_to_touchpanel`
 
 ### Important implementation notes
 - `PROJECT_STATE.md` remains the single source of truth
@@ -624,3 +619,13 @@ ASSUME:
   - Tightened Q-SYS role inference so generic web devices are no longer treated as Q-SYS from weak signals alone
   - Prevented low-confidence Q-SYS fingerprint fallback from reinforcing stale or weak auto-typing
   - Improved system validation skip reasons with Q-SYS-specific missing-device messages
+
+### Last Update
+- Feature: Removed legacy generic Q-SYS touchpanel rule
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Removed the older `qsys_to_touchpanel` system rule so Q-SYS messaging now follows the stricter `qsys-core` to `qsys-touchpanel` model
+  - Dropped the stale graph label mapping tied to the removed generic Q-SYS touchpanel rule

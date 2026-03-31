@@ -1493,7 +1493,6 @@ def build_detected_systems(devices, system_results):
             "crestron_control_to_qsys": "control",
             "crestron_control_to_biamp": "control",
             "crestron_uc_to_touchpanel": "ui",
-            "qsys_to_touchpanel": "ui",
         }
         return mapping.get(system_check, "link")
 
@@ -1730,6 +1729,5 @@ def api_validate_systems():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
-
 
 

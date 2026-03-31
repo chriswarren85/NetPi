@@ -757,16 +757,6 @@ SYSTEM_VALIDATION_RULES = [
         "inference_note": "Readiness inferred from port presence only"
     },
     {
-        "name": "qsys_to_touchpanel",
-        "relationship_type": "control",
-        "source_types": ["qsys"],
-        "target_types": ["tp1070", "touchpanel", "crestron_touchpanel"],
-        "required_target_ports": [443],
-        "port_mode": "any",
-        "description": "Touch panel should expose a reachable secure UI path in mixed AV systems",
-        "inference_note": "Readiness inferred from target validation only"
-    },
-    {
         "name": "qsys_core_to_nv",
         "relationship_type": "media_flow",
         "source_types": ["qsys-core"],
