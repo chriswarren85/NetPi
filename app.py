@@ -956,35 +956,49 @@ def add_bulk_devices():
     data = request.json or {}
     devices_in = data.get("devices", [])
 
+    devices, summary = add_discovered_devices_to_inventory(devices_in)
+    save_devices_file(devices)
+
+    return jsonify({"success": True, "added": summary["added"]})
+
+
+def add_discovered_devices_to_inventory(devices_in):
     devices = load_devices()
     added = 0
+    skipped_existing = 0
 
     for d in devices_in:
-        ip = d.get("ip")
+        ip = (d.get("ip") or "").strip()
         if not ip:
             continue
 
         if any(existing.get("ip") == ip for existing in devices):
+            skipped_existing += 1
             continue
 
-        device_type = d.get("type", "generic")
-        preferred_name = d.get("hostname") or ""
+        device_type = (d.get("type") or "generic").strip() or "generic"
+        preferred_name = (d.get("name") or d.get("hostname") or "").strip()
+        vendor = (d.get("vendor") or "").strip()
+        notes = (d.get("notes") or "").strip()
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
         devices.append({
             "name": generated_name,
             "ip": ip,
             "type": device_type,
-            "vlan": d.get("vlan", ""),
-            "notes": f"Auto-discovered ({d.get('vendor','')})",
-            "mac": d.get("mac", ""),
-            "vendor": d.get("vendor", "")
+            "vlan": (d.get("vlan") or "").strip(),
+            "notes": notes or (f"Auto-discovered ({vendor})" if vendor else "Auto-discovered"),
+            "mac": (d.get("mac") or "").strip(),
+            "vendor": vendor
         })
         added += 1
 
-    save_devices_file(devices)
+    return devices, {
+        "added": added,
+        "skipped_existing": skipped_existing,
+        "total_seen": len(devices_in)
+    }
 
-    return jsonify({"success": True, "added": added})
 
 @app.route("/tools/api/devices/add_discovered", methods=["POST"])
 def add_discovered_device():
@@ -1018,6 +1032,25 @@ def add_discovered_device():
 
     save_devices_file(devices)
     return jsonify({"success": True, "message": f"Device added as {name}"})
+
+
+@app.route("/tools/api/devices/add_all_discovered", methods=["POST"])
+def add_all_discovered_devices():
+    data = request.json or {}
+    devices_in = data.get("devices", [])
+
+    if not isinstance(devices_in, list):
+        return jsonify({"error": "devices must be a list"}), 400
+
+    devices, summary = add_discovered_devices_to_inventory(devices_in)
+    save_devices_file(devices)
+
+    return jsonify({
+        "success": True,
+        "added": summary["added"],
+        "skipped_existing": summary["skipped_existing"],
+        "total_seen": summary["total_seen"]
+    })
 
 @app.route("/tools/api/checks/export_csv")
 def export_csv():
@@ -1738,4 +1771,3 @@ def api_validate_systems():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
-

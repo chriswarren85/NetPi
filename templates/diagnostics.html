@@ -38,6 +38,7 @@
 
     <button class="btn btn-primary" id="run-btn" onclick="runChecks()">▶ Run all checks</button>
     <button class="btn" id="discover-btn" onclick="discoverHosts()">🔎 Discover Hosts</button>
+    <button class="btn btn-primary" id="add-all-discovered-btn" onclick="addAllDiscovered()" disabled>Add All Discovered</button>
     <button class="btn" id="cancel-discover-btn" onclick="cancelDiscovery()" style="display:none">✖ Cancel Discovery</button>
   </div>
 
@@ -46,29 +47,6 @@
     <button class="btn" onclick="downloadCSV()">⬇ Export CSV</button>
     <button class="btn" onclick="openReport()">📄 Open Report</button>
     <button class="btn" onclick="window.location.href='/tools/devices'">Manage devices</button>
-
-<div class="panel" style="margin-bottom:1rem">
-  <div class="panel-header">Paste Device List</div>
-  <div class="panel-body">
-
-    <textarea id="pasted-device-text"
-      style="width:100%; min-height:160px; font-family:monospace; resize:vertical;"
-      placeholder="Name	IP	VLAN	Type	MAC	Vendor	Notes
-DSP-01	192.168.1.20	10	DSP	00:11:22:33:44:55	Biamp	Main DSP
-SW-01	192.168.1.10	10	network-device		Cisco	Core switch"></textarea>
-
-    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn" onclick="previewPastedDevices()">👁 Preview</button>
-      <button class="btn btn-primary" onclick="importPastedDevices()">➕ Import</button>
-      <button class="btn" onclick="clearPastedDevices()">✖ Clear</button>
-    </div>
-
-    <div id="paste-import-summary" style="margin-top:10px;"></div>
-    <div id="paste-import-invalid" style="margin-top:10px;"></div>
-    <div id="paste-import-preview" style="margin-top:10px; overflow-x:auto;"></div>
-
-  </div>
-</div>
 
   </div>
 </div>
@@ -268,6 +246,7 @@ function discoverHosts(){
 
       const tbody = document.getElementById('discover-results');
       tbody.innerHTML = '';
+      document.getElementById('add-all-discovered-btn').disabled = true;
 
       if(!data.devices || data.devices.length === 0){
         tbody.innerHTML = `<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No live hosts found on ${data.subnet}</td></tr>`;
@@ -297,6 +276,7 @@ function discoverHosts(){
           tbody.appendChild(tr);
           fingerprintHost(d.ip);
         });
+        document.getElementById('add-all-discovered-btn').disabled = false;
       }
 
       document.getElementById('discover-panel').style.display = 'block';
@@ -399,31 +379,43 @@ function addDiscovered(ip, hostname){
       alert('Error adding device: ' + e);
     });
 }
-function addSelected(){
+
+function collectDiscoveredDevices(selectedOnly){
   const rows = document.querySelectorAll('#discover-results tr');
   const vlan = document.getElementById('vlan-select').value;
-
   const devices = [];
 
   rows.forEach(tr => {
     const checkbox = tr.querySelector('.host-check');
-    if(!checkbox || !checkbox.checked) return;
+    if(!checkbox) return;
+    if(selectedOnly && !checkbox.checked) return;
 
-    const ip = tr.children[2]?.textContent.trim();
-    const hostname = tr.children[1]?.textContent.trim();
+    const ip = tr.children[2]?.textContent.trim() || '';
+    if(!ip) return;
 
-    // MAC + Vendor extraction
+    const hostnameCell = tr.children[1];
+    let hostname = hostnameCell ? hostnameCell.textContent.trim() : '';
+    if(hostname === '—'){
+      hostname = '';
+    }
+
     const macVendorCell = tr.children[3];
     let mac = '';
     let vendor = '';
 
     if(macVendorCell){
       const divs = macVendorCell.querySelectorAll('div');
-      if(divs[0]) mac = divs[0].textContent.trim();
-      if(divs[1]) vendor = divs[1].textContent.trim();
+      if(divs[0]){
+        mac = divs[0].textContent.trim();
+        if(mac === '—'){
+          mac = '';
+        }
+      }
+      if(divs[1]){
+        vendor = divs[1].textContent.trim();
+      }
     }
 
-    // Get guessed type (fingerprint result preferred)
     const guessEl = tr.querySelector('[id^="guess-"]');
     let type = 'generic';
 
@@ -439,17 +431,51 @@ function addSelected(){
       }
     }
 
-    if(ip){
-      devices.push({
-        ip: ip,
-        hostname: hostname,
-        vlan: vlan,
-        type: type,
-        mac: mac,
-        vendor: vendor
-      });
-    }
+    devices.push({
+      ip: ip,
+      hostname: hostname,
+      vlan: vlan,
+      type: type,
+      mac: mac,
+      vendor: vendor
+    });
   });
+
+  return devices;
+}
+
+function addAllDiscovered(){
+  const devices = collectDiscoveredDevices(false);
+
+  if(devices.length === 0){
+    alert('No discovered devices to add');
+    return;
+  }
+
+  fetch('/tools/api/devices/add_all_discovered', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      devices: devices
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if(d.error){
+      alert(d.error);
+      return;
+    }
+    alert(`Added ${d.added || 0} of ${d.total_seen || 0} discovered hosts (${d.skipped_existing || 0} skipped existing)`);
+  })
+  .catch(e => {
+    alert('Error adding discovered devices: ' + e);
+  });
+}
+
+function addSelected(){
+  const devices = collectDiscoveredDevices(true);
 
   if(devices.length === 0){
     alert('No devices selected');

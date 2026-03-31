@@ -638,3 +638,14 @@ ASSUME:
 - Summary of changes:
   - Updated fallback detected-system grouping to return no inferred systems when only one AV role is present
   - Preserved the `detected_systems` output shape while reducing noisy peer groupings from incomplete role evidence
+
+### Last Update
+- Feature: Diagnostics discovery bulk-add cleanup
+- Files modified:
+  - app.py
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Removed the pasted-device import UI from diagnostics only and left the Devices page import workflow unchanged
+  - Added diagnostics-side `Add All Discovered` action backed by a new `/tools/api/devices/add_all_discovered` endpoint
+  - Reused shared discovered-device add logic so duplicate IPs are skipped and bulk add returns `added`, `skipped_existing`, and `total_seen`
