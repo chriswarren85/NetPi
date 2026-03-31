@@ -1538,6 +1538,15 @@ def build_detected_systems(devices, system_results):
     # 2. Fallback inferred edges only if no real rule edges exist
     if not edges:
         groups = build_basic_type_groups(devices)
+        active_role_groups = [devs for devs in groups.values() if isinstance(devs, list) and devs]
+
+        # Avoid weak inferred systems when only one AV role is present.
+        if len(active_role_groups) <= 1:
+            return {
+                "systems": [],
+                "mode": "type_grouping",
+                "edge_count": 0
+            }
 
         idx = 1
         for t, devs in groups.items():
@@ -1729,5 +1738,4 @@ def api_validate_systems():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
-
 

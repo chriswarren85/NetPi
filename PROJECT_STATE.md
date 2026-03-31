@@ -629,3 +629,12 @@ ASSUME:
 - Summary of changes:
   - Removed the older `qsys_to_touchpanel` system rule so Q-SYS messaging now follows the stricter `qsys-core` to `qsys-touchpanel` model
   - Dropped the stale graph label mapping tied to the removed generic Q-SYS touchpanel rule
+
+### Last Update
+- Feature: Suppressed weak fallback type grouping for single-role AV evidence
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Updated fallback detected-system grouping to return no inferred systems when only one AV role is present
+  - Preserved the `detected_systems` output shape while reducing noisy peer groupings from incomplete role evidence
