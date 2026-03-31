@@ -4,12 +4,6 @@
 <div class="page-title">Devices</div>
 <div class="page-sub">Define devices to check during diagnostics</div>
 <div id="success" class="success-msg">Device list saved.</div>
-<datalist id="device-vlan-options">
-  {% for v in s.vlans %}
-  <option value="{{ v.name }}"></option>
-  {% endfor %}
-</datalist>
-
 <div class="panel">
   <div class="panel-header">Add device</div>
   <div class="panel-body">
@@ -39,15 +33,6 @@
             <option value="grandma">GrandMA</option>
           </select>
         </div>
-      </div>
-      <div class="form-group">
-        <label>VLAN</label>
-        <select id="new-vlan">
-          <option value="">Unassigned</option>
-          {% for v in s.vlans %}
-          <option value="{{ v.name }}">{{ v.name }}</option>
-          {% endfor %}
-        </select>
       </div>
       <div class="form-group">
         <label>Notes</label>
@@ -401,7 +386,6 @@ function addDevice(){
   const name  = document.getElementById('new-name').value.trim();
   const ip    = document.getElementById('new-ip').value.trim();
   const type  = document.getElementById('new-type').value;
-  const vlan  = document.getElementById('new-vlan').value;
   const notes = document.getElementById('new-notes').value.trim();
 
   if(!name || !ip){
@@ -409,27 +393,16 @@ function addDevice(){
     return;
   }
 
-  deviceList.push({name, ip, type, vlan, notes});
+  deviceList.push({name, ip, type, vlan: '', notes});
   renderTable();
 
   document.getElementById('new-name').value = '';
   document.getElementById('new-ip').value = '';
   document.getElementById('new-notes').value = '';
-  document.getElementById('new-vlan').value = '';
 }
 
 function removeDevice(ip){
   deviceList = deviceList.filter(d => d.ip !== ip);
-  renderTable();
-}
-
-function updateDeviceVlan(ip, value){
-  deviceList = deviceList.map(d => {
-    if(d.ip === ip){
-      d.vlan = (value || '').trim();
-    }
-    return d;
-  });
   renderTable();
 }
 
@@ -499,7 +472,7 @@ function renderTable(){
         '<td>' + escapeHtml(d.name) + '</td>' +
         '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
         '<td>' + escapeHtml(d.type) + '</td>' +
-        '<td><input class="input" list="device-vlan-options" value="' + escapeHtml(d.vlan || '') + '" placeholder="Unassigned" onchange="updateDeviceVlan(\'' + safeIp + '\', this.value)" style="min-width:140px"></td>' +
+        '<td>' + escapeHtml(d.vlan || '') + '</td>' +
         '<td style="color:#6b7280">' + escapeHtml(d.notes || '') + '</td>' +
         '<td><button class="btn btn-danger" onclick="removeDevice(\'' + safeIp + '\')">Remove</button></td>' +
         '<td>' + validationHtml + '</td>';
@@ -628,7 +601,6 @@ function saveDevices(){
 
 window.validateDevice = validateDevice;
 window.validateAllDevices = validateAllDevices;
-window.updateDeviceVlan = updateDeviceVlan;
 
 renderTable();
 </script>

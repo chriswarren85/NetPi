@@ -159,11 +159,6 @@ def save_settings(data):
         json.dump(data, f, indent=2)
 
 
-DEFAULT_VLAN_SUBNETS = [
-    {"name": "AV_Control", "subnet": "10.110.50.0/24"},
-]
-
-
 def infer_vlan_from_ip(ip, settings=None):
     ip_text = (ip or "").strip()
     if not ip_text:
@@ -177,7 +172,6 @@ def infer_vlan_from_ip(ip, settings=None):
     vlan_sources = []
     if isinstance(settings, dict):
         vlan_sources.extend(settings.get("vlans", []))
-    vlan_sources.extend(DEFAULT_VLAN_SUBNETS)
 
     for vlan in vlan_sources:
         if not isinstance(vlan, dict):
@@ -199,15 +193,9 @@ def infer_vlan_from_ip(ip, settings=None):
     return ""
 
 
-def assign_vlan_if_missing(device, settings=None):
+def assign_inferred_vlan(device, settings=None):
     item = dict(device or {})
-    current_vlan = (item.get("vlan") or "").strip()
-    if current_vlan:
-        item["vlan"] = current_vlan
-        return item
-
-    inferred_vlan = infer_vlan_from_ip(item.get("ip"), settings=settings)
-    item["vlan"] = inferred_vlan
+    item["vlan"] = infer_vlan_from_ip(item.get("ip"), settings=settings)
     return item
 
 
@@ -215,7 +203,7 @@ def normalize_devices_for_save(devices_in, settings=None):
     normalized = []
     for device in devices_in or []:
         if isinstance(device, dict):
-            normalized.append(assign_vlan_if_missing(device, settings=settings))
+            normalized.append(assign_inferred_vlan(device, settings=settings))
     return normalized
 
 
@@ -1030,7 +1018,7 @@ def add_discovered_devices_to_inventory(devices_in):
     added_ips = []
 
     for d in devices_in:
-        normalized = assign_vlan_if_missing(d, settings=settings)
+        normalized = assign_inferred_vlan(d, settings=settings)
         ip = (normalized.get("ip") or "").strip()
         if not ip:
             continue
@@ -1083,7 +1071,7 @@ def add_discovered_device():
     if any(d.get("ip") == ip for d in devices):
         return jsonify({"success": True, "message": "Device already exists"})
 
-    normalized = assign_vlan_if_missing(data, settings=load_settings())
+    normalized = assign_inferred_vlan(data, settings=load_settings())
     vlan = (normalized.get("vlan") or "").strip()
     name = generate_device_name(devices, device_type, hostname)
 
@@ -1456,7 +1444,7 @@ def preview_pasted_devices():
     simulated_devices = list(existing_devices)
 
     for row in result["devices"]:
-        row_copy = assign_vlan_if_missing(row, settings=settings)
+        row_copy = assign_inferred_vlan(row, settings=settings)
         row_ip = (row_copy.get("ip") or "").strip()
         row_copy["duplicate"] = row_ip in existing_ips
 
@@ -1508,7 +1496,7 @@ def import_pasted_devices():
     skipped = []
 
     for d in devices_in:
-        normalized = assign_vlan_if_missing(d, settings=settings)
+        normalized = assign_inferred_vlan(d, settings=settings)
         ip = (normalized.get("ip") or "").strip()
         if not ip or not _valid_ip(ip):
             skipped.append({"ip": ip, "reason": "invalid_ip"})

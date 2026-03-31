@@ -719,3 +719,15 @@ This separation is mandatory and must not be bypassed.
   - Added backend CIDR-based VLAN inference with a default 10.110.50.0/24 -> AV_Control mapping
   - Applied VLAN autofill only when incoming devices have no VLAN set across discovered-device add, add-all discovered, pasted import, preview, and save flows
   - Updated Devices save handling so backend-normalized VLAN values are reflected in the UI after save without changing the existing table flow
+
+### Last Update
+- Feature: Settings-driven VLAN inference and read-only Devices VLAN UI
+- Files modified:
+  - app.py
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - VLAN assignment is now inferred automatically from settings.json lans[].subnet using each VLAN 
+ame as the saved label
+  - settings.json lans is now the sole source of truth for subnet-based VLAN mapping, with blank or unmatched subnets saving blank VLAN values
+  - Removed manual VLAN editing from the Devices UI while keeping VLAN visible and filterable as a read-only field
