@@ -376,6 +376,54 @@ def quick_tcp_probe(ip, port, timeout=1):
         return False
 
 
+def _extract_validation_open_ports(validation):
+    ports = set()
+
+    for port in validation.get("open_ports", []) or []:
+        try:
+            ports.add(int(port))
+        except Exception:
+            pass
+
+    for result in validation.get("results", []) or []:
+        if result.get("status") != "pass":
+            continue
+
+        port = result.get("port")
+        if port is None:
+            check = (result.get("check") or "").strip().lower()
+            if check.startswith("port:"):
+                try:
+                    port = int(check.split(":", 1)[1])
+                except Exception:
+                    port = None
+
+        if port is not None:
+            try:
+                ports.add(int(port))
+            except Exception:
+                pass
+
+    return sorted(ports)
+
+
+def _has_validation_evidence(validation):
+    if not validation:
+        return False
+
+    if validation.get("overall") == "pass":
+        return True
+
+    if _extract_validation_open_ports(validation):
+        return True
+
+    for result in validation.get("results", []) or []:
+        if result.get("check") == "ping" and result.get("status") == "pass":
+            return True
+
+    return False
+
+
 def http_probe(ip, port):
     try:
         import http.client
@@ -717,10 +765,10 @@ SYSTEM_VALIDATION_RULES = [
         "relationship_type": "media_flow",
         "source_types": ["qsys-core", "qsys"],
         "target_types": ["qsys-nv-endpoint", "qsys-nv-decoder"],
-        "required_target_ports": [],
-        "port_mode": "any",
-        "description": "Q-SYS Core should relate to Q-SYS NV endpoints in the same AV system",
-        "inference_note": "Relationship inferred from role-aware device classification"
+        "required_target_ports": [443, 554],
+        "port_mode": "all",
+        "description": "Q-SYS Core should see NV control and media services on the endpoint",
+        "inference_note": "Readiness inferred from target port evidence, not source-initiated media flow"
     },
     {
         "name": "qsys_core_to_touchpanel",
@@ -774,17 +822,28 @@ def _evaluate_system_rule(rule, source_device, target_device, validations_by_ip)
     target_validation = validations_by_ip.get(target_ip, {})
 
     required_ports = list(rule.get("required_target_ports", []))
-    target_open_ports = list(target_validation.get("open_ports", []))
+    target_open_ports = _extract_validation_open_ports(target_validation)
+
+    if target_ip and required_ports:
+        for port in required_ports:
+            if port in target_open_ports:
+                continue
+            if quick_tcp_probe(target_ip, int(port), timeout=0.5):
+                target_open_ports.append(int(port))
+
+    target_open_ports = sorted(set(target_open_ports))
     observed_ports = [p for p in required_ports if p in target_open_ports]
 
     port_mode = rule.get("port_mode", "all")
-    if port_mode == "any":
+    if not required_ports:
+        ports_ok = True
+    elif port_mode == "any":
         ports_ok = len(observed_ports) > 0
     else:
         ports_ok = len(observed_ports) == len(required_ports)
 
-    source_ok = source_validation.get("overall") == "pass"
-    target_ok = target_validation.get("overall") == "pass"
+    source_ok = _has_validation_evidence(source_validation)
+    target_ok = _has_validation_evidence(target_validation) or bool(observed_ports)
 
     status = "pass" if (source_ok and target_ok and ports_ok) else "fail"
 

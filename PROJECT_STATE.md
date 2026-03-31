@@ -603,3 +603,13 @@ ASSUME:
 - safe patching is required
 - curl verification is required
 
+
+### Last Update
+- Feature: System validation backed by target port evidence for Q-SYS Core to NV relationships
+- Files modified:
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added lightweight system-rule target port evidence collection using existing TCP probing helper
+  - Populated `required_target_ports`, `observed_target_ports`, and `target_open_ports` for Q-SYS Core to NV checks
+  - Switched system rule pass/fail to use observed network evidence instead of broad device `overall` validation status
