@@ -616,6 +616,10 @@ function saveDevices(){
     body: JSON.stringify({devices: deviceList})
   }).then(r => r.json()).then(d => {
     if(d.success){
+      if(Array.isArray(d.devices)){
+        deviceList = d.devices;
+        renderTable();
+      }
       document.getElementById('success').style.display = 'block';
       setTimeout(() => document.getElementById('success').style.display = 'none', 3000);
     }

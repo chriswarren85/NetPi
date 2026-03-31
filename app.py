@@ -159,6 +159,66 @@ def save_settings(data):
         json.dump(data, f, indent=2)
 
 
+DEFAULT_VLAN_SUBNETS = [
+    {"name": "AV_Control", "subnet": "10.110.50.0/24"},
+]
+
+
+def infer_vlan_from_ip(ip, settings=None):
+    ip_text = (ip or "").strip()
+    if not ip_text:
+        return ""
+
+    try:
+        ip_obj = ipaddress.ip_address(ip_text)
+    except Exception:
+        return ""
+
+    vlan_sources = []
+    if isinstance(settings, dict):
+        vlan_sources.extend(settings.get("vlans", []))
+    vlan_sources.extend(DEFAULT_VLAN_SUBNETS)
+
+    for vlan in vlan_sources:
+        if not isinstance(vlan, dict):
+            continue
+
+        subnet = (vlan.get("subnet") or "").strip()
+        name = (vlan.get("name") or "").strip()
+        if not subnet or not name:
+            continue
+
+        try:
+            network = ipaddress.ip_network(subnet, strict=False)
+        except Exception:
+            continue
+
+        if ip_obj in network:
+            return name
+
+    return ""
+
+
+def assign_vlan_if_missing(device, settings=None):
+    item = dict(device or {})
+    current_vlan = (item.get("vlan") or "").strip()
+    if current_vlan:
+        item["vlan"] = current_vlan
+        return item
+
+    inferred_vlan = infer_vlan_from_ip(item.get("ip"), settings=settings)
+    item["vlan"] = inferred_vlan
+    return item
+
+
+def normalize_devices_for_save(devices_in, settings=None):
+    normalized = []
+    for device in devices_in or []:
+        if isinstance(device, dict):
+            normalized.append(assign_vlan_if_missing(device, settings=settings))
+    return normalized
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -964,12 +1024,14 @@ def add_bulk_devices():
 
 def add_discovered_devices_to_inventory(devices_in):
     devices = load_devices()
+    settings = load_settings()
     added = 0
     skipped_existing = 0
     added_ips = []
 
     for d in devices_in:
-        ip = (d.get("ip") or "").strip()
+        normalized = assign_vlan_if_missing(d, settings=settings)
+        ip = (normalized.get("ip") or "").strip()
         if not ip:
             continue
 
@@ -977,19 +1039,19 @@ def add_discovered_devices_to_inventory(devices_in):
             skipped_existing += 1
             continue
 
-        device_type = (d.get("type") or "generic").strip() or "generic"
-        preferred_name = (d.get("name") or d.get("hostname") or "").strip()
-        vendor = (d.get("vendor") or "").strip()
-        notes = (d.get("notes") or "").strip()
+        device_type = (normalized.get("type") or "generic").strip() or "generic"
+        preferred_name = (normalized.get("name") or normalized.get("hostname") or "").strip()
+        vendor = (normalized.get("vendor") or "").strip()
+        notes = (normalized.get("notes") or "").strip()
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
         devices.append({
             "name": generated_name,
             "ip": ip,
             "type": device_type,
-            "vlan": (d.get("vlan") or "").strip(),
+            "vlan": (normalized.get("vlan") or "").strip(),
             "notes": notes or (f"Auto-discovered ({vendor})" if vendor else "Auto-discovered"),
-            "mac": (d.get("mac") or "").strip(),
+            "mac": (normalized.get("mac") or "").strip(),
             "vendor": vendor
         })
         added += 1
@@ -1009,7 +1071,6 @@ def add_discovered_device():
     data = request.json or {}
     ip = data.get("ip", "").strip()
     hostname = data.get("hostname", "").strip()
-    vlan = data.get("vlan", "").strip()
     device_type = data.get("type", "generic").strip()
     mac = data.get("mac", "").strip()
     vendor = data.get("vendor", "").strip()
@@ -1022,6 +1083,8 @@ def add_discovered_device():
     if any(d.get("ip") == ip for d in devices):
         return jsonify({"success": True, "message": "Device already exists"})
 
+    normalized = assign_vlan_if_missing(data, settings=load_settings())
+    vlan = (normalized.get("vlan") or "").strip()
     name = generate_device_name(devices, device_type, hostname)
 
     devices.append({
@@ -1093,8 +1156,9 @@ def export_csv():
 @app.route('/tools/api/devices/save', methods=['POST'])
 def api_devices_save():
     devices = request.json.get('devices', [])
-    save_devices_file(devices)
-    return jsonify({'success': True})
+    normalized_devices = normalize_devices_for_save(devices, settings=load_settings())
+    save_devices_file(normalized_devices)
+    return jsonify({'success': True, 'devices': normalized_devices})
 
 
 @app.route('/tools/api/scan', methods=['POST'])
@@ -1385,13 +1449,14 @@ def preview_pasted_devices():
 
     result = parse_pasted_device_text(pasted_text)
     existing_devices = load_devices()
+    settings = load_settings()
     existing_ips = { (d.get("ip") or "").strip() for d in existing_devices if d.get("ip") }
 
     preview_devices = []
     simulated_devices = list(existing_devices)
 
     for row in result["devices"]:
-        row_copy = dict(row)
+        row_copy = assign_vlan_if_missing(row, settings=settings)
         row_ip = (row_copy.get("ip") or "").strip()
         row_copy["duplicate"] = row_ip in existing_ips
 
@@ -1438,11 +1503,13 @@ def import_pasted_devices():
         devices_in = parsed["devices"]
 
     devices = load_devices()
+    settings = load_settings()
     added = 0
     skipped = []
 
     for d in devices_in:
-        ip = (d.get("ip") or "").strip()
+        normalized = assign_vlan_if_missing(d, settings=settings)
+        ip = (normalized.get("ip") or "").strip()
         if not ip or not _valid_ip(ip):
             skipped.append({"ip": ip, "reason": "invalid_ip"})
             continue
@@ -1451,18 +1518,18 @@ def import_pasted_devices():
             skipped.append({"ip": ip, "reason": "duplicate_ip"})
             continue
 
-        device_type = (d.get("type") or "").strip() or guess_type_from_vendor(d.get("vendor", ""))
-        preferred_name = (d.get("name") or "").strip()
+        device_type = (normalized.get("type") or "").strip() or guess_type_from_vendor(normalized.get("vendor", ""))
+        preferred_name = (normalized.get("name") or "").strip()
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
         devices.append({
             "name": generated_name,
             "ip": ip,
             "type": device_type,
-            "vlan": (d.get("vlan") or "").strip(),
-            "notes": (d.get("notes") or "").strip() or f"Pasted import ({d.get('vendor', '')})".strip(),
-            "mac": (d.get("mac") or "").strip(),
-            "vendor": (d.get("vendor") or "").strip()
+            "vlan": (normalized.get("vlan") or "").strip(),
+            "notes": (normalized.get("notes") or "").strip() or f"Pasted import ({normalized.get('vendor', '')})".strip(),
+            "mac": (normalized.get("mac") or "").strip(),
+            "vendor": (normalized.get("vendor") or "").strip()
         })
         added += 1
 

@@ -708,3 +708,14 @@ curl -s http://127.0.0.1/tools/...
 5. Verify in browser via nginx (/tools)
 
 This separation is mandatory and must not be bypassed.
+
+### Last Update
+- Feature: Auto-assign VLAN from subnet on device add/import
+- Files modified:
+  - app.py
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added backend CIDR-based VLAN inference with a default 10.110.50.0/24 -> AV_Control mapping
+  - Applied VLAN autofill only when incoming devices have no VLAN set across discovered-device add, add-all discovered, pasted import, preview, and save flows
+  - Updated Devices save handling so backend-normalized VLAN values are reflected in the UI after save without changing the existing table flow
