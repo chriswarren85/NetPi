@@ -649,3 +649,62 @@ ASSUME:
   - Removed the pasted-device import UI from diagnostics only and left the Devices page import workflow unchanged
   - Added diagnostics-side `Add All Discovered` action backed by a new `/tools/api/devices/add_all_discovered` endpoint
   - Reused shared discovered-device add logic so duplicate IPs are skipped and bulk add returns `added`, `skipped_existing`, and `total_seen`
+
+### Last Update
+- Feature: Diagnostics post-add fingerprint follow-up and per-row VLAN editing
+- Files modified:
+  - app.py
+  - templates/diagnostics.html
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Extended `/tools/api/devices/add_all_discovered` to return the newly added IP set for targeted follow-up actions without changing duplicate-skip behavior
+  - Added a diagnostics-side `Fingerprint Added Devices` action that only fingerprints the devices added by the last bulk add
+  - Made the Devices page VLAN cell editable per row while preserving the existing `deviceList` plus `saveDevices()` persistence flow into `devices.json`
+## Execution Boundaries — Local vs Pi
+
+NetPi follows a strict separation between development environment and runtime environment.
+
+### Laptop (Windows / Dev Environment)
+- Used for:
+  - Code editing
+  - Planning
+  - Static analysis
+  - Syntax checks (e.g. python -m py_compile app.py)
+- NOT used for:
+  - Running NetPi backend endpoints
+  - curl testing against /tools/api/*
+  - Any network validation or discovery logic
+
+### Raspberry Pi (Runtime / Source of Truth for Execution)
+- The ONLY environment where:
+  - Flask app is running
+  - nginx is serving /tools
+  - devices.json is live
+  - Network discovery and fingerprinting are valid
+
+### Critical Rule
+- NEVER run curl or endpoint tests from outside the Pi
+- NEVER assume localhost on dev machine == NetPi runtime
+
+### Required Testing Pattern
+All endpoint testing must be executed manually on the Pi using:
+
+curl -s http://127.0.0.1/tools/...
+
+### Codex / Assistant Behavior
+- Must NOT attempt to execute curl requests outside the sandbox
+- Must NOT simulate network results
+- Must ALWAYS provide:
+  1. Exact curl commands for Pi
+  2. Expected response shape
+  3. What success/failure looks like
+
+### Deployment Flow
+1. Edit code locally
+2. Syntax check locally (optional)
+3. Deploy to Pi
+4. Run curl tests on Pi
+5. Verify in browser via nginx (/tools)
+
+This separation is mandatory and must not be bypassed.

@@ -39,6 +39,7 @@
     <button class="btn btn-primary" id="run-btn" onclick="runChecks()">▶ Run all checks</button>
     <button class="btn" id="discover-btn" onclick="discoverHosts()">🔎 Discover Hosts</button>
     <button class="btn btn-primary" id="add-all-discovered-btn" onclick="addAllDiscovered()" disabled>Add All Discovered</button>
+    <button class="btn" id="fingerprint-added-btn" onclick="fingerprintAddedDevices()" style="display:none">Fingerprint Added Devices</button>
     <button class="btn" id="cancel-discover-btn" onclick="cancelDiscovery()" style="display:none">✖ Cancel Discovery</button>
   </div>
 
@@ -58,6 +59,8 @@
 <div id="discovering-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem">
   Discovering live hosts on selected subnet...
 </div>
+
+<div id="fingerprint-added-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem"></div>
 
 <div class="panel" id="base-panel" style="display:none">
   <div class="panel-header">Network checks</div>
@@ -98,6 +101,26 @@
 
 <script>
 let discoverAbortController = null;
+let lastAddedIps = [];
+
+function setFingerprintAddedState(ips, message){
+  lastAddedIps = Array.isArray(ips) ? ips.filter(Boolean) : [];
+
+  const btn = document.getElementById('fingerprint-added-btn');
+  const msg = document.getElementById('fingerprint-added-msg');
+
+  btn.style.display = lastAddedIps.length ? 'inline-block' : 'none';
+  btn.disabled = false;
+  btn.textContent = 'Fingerprint Added Devices';
+
+  if(message){
+    msg.textContent = message;
+    msg.style.display = 'block';
+  } else {
+    msg.textContent = '';
+    msg.style.display = 'none';
+  }
+}
 
 function statusBadge(s){
   const map = {
@@ -247,6 +270,7 @@ function discoverHosts(){
       const tbody = document.getElementById('discover-results');
       tbody.innerHTML = '';
       document.getElementById('add-all-discovered-btn').disabled = true;
+      setFingerprintAddedState([], '');
 
       if(!data.devices || data.devices.length === 0){
         tbody.innerHTML = `<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No live hosts found on ${data.subnet}</td></tr>`;
@@ -327,7 +351,7 @@ function fingerprintHost(ip){
     }
   }
 
-  fetch('/tools/api/fingerprint_host', {
+  return fetch('/tools/api/fingerprint_host', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ ip: ip, vendor: vendor })
@@ -338,14 +362,15 @@ function fingerprintHost(ip){
       if(!el) return;
       if(d.error){
         el.textContent = 'unknown';
-        return;
+        throw new Error(d.error);
       }
       const ports = (d.open_ports || []).join(', ');
       el.innerHTML = `<strong>${d.guessed_type || 'generic'}</strong>${ports ? `<div style="font-size:11px;color:#6b7280">${ports}</div>` : ''}`;
     })
-    .catch(() => {
+    .catch((error) => {
       const el = document.getElementById('guess-' + ip.replace(/\./g,'-'));
       if(el) el.textContent = 'unknown';
+      throw error;
     });
 }
 
@@ -467,11 +492,47 @@ function addAllDiscovered(){
       alert(d.error);
       return;
     }
+    const addedIps = Array.isArray(d.added_ips) ? d.added_ips : [];
+    if(addedIps.length){
+      setFingerprintAddedState(addedIps, `Ready to fingerprint ${addedIps.length} newly added device${addedIps.length === 1 ? '' : 's'}.`);
+    } else {
+      setFingerprintAddedState([], 'No newly added devices to fingerprint.');
+    }
     alert(`Added ${d.added || 0} of ${d.total_seen || 0} discovered hosts (${d.skipped_existing || 0} skipped existing)`);
   })
   .catch(e => {
     alert('Error adding discovered devices: ' + e);
   });
+}
+
+async function fingerprintAddedDevices(){
+  if(!lastAddedIps.length){
+    setFingerprintAddedState([], 'No newly added devices to fingerprint.');
+    return;
+  }
+
+  const btn = document.getElementById('fingerprint-added-btn');
+  const msg = document.getElementById('fingerprint-added-msg');
+  let completed = 0;
+  let failed = 0;
+
+  btn.disabled = true;
+  btn.textContent = 'Fingerprinting...';
+  msg.textContent = `Fingerprinting ${lastAddedIps.length} newly added device${lastAddedIps.length === 1 ? '' : 's'}...`;
+  msg.style.display = 'block';
+
+  for(const ip of lastAddedIps){
+    try {
+      await fingerprintHost(ip);
+      completed += 1;
+    } catch (e) {
+      failed += 1;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Fingerprint Added Devices';
+  msg.textContent = `Fingerprint complete: ${completed} succeeded, ${failed} failed.`;
 }
 
 function addSelected(){

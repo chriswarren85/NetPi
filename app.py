@@ -966,6 +966,7 @@ def add_discovered_devices_to_inventory(devices_in):
     devices = load_devices()
     added = 0
     skipped_existing = 0
+    added_ips = []
 
     for d in devices_in:
         ip = (d.get("ip") or "").strip()
@@ -992,10 +993,13 @@ def add_discovered_devices_to_inventory(devices_in):
             "vendor": vendor
         })
         added += 1
+        added_ips.append(ip)
 
     return devices, {
         "added": added,
         "skipped_existing": skipped_existing,
+        "skipped": skipped_existing,
+        "added_ips": added_ips,
         "total_seen": len(devices_in)
     }
 
@@ -1049,6 +1053,8 @@ def add_all_discovered_devices():
         "success": True,
         "added": summary["added"],
         "skipped_existing": summary["skipped_existing"],
+        "skipped": summary["skipped"],
+        "added_ips": summary["added_ips"],
         "total_seen": summary["total_seen"]
     })
 

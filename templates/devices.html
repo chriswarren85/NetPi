@@ -4,6 +4,11 @@
 <div class="page-title">Devices</div>
 <div class="page-sub">Define devices to check during diagnostics</div>
 <div id="success" class="success-msg">Device list saved.</div>
+<datalist id="device-vlan-options">
+  {% for v in s.vlans %}
+  <option value="{{ v.name }}"></option>
+  {% endfor %}
+</datalist>
 
 <div class="panel">
   <div class="panel-header">Add device</div>
@@ -418,6 +423,16 @@ function removeDevice(ip){
   renderTable();
 }
 
+function updateDeviceVlan(ip, value){
+  deviceList = deviceList.map(d => {
+    if(d.ip === ip){
+      d.vlan = (value || '').trim();
+    }
+    return d;
+  });
+  renderTable();
+}
+
 function renderTable(){
   const tbody = document.getElementById('device-table');
   const filterVlan = document.getElementById('filter-vlan').value;
@@ -484,7 +499,7 @@ function renderTable(){
         '<td>' + escapeHtml(d.name) + '</td>' +
         '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
         '<td>' + escapeHtml(d.type) + '</td>' +
-        '<td>' + escapeHtml(d.vlan || '') + '</td>' +
+        '<td><input class="input" list="device-vlan-options" value="' + escapeHtml(d.vlan || '') + '" placeholder="Unassigned" onchange="updateDeviceVlan(\'' + safeIp + '\', this.value)" style="min-width:140px"></td>' +
         '<td style="color:#6b7280">' + escapeHtml(d.notes || '') + '</td>' +
         '<td><button class="btn btn-danger" onclick="removeDevice(\'' + safeIp + '\')">Remove</button></td>' +
         '<td>' + validationHtml + '</td>';
@@ -609,6 +624,7 @@ function saveDevices(){
 
 window.validateDevice = validateDevice;
 window.validateAllDevices = validateAllDevices;
+window.updateDeviceVlan = updateDeviceVlan;
 
 renderTable();
 </script>
