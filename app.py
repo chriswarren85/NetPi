@@ -207,6 +207,26 @@ def normalize_devices_for_save(devices_in, settings=None):
     return normalized
 
 
+def should_persist_fingerprinted_type(current_type, guessed_type):
+    current = (current_type or "").strip().lower()
+    guessed = (guessed_type or "").strip().lower()
+
+    if not guessed or guessed in ("generic", "unknown"):
+        return False
+
+    if current == guessed:
+        return False
+
+    weak_types = {
+        "", "generic", "unknown", "device", "other",
+        "web-device", "network-device", "ssh-device",
+        "telnet-device", "snmp-device", "rtsp-device",
+        "windows-host", "mqtt-device"
+    }
+
+    return current in weak_types and guessed not in weak_types
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -647,6 +667,11 @@ def api_validate_all():
     try:
         devices = load_devices()
         results = run_validation_for_all(devices)
+        detected = {
+            "systems": [],
+            "mode": "",
+            "edge_count": 0,
+        }
 
         return jsonify({
             "ok": True,
@@ -989,10 +1014,31 @@ def fingerprint_host():
         elif ('axis' in vendor or 'hikvision' in vendor or 'dahua' in vendor) and has_any(80, 443, 554, 8554):
             guessed = 'camera'
 
+        devices = load_devices()
+        updated_device = None
+        device_updated = False
+
+        for device in devices:
+            if (device.get("ip") or "").strip() != ip:
+                continue
+
+            if should_persist_fingerprinted_type(device.get("type"), guessed):
+                device["type"] = guessed
+                updated_device = dict(device)
+                device_updated = True
+            else:
+                updated_device = dict(device)
+            break
+
+        if device_updated:
+            save_devices_file(devices)
+
         return jsonify({
             "ip": ip,
             "open_ports": open_ports,
-            "guessed_type": guessed
+            "guessed_type": guessed,
+            "device_updated": device_updated,
+            "updated_device": updated_device
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

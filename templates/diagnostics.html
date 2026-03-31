@@ -366,6 +366,7 @@ function fingerprintHost(ip){
       }
       const ports = (d.open_ports || []).join(', ');
       el.innerHTML = `<strong>${d.guessed_type || 'generic'}</strong>${ports ? `<div style="font-size:11px;color:#6b7280">${ports}</div>` : ''}`;
+      return d;
     })
     .catch((error) => {
       const el = document.getElementById('guess-' + ip.replace(/\./g,'-'));
@@ -515,6 +516,7 @@ async function fingerprintAddedDevices(){
   const msg = document.getElementById('fingerprint-added-msg');
   let completed = 0;
   let failed = 0;
+  let updated = 0;
 
   btn.disabled = true;
   btn.textContent = 'Fingerprinting...';
@@ -523,8 +525,11 @@ async function fingerprintAddedDevices(){
 
   for(const ip of lastAddedIps){
     try {
-      await fingerprintHost(ip);
+      const result = await fingerprintHost(ip);
       completed += 1;
+      if(result && result.device_updated){
+        updated += 1;
+      }
     } catch (e) {
       failed += 1;
     }
@@ -532,7 +537,7 @@ async function fingerprintAddedDevices(){
 
   btn.disabled = false;
   btn.textContent = 'Fingerprint Added Devices';
-  msg.textContent = `Fingerprint complete: ${completed} succeeded, ${failed} failed.`;
+  msg.textContent = `Fingerprint complete: ${completed} succeeded, ${failed} failed, ${updated} saved type update${updated === 1 ? '' : 's'}.`;
 }
 
 function addSelected(){

@@ -731,3 +731,14 @@ This separation is mandatory and must not be bypassed.
 ame as the saved label
   - settings.json lans is now the sole source of truth for subnet-based VLAN mapping, with blank or unmatched subnets saving blank VLAN values
   - Removed manual VLAN editing from the Devices UI while keeping VLAN visible and filterable as a read-only field
+
+### Last Update
+- Feature: Validate All repair and fingerprint type persistence
+- Files modified:
+  - app.py
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Repaired the Devices page Validate All regression after the VLAN UI cleanup by restoring a valid backend response shape
+  - Fingerprinting now persists updated device types for matching saved devices when a weak stored type can be safely promoted to a stronger inferred type
+  - Diagnostics fingerprint follow-up now reports how many saved device type updates were written during the run
