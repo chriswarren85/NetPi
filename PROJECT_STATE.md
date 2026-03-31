@@ -752,3 +752,13 @@ ame as the saved label
   - Updated /tools/api/fingerprint_host so guessed_type now derives from ingerprint.platform when a strong platform is identified
   - Preserved the existing fallback guess logic for cases where fingerprint platform remains unknown
   - Left the existing saved-device persistence logic unchanged so type promotion now works naturally once guessed_type is stronger
+
+### Last Update
+- Feature: fingerprint_host now uses rich validation fingerprinting
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Updated /tools/api/fingerprint_host to reuse the same un_validation() path as alidate_all, including HTTP title and observed platform evidence
+  - guessed_type now prefers the rich validation fingerprint and observed platform results before falling back to weak web-device style guesses
+  - Preserved the existing response shape and conservative saved-device type persistence behavior

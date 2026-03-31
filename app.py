@@ -6,7 +6,7 @@ from checks.devices import run_device_checks
 import io
 import ipaddress
 import re
-from checks.validation import run_validation, run_validation_for_all, infer_fingerprint
+from checks.validation import run_validation, run_validation_for_all
 
 app = Flask(__name__)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
@@ -887,42 +887,34 @@ def fingerprint_host():
         return jsonify({"error": "Missing IP"}), 400
 
     try:
-        scan_ports = ",".join([
-            "21","22","23","25","53","80","81","88","123","135","139","161","162",
-            "389","443","445","515","554","631","902","989","990","1701","1723",
-            "1883","1935","2049","2222","2869","2967","3074","3389","3689","3702",
-            "5000","5001","5060","5061","5200","5353","5568","5683","5985","5986",
-            "6454","7001","7002","7142","8000","8001","8080","8081","8088","8090",
-            "8443","8554","8610","8899","9000","9001","9090","9100","9999","10001",
-            "10008","10443","15002","20000","41794","41795","41796","47808"
-        ])
+        devices = load_devices()
+        device = next((d for d in devices if (d.get("ip") or "").strip() == ip), None)
+        if device is None:
+            device = {
+                "name": ip,
+                "ip": ip,
+                "type": guess_type_from_vendor(vendor) or "generic",
+                "vendor": vendor,
+                "vlan": "",
+                "notes": ""
+            }
 
-        result = subprocess.check_output(
-            ['sudo', 'nmap', '-Pn', '-p', scan_ports, ip, '-oG', '-'],
-            timeout=60
-        ).decode()
-
-        open_ports = []
-        for line in result.splitlines():
-            if '/open/' in line and 'Ports:' in line:
-                ports_part = line.split('Ports:', 1)[1]
-                for part in ports_part.split(','):
-                    part = part.strip()
-                    if '/open/' in part:
-                        port = part.split('/')[0].strip()
-                        if port.isdigit():
-                            open_ports.append(int(port))
-
-        open_ports = sorted(set(open_ports))
+        validation = run_validation(device)
+        open_ports = sorted(set(validation.get("open_ports") or []))
         open_set = set(open_ports)
 
         guessed = 'generic'
+        fingerprint_platform = normalize_platform_name((validation.get("fingerprint") or {}).get("platform"))
+        observed_platform = normalize_platform_name((validation.get("observed_platform") or {}).get("platform"))
 
         def has_any(*ports):
             return any(p in open_set for p in ports)
 
-        # Strong AV / control fingerprints first
-        if has_any(41794, 41795, 41796):
+        if fingerprint_platform and fingerprint_platform != "unknown":
+            guessed = fingerprint_platform
+        elif observed_platform and observed_platform != "unknown":
+            guessed = observed_platform
+        elif has_any(41794, 41795, 41796):
             guessed = 'crestron'
         elif has_any(319, 320, 4440):
             guessed = 'dante'
@@ -942,8 +934,6 @@ def fingerprint_host():
             guessed = 'mqtt-device'
         elif has_any(8554, 554):
             guessed = 'rtsp-device'
-
-        # Network / OS style fingerprints
         elif has_any(161, 162) and has_any(22, 80, 443, 8080, 8443):
             guessed = 'network-device'
         elif has_any(161, 162):
@@ -961,65 +951,6 @@ def fingerprint_host():
         elif has_any(80, 81, 88, 443, 8080, 8081, 8088, 8090, 8443, 10443):
             guessed = 'web-device'
 
-        # Vendor-assisted refinement
-        vendor_map = [
-            (['crestron'], 'crestron'),
-            (['audinate'], 'dante'),
-            (['qsc', 'q-sys'], 'qsys'),
-            (['biamp'], 'biamp'),
-            (['shure'], 'shure'),
-            (['novastar'], 'novastar'),
-            (['barco'], 'barco_ctrl'),
-            (['yamaha'], 'audio-device'),
-            (['extron'], 'control-processor'),
-            (['sony'], 'camera-or-display'),
-            (['panasonic'], 'camera-or-display'),
-            (['lg'], 'display'),
-            (['samsung'], 'display'),
-            (['philips'], 'display'),
-            (['epson'], 'projector'),
-            (['benq'], 'projector'),
-            (['nec'], 'display'),
-            (['netgear', 'cisco', 'aruba', 'juniper', 'hp', 'hewlett packard enterprise', 'hpe', 'ruckus'], 'network-device'),
-            (['ubiquiti'], 'network-device'),
-            (['fortinet', 'palo alto', 'sophos'], 'firewall'),
-            (['axis'], 'camera'),
-            (['hikvision', 'dahua'], 'camera'),
-            (['yealink', 'poly', 'polycom'], 'voip-device'),
-            (['brother', 'xerox', 'canon', 'ricoh', 'kyocera', 'lexmark'], 'printer'),
-        ]
-
-        if guessed in (
-            'generic', 'web-device', 'network-device', 'ssh-device',
-            'snmp-device', 'rtsp-device'
-        ):
-            for vendor_keys, vendor_guess in vendor_map:
-                if any(k in vendor for k in vendor_keys):
-                    guessed = vendor_guess
-                    break
-
-        # Port + vendor combo refinement
-        if 'qsc' in vendor and has_any(80, 443, 8080, 8443, 1702):
-            guessed = 'qsys'
-        elif 'biamp' in vendor and has_any(80, 443, 5000, 5001):
-            guessed = 'biamp'
-        elif 'shure' in vendor and has_any(80, 443, 2202):
-            guessed = 'shure'
-        elif ('cisco' in vendor or 'aruba' in vendor or 'netgear' in vendor or 'juniper' in vendor) and has_any(22, 23, 80, 443, 161, 162):
-            guessed = 'network-device'
-        elif ('samsung' in vendor or 'lg' in vendor or 'nec' in vendor or 'philips' in vendor) and has_any(80, 443, 8080):
-            guessed = 'display'
-        elif ('epson' in vendor or 'benq' in vendor) and has_any(80, 443, 23):
-            guessed = 'projector'
-        elif ('axis' in vendor or 'hikvision' in vendor or 'dahua' in vendor) and has_any(80, 443, 554, 8554):
-            guessed = 'camera'
-
-        fingerprint = infer_fingerprint(guessed, open_ports, {})
-        fingerprint_platform = normalize_platform_name((fingerprint or {}).get("platform"))
-        if fingerprint_platform and fingerprint_platform != "unknown":
-            guessed = fingerprint_platform
-
-        devices = load_devices()
         updated_device = None
         device_updated = False
 
