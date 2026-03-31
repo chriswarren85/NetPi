@@ -1,0 +1,323 @@
+{% extends 'base.html' %}
+{% block title %}— Devices{% endblock %}
+{% block content %}
+<div class="page-title">Devices</div>
+<div class="page-sub">Define devices to check during diagnostics</div>
+<div id="success" class="success-msg">Device list saved.</div>
+
+<div class="panel">
+  <div class="panel-header">Add device</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Device name</label>
+        <input id="new-name" placeholder="e.g. Barco CTRL Server">
+      </div>
+      <div class="form-group">
+        <label>IP address</label>
+        <input id="new-ip" placeholder="e.g. 192.168.1.10">
+      </div>
+      <div class="form-group">
+        <label>Device type</label>
+        <select id="new-type">
+          <option value="generic">Generic</option>
+          <option value="crestron">Crestron</option>
+          <option value="barco_ctrl">Barco CTRL</option>
+          <option value="novastar">Novastar</option>
+          <option value="dante">Dante</option>
+          <option value="sacn">sACN node</option>
+          <option value="artnet">Art-Net node</option>
+          <option value="grandma">GrandMA</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>VLAN</label>
+        <select id="new-vlan">
+          <option value="">Unassigned</option>
+          {% for v in s.vlans %}
+          <option value="{{ v.name }}">{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input id="new-notes" placeholder="Optional notes">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end">
+        <button class="btn btn-primary" onclick="addDevice()">Add</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <div class="panel">
+    <div class="panel-header">Paste Device List</div>
+    <div class="panel-body">
+
+      <textarea id="pasted-device-text"
+        style="width:100%; min-height:160px; font-family:monospace;"
+        placeholder="Name	IP	VLAN	Type	Vendor
+DSP-01	192.168.1.20	10		Biamp
+SW-01	192.168.1.10	10		Cisco"></textarea>
+
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn" onclick="previewPasteDevices()">👁 Preview</button>
+        <button class="btn btn-primary" onclick="addPastedToList()">➕ Add to Device List</button>
+        <button class="btn" onclick="clearPaste()">✖ Clear</button>
+      </div>
+
+      <div id="paste-summary" style="margin-top:10px;"></div>
+      <div id="paste-invalid" style="margin-top:10px;"></div>
+      <div id="paste-preview" style="margin-top:10px; overflow-x:auto;"></div>
+
+    </div>
+  </div>
+
+<div class="panel">
+  <div class="panel-header">Filter</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group" style="max-width:260px">
+        <label>Show VLAN</label>
+        <select id="filter-vlan" onchange="renderTable()">
+          <option value="">All VLANs</option>
+          {% for v in s.vlans %}
+          <option value="{{ v.name }}">{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Device list</span>
+    <button class="btn" onclick="saveDevices()">Save changes</button>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>IP</th>
+          <th>Type</th>
+          <th>VLAN</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="device-table">
+        {% for d in devices %}
+        <tr>
+          <td>{{ d.name }}</td>
+          <td style="font-family:monospace">{{ d.ip }}</td>
+          <td>{{ d.type }}</td>
+          <td>{{ d.vlan or '' }}</td>
+          <td style="color:#6b7280">{{ d.notes or '' }}</td>
+          <td><button class="btn btn-danger" onclick="removeDevice('{{ d.ip }}')">Remove</button></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — add one above</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let deviceList = {{ devices | tojson }};
+let pastedPreview = [];
+
+function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function addDevice(){
+  const name  = document.getElementById('new-name').value.trim();
+  const ip    = document.getElementById('new-ip').value.trim();
+  const type  = document.getElementById('new-type').value;
+  const vlan  = document.getElementById('new-vlan').value;
+  const notes = document.getElementById('new-notes').value.trim();
+
+  if(!name || !ip){
+    alert('Name and IP are required');
+    return;
+  }
+
+  deviceList.push({name, ip, type, vlan, notes});
+  renderTable();
+
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-ip').value = '';
+  document.getElementById('new-notes').value = '';
+  document.getElementById('new-vlan').value = '';
+}
+
+function removeDevice(ip){
+  deviceList = deviceList.filter(d => d.ip !== ip);
+  renderTable();
+}
+
+function renderTable(){
+  const tbody = document.getElementById('device-table');
+  const filterVlan = document.getElementById('filter-vlan').value;
+  tbody.innerHTML = '';
+
+  let filtered = deviceList;
+  if(filterVlan){
+    filtered = deviceList.filter(d => (d.vlan || '') === filterVlan);
+  }
+
+  if(filtered.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#4b5563;text-align:center;padding:1rem">No matching devices</td></tr>';
+    return;
+  }
+
+  const groups = {};
+  filtered.forEach(d => {
+    const key = d.vlan || 'Unassigned';
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(d);
+  });
+
+  Object.keys(groups).sort().forEach(groupName => {
+    const groupRow = document.createElement('tr');
+    groupRow.innerHTML = '<td colspan="6" style="background:#111827;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
+    tbody.appendChild(groupRow);
+
+    groups[groupName].forEach(d => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escapeHtml(d.name) + '</td>' +
+        '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
+        '<td>' + escapeHtml(d.type) + '</td>' +
+        '<td>' + escapeHtml(d.vlan || '') + '</td>' +
+        '<td style="color:#6b7280">' + escapeHtml(d.notes || '') + '</td>' +
+        '<td><button class="btn btn-danger" onclick="removeDevice(\'' + String(d.ip).replace(/'/g, "\'") + '\')">Remove</button></td>';
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+async function previewPasteDevices(){
+  const pasted = document.getElementById('pasted-device-text').value.trim();
+  if(!pasted){
+    alert('Paste something first');
+    return;
+  }
+
+  try {
+    const res = await fetch('/tools/api/devices/preview_pasted', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text: pasted })
+    });
+
+    const data = await res.json();
+
+    if(!data.ok){
+      alert(data.error || 'Preview failed');
+      return;
+    }
+
+    pastedPreview = data.devices || [];
+
+    document.getElementById('paste-summary').innerHTML =
+      '<div style="color:#6b7280"><strong>Preview:</strong> valid ' +
+      data.rows_valid + ' | invalid ' +
+      data.rows_invalid + ' | duplicates ' +
+      data.rows_duplicate + ' | headers detected: ' +
+      (data.headers_detected ? 'yes' : 'no') + '</div>';
+
+    if(data.invalid_rows && data.invalid_rows.length){
+      document.getElementById('paste-invalid').innerHTML =
+        '<details>' +
+        '<summary><strong>Invalid rows (' + data.invalid_rows.length + ')</strong></summary>' +
+        '<pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">' +
+        escapeHtml(JSON.stringify(data.invalid_rows, null, 2)) +
+        '</pre></details>';
+    } else {
+      document.getElementById('paste-invalid').innerHTML = '';
+    }
+
+    const rows = pastedPreview.map(d => {
+      const rowStyle = d.duplicate ? ' style="background:#3f3f00"' : '';
+      const status = d.duplicate ? 'Skip duplicate' : 'Ready';
+      return '<tr' + rowStyle + '>' +
+        '<td>' + escapeHtml(d.name) + '</td>' +
+        '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
+        '<td>' + escapeHtml(d.type) + '</td>' +
+        '<td>' + escapeHtml(d.vlan || '') + '</td>' +
+        '<td>' + escapeHtml(d.vendor || '') + '</td>' +
+        '<td>' + status + '</td>' +
+      '</tr>';
+    }).join('');
+
+    document.getElementById('paste-preview').innerHTML =
+      '<table>' +
+        '<thead>' +
+          '<tr><th>Name</th><th>IP</th><th>Type</th><th>VLAN</th><th>Vendor</th><th>Status</th></tr>' +
+        '</thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>';
+  } catch (e) {
+    alert('Preview failed: ' + e);
+  }
+}
+
+function addPastedToList(){
+  if(!pastedPreview.length){
+    alert('Preview first');
+    return;
+  }
+
+  let added = 0;
+
+  pastedPreview.forEach(d => {
+    if(deviceList.some(x => x.ip === d.ip)) return;
+
+    deviceList.push({
+      name: d.name,
+      ip: d.ip,
+      type: d.type,
+      vlan: d.vlan || '',
+      notes: d.notes || ''
+    });
+
+    added++;
+  });
+
+  renderTable();
+  alert('Added ' + added + ' devices to list. Click Save changes to write them to devices.json.');
+}
+
+function clearPaste(){
+  document.getElementById('pasted-device-text').value = '';
+  document.getElementById('paste-summary').innerHTML = '';
+  document.getElementById('paste-invalid').innerHTML = '';
+  document.getElementById('paste-preview').innerHTML = '';
+  pastedPreview = [];
+}
+
+function saveDevices(){
+  fetch('/tools/api/devices/save', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({devices: deviceList})
+  }).then(r => r.json()).then(d => {
+    if(d.success){
+      document.getElementById('success').style.display = 'block';
+      setTimeout(() => document.getElementById('success').style.display = 'none', 3000);
+    }
+  });
+}
+
+renderTable();
+</script>
+{% endblock %}

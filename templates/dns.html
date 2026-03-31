@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}— DNS Records{% endblock %}
+{% block content %}
+<div class="page-title">Local DNS records</div>
+<div class="page-sub">Add A records that resolve on your local network via Pi-hole</div>
+<div id="success" class="success-msg">Record added successfully.</div>
+<div id="error" class="error-msg"></div>
+<div class="panel">
+  <div class="panel-header">Add record</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Hostname (e.g. barco-ctrl{{ s.dns_suffix }})</label>
+        <input id="new-domain" placeholder="barco-ctrl{{ s.dns_suffix }}" value="{{ request.args.get('hostname', '') }}">
+      </div>
+      <div class="form-group">
+        <label>IP address</label>
+        <input id="new-ip" placeholder="192.168.1.10" value="{{ request.args.get('ip', '') }}">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end">
+        <button class="btn btn-primary" onclick="addRecord()">Add record</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-header">Current records</div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead><tr><th>Hostname</th><th>IP address</th><th></th></tr></thead>
+      <tbody id="records-body">
+        {% for r in records %}
+        <tr>
+          <td style="font-family:monospace">{{ r.domain }}</td>
+          <td style="font-family:monospace">{{ r.ip }}</td>
+          <td><button class="btn btn-danger" onclick="deleteRecord('{{ r.domain }}')">Delete</button></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" style="color:#4b5563;text-align:center;padding:1rem">No records yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+function addRecord(){
+  const domain = document.getElementById('new-domain').value.trim();
+  const ip = document.getElementById('new-ip').value.trim();
+  if(!domain||!ip){ alert('Please fill in both fields'); return; }
+  fetch('/tools/api/dns/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain,ip})})
+  .then(r=>r.json()).then(d=>{
+    if(d.error){ document.getElementById('error').textContent=d.error; document.getElementById('error').style.display='block'; }
+    else{ document.getElementById('success').style.display='block'; setTimeout(()=>location.reload(),1000); }
+  });
+}
+function deleteRecord(domain){
+  if(!confirm('Delete '+domain+'?')) return;
+  fetch('/tools/api/dns/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain})})
+  .then(r=>r.json()).then(d=>{ location.reload(); });
+}
+</script>
+{% endblock %}

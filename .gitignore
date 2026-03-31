@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+
+runs/
+*.tar
+*.tar.gz
+
+*.bak
+*.save
+
+app.py.bak*
+PROJECT_STATE.md.bak*
+PROJECT_STATE.bak*

@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block title %}— Report{% endblock %}
+{% block content %}
+<style>
+  .report-wrap { max-width: 1100px; margin: 0 auto; }
+  .report-head { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:20px; }
+  .report-meta { color:#9ca3af; font-size:13px; line-height:1.6; }
+  .report-status {
+    padding: 14px 18px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 20px;
+    text-align: center;
+    min-width: 240px;
+  }
+  .report-status.ok { background:#052e16; color:#86efac; border:1px solid #166534; }
+  .report-status.warn { background:#451a03; color:#fcd34d; border:1px solid #92400e; }
+  .report-status.fail { background:#450a0a; color:#fca5a5; border:1px solid #991b1b; }
+  .report-grid {
+    display:grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap:12px;
+    margin-bottom:20px;
+  }
+  .report-card {
+    background:#111827;
+    border:1px solid #1f2937;
+    border-radius:12px;
+    padding:14px;
+  }
+  .report-card .label { color:#9ca3af; font-size:12px; margin-bottom:6px; }
+  .report-card .value { font-size:24px; font-weight:700; }
+  .report-actions { display:flex; gap:10px; margin-bottom:18px; }
+  .report-table td, .report-table th { vertical-align: top; }
+  @media print {
+    .report-actions, .sidebar, nav, .topbar { display:none !important; }
+    body { background:#fff !important; color:#000 !important; }
+    .panel, .report-card { border:1px solid #ccc !important; box-shadow:none !important; }
+  }
+</style>
+
+<div class="report-wrap">
+  <div class="page-title">Commissioning Report</div>
+  <div class="page-sub">{{ s.project_name or 'No project loaded' }} — {{ s.site_location or '' }}</div>
+
+  <div class="report-actions">
+    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    <button class="btn" onclick="window.location.href='/tools/api/checks/download_csv'">⬇ Download CSV</button>
+    <button class="btn" onclick="window.location.href='/tools/diagnostics'">← Back to diagnostics</button>
+  </div>
+
+  <div class="report-head">
+    <div class="report-meta">
+      <div><strong>Project:</strong> {{ s.project_name or '—' }}</div>
+      <div><strong>Job Number:</strong> {{ s.job_number or '—' }}</div>
+      <div><strong>Client:</strong> {{ s.client_name or '—' }}</div>
+      <div><strong>Site:</strong> {{ s.site_location or '—' }}</div>
+      <div><strong>Selected VLAN:</strong> {{ data.selected_vlan or 'Auto' }}</div>
+      <div><strong>Gateway:</strong> {{ data.gateway or '—' }}</div>
+      <div><strong>Subnet:</strong> {{ data.subnet or '—' }}</div>
+      <div><strong>Run Time:</strong> {{ data.timestamp or '—' }}</div>
+    </div>
+
+    <div class="report-status {{ summary.overall_class }}">
+      {{ summary.overall }}
+    </div>
+  </div>
+
+  <div class="report-grid">
+    <div class="report-card">
+      <div class="label">Checks Passed</div>
+      <div class="value" style="color:#4ade80">{{ summary.passed }}</div>
+    </div>
+    <div class="report-card">
+      <div class="label">Warnings</div>
+      <div class="value" style="color:#fbbf24">{{ summary.warned }}</div>
+    </div>
+    <div class="report-card">
+      <div class="label">Failed</div>
+      <div class="value" style="color:#f87171">{{ summary.failed }}</div>
+    </div>
+    <div class="report-card">
+      <div class="label">Devices Checked</div>
+      <div class="value">{{ data.devices | length }}</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">Network Checks</div>
+    <div class="panel-body" style="padding:0">
+      <table class="report-table">
+        <thead>
+          <tr><th>Check</th><th>Status</th><th>Latency</th><th>Detail</th></tr>
+        </thead>
+        <tbody>
+          {% for c in data.base %}
+          <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.status|upper }}</td>
+            <td style="font-family:monospace">{{ c.latency_ms if c.latency_ms else '—' }}{% if c.latency_ms %} ms{% endif %}</td>
+            <td><pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">{{ c.detail }}</pre></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">Device Checks</div>
+    <div class="panel-body" style="padding:0">
+      <table class="report-table">
+        <thead>
+          <tr><th>Device</th><th>IP</th><th>Type</th><th>Overall</th><th>Checks</th></tr>
+        </thead>
+        <tbody>
+          {% if data.devices %}
+            {% for d in data.devices %}
+            <tr>
+              <td>{{ d.name }}</td>
+              <td style="font-family:monospace">{{ d.ip }}</td>
+              <td>{{ d.type }}</td>
+              <td>{{ d.overall|upper }}</td>
+              <td>
+                {% for c in d.checks %}
+                  <div style="margin-bottom:8px">
+                    <strong>{{ c.check }}</strong> — {{ c.status|upper }}
+                    {% if c.latency_ms %}<span style="font-family:monospace"> ({{ c.latency_ms }} ms)</span>{% endif %}
+                    <pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:4px 0 0 0">{{ c.detail }}</pre>
+                  </div>
+                {% endfor %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="5" style="text-align:center;color:#6b7280">No devices were checked in this run.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

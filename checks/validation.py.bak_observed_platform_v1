@@ -1,0 +1,498 @@
+import subprocess
+import socket
+import time
+import ssl
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Lightweight defaults for fast UI-safe validation
+DEFAULT_PING_COUNT = 1
+DEFAULT_PING_TIMEOUT = 2
+DEFAULT_TCP_TIMEOUT = 2
+DEFAULT_HTTP_TIMEOUT = 3
+DEFAULT_MAX_WORKERS = 8
+
+# Device-type validation profiles
+# Keep this simple and easy to extend later.
+VALIDATION_RULES = {
+    "network-device": ["ping", "http", "ssh"],
+    "crestron": ["ping", "http", "https"],
+    "qsys": ["ping", "http", "port:1710"],
+    "dante": ["ping", "port:8700", "port:8800"],
+    "novastar": ["ping", "port:5200"],
+    "lighting": ["ping", "artnet", "sacn"],
+    "barco_ctrl": ["ping", "http", "https"],
+    "sacn": ["ping", "port:5568"],
+    "artnet": ["ping", "port:6454"],
+    "grandma": ["ping", "port:80", "port:443"],
+    "generic": ["ping"],
+}
+
+# Aliases so existing NetPi device types can map cleanly
+TYPE_ALIASES = {
+    "crestron": "crestron",
+    "qsys": "qsys",
+    "dante": "dante",
+    "novastar": "novastar",
+    "barco_ctrl": "barco_ctrl",
+    "barco ctrl": "barco_ctrl",
+    "sacn": "sacn",
+    "artnet": "artnet",
+    "grandma": "grandma",
+    "lighting": "lighting",
+    "network-device": "network-device",
+    "network device": "network-device",
+    "generic": "generic",
+}
+
+# Named checks can expand to one or more primitive checks
+CHECK_EXPANDERS = {
+    "http": ["port:80"],
+    "https": ["port:443", "ssl"],
+    "ssh": ["port:22"],
+    "web": ["port:80", "port:443"],
+    "ssl": ["ssl"],
+    "artnet": ["port:6454"],
+    "sacn": ["port:5568"],
+}
+
+
+def normalize_device_type(device_type):
+    value = (device_type or "").strip().lower()
+    return TYPE_ALIASES.get(value, value or "generic")
+
+
+def get_validation_profile(device_type):
+    normalized = normalize_device_type(device_type)
+    checks = VALIDATION_RULES.get(normalized)
+
+    if not checks:
+        checks = VALIDATION_RULES["generic"]
+
+    expanded = []
+    for check in checks:
+        expanded.extend(expand_check(check))
+
+    # Deduplicate while preserving order
+    seen = set()
+    ordered = []
+    for item in expanded:
+        if item not in seen:
+            seen.add(item)
+            ordered.append(item)
+
+    return normalized, ordered
+
+
+def expand_check(check):
+    check = (check or "").strip().lower()
+    return CHECK_EXPANDERS.get(check, [check])
+
+
+def summarize_results(results):
+    statuses = [r.get("status") for r in results]
+
+    if "fail" in statuses:
+        return "fail"
+    if "warn" in statuses:
+        return "warn"
+    if "error" in statuses:
+        return "error"
+    return "pass"
+
+
+def format_latency_ms(start_time):
+    return round((time.time() - start_time) * 1000, 1)
+
+
+def make_result(check, status, detail="", latency_ms=None, extra=None):
+    payload = {
+        "check": check,
+        "status": status,
+        "detail": detail,
+    }
+    if latency_ms is not None:
+        payload["latency_ms"] = latency_ms
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def run_ping_check(ip):
+    start = time.time()
+    try:
+        result = subprocess.run(
+            ["ping", "-c", str(DEFAULT_PING_COUNT), "-W", str(DEFAULT_PING_TIMEOUT), ip],
+            capture_output=True,
+            text=True,
+            timeout=DEFAULT_PING_TIMEOUT + 2,
+        )
+
+        latency_ms = format_latency_ms(start)
+
+        if result.returncode == 0:
+            parsed_avg = None
+            for line in result.stdout.splitlines():
+                if "rtt" in line or "round-trip" in line:
+                    parts = line.split("=")
+                    if len(parts) > 1:
+                        stats = parts[1].strip().split("/")
+                        if len(stats) >= 2:
+                            parsed_avg = stats[1].strip()
+                    break
+
+            extra = {}
+            if parsed_avg is not None:
+                extra["reported_latency_ms"] = parsed_avg
+
+            return make_result(
+                "ping",
+                "pass",
+                detail=f"{ip} responded to ping",
+                latency_ms=latency_ms,
+                extra=extra,
+            )
+
+        return make_result(
+            "ping",
+            "fail",
+            detail=f"{ip} did not respond to ping",
+            latency_ms=latency_ms,
+        )
+
+    except subprocess.TimeoutExpired:
+        return make_result("ping", "fail", detail=f"Ping timed out for {ip}")
+    except Exception as e:
+        return make_result("ping", "error", detail=str(e))
+
+
+def run_tcp_port_check(ip, port):
+    check_name = f"port:{port}"
+    start = time.time()
+    sock = None
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(DEFAULT_TCP_TIMEOUT)
+        result = sock.connect_ex((ip, int(port)))
+        latency_ms = format_latency_ms(start)
+
+        if result == 0:
+            return make_result(
+                check_name,
+                "pass",
+                detail=f"TCP {port} open on {ip}",
+                latency_ms=latency_ms,
+                extra={"port": int(port)},
+            )
+
+        return make_result(
+            check_name,
+            "fail",
+            detail=f"TCP {port} closed or filtered on {ip}",
+            latency_ms=latency_ms,
+            extra={"port": int(port)},
+        )
+
+    except Exception as e:
+        return make_result(
+            check_name,
+            "error",
+            detail=str(e),
+            extra={"port": int(port)},
+        )
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+def run_ssl_check(ip, port=443):
+    start = time.time()
+    sock = None
+    wrapped = None
+
+    try:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        sock = socket.create_connection((ip, int(port)), timeout=DEFAULT_HTTP_TIMEOUT)
+        wrapped = context.wrap_socket(sock, server_hostname=ip)
+
+        cipher = wrapped.cipher()
+        version = wrapped.version()
+        latency_ms = format_latency_ms(start)
+
+        return make_result(
+            "ssl",
+            "pass",
+            detail=f"TLS handshake successful on {ip}:{port}",
+            latency_ms=latency_ms,
+            extra={
+                "port": int(port),
+                "tls_version": version,
+                "cipher": cipher[0] if cipher else None,
+            },
+        )
+
+    except Exception as e:
+        return make_result(
+            "ssl",
+            "fail",
+            detail=f"TLS handshake failed on {ip}:{port} - {e}",
+            extra={"port": int(port)},
+        )
+    finally:
+        for handle in (wrapped, sock):
+            if handle:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+
+
+def run_check(device, check):
+    ip = device.get("ip", "").strip()
+    if not ip:
+        return make_result(check, "error", detail="Device has no IP address")
+
+    check = (check or "").strip().lower()
+
+    if check == "ping":
+        return run_ping_check(ip)
+
+    if check.startswith("port:"):
+        try:
+            port = int(check.split(":", 1)[1])
+            return run_tcp_port_check(ip, port)
+        except ValueError:
+            return make_result(check, "error", detail=f"Invalid port definition: {check}")
+
+    if check == "ssl":
+        return run_ssl_check(ip, 443)
+
+    return make_result(check, "warn", detail=f"Check type not implemented yet: {check}")
+
+
+
+COMMON_PORTS = [80, 443, 22, 23, 8080, 8443]
+AV_FINGERPRINT_PORTS = [1710, 8700, 8800]
+
+SERVICE_MAP_LOOKUP = {
+    80: "http",
+    443: "https",
+    22: "ssh",
+    23: "telnet",
+    8080: "http-alt",
+    8443: "https-alt",
+}
+
+
+def quick_tcp_probe(ip, port, timeout=1):
+    try:
+        sock = socket.create_connection((ip, port), timeout=timeout)
+        sock.close()
+        return True
+    except Exception:
+        return False
+
+
+def http_probe(ip, port):
+    try:
+        import http.client
+        import re
+
+        is_https = port in (443, 8443)
+        conn_class = http.client.HTTPSConnection if is_https else http.client.HTTPConnection
+
+        if is_https:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            conn = conn_class(ip, port=port, timeout=1.5, context=context)
+        else:
+            conn = conn_class(ip, port=port, timeout=1.5)
+
+        conn.request("GET", "/", headers={"Host": ip, "User-Agent": "NetPi/3.0"})
+        resp = conn.getresponse()
+        status = resp.status
+        body = resp.read(1024).decode(errors="ignore")
+        conn.close()
+
+        title = ""
+        m = re.search(r"<title[^>]*>(.*?)</title>", body, re.IGNORECASE | re.DOTALL)
+        if m:
+            title = " ".join(m.group(1).split())[:120]
+
+        payload = {"status_code": status}
+        server = resp.getheader("Server", "")
+        if server:
+            payload["server"] = server
+        if title:
+            payload["title"] = title
+        return payload
+    except Exception:
+        return None
+
+
+
+def infer_fingerprint(normalized_type, open_ports, http_details):
+    ports = set(open_ports or [])
+    title_text = " ".join(str(v.get("title", "")) for v in (http_details or {}).values()).lower()
+    server_text = " ".join(str(v.get("server", "")) for v in (http_details or {}).values()).lower()
+    reasons = []
+
+    if 1710 in ports or "q-sys" in title_text or "qsys" in title_text:
+        if 1710 in ports:
+            reasons.append("port 1710 open")
+        if "q-sys" in title_text or "qsys" in title_text:
+            reasons.append("http title suggests q-sys")
+        return {
+            "platform": "qsys",
+            "confidence": "high" if reasons else "medium",
+            "reasons": reasons
+        }
+
+    if "dm nvx" in title_text or " nvx" in f" {title_text}" or title_text.startswith("nvx"):
+        reasons.append("http title suggests dm nvx")
+        return {
+            "platform": "nvx",
+            "confidence": "medium",
+            "reasons": reasons
+        }
+
+    if 8700 in ports or 8800 in ports or "dante" in title_text:
+        if 8700 in ports:
+            reasons.append("port 8700 open")
+        if 8800 in ports:
+            reasons.append("port 8800 open")
+        if "dante" in title_text:
+            reasons.append("http title suggests dante")
+        return {
+            "platform": "dante",
+            "confidence": "high" if (8700 in ports and 8800 in ports) else "medium",
+            "reasons": reasons
+        }
+
+    if "crestron" in title_text or "crestron" in server_text:
+        if "crestron" in title_text:
+            reasons.append("http title suggests crestron")
+        if "crestron" in server_text:
+            reasons.append("server header suggests crestron")
+        return {
+            "platform": "crestron",
+            "confidence": "medium",
+            "reasons": reasons
+        }
+
+    if normalized_type in ("qsys", "dante", "crestron"):
+        return {
+            "platform": normalized_type,
+            "confidence": "low",
+            "reasons": ["inferred from device type"]
+        }
+
+    return {
+        "platform": "unknown",
+        "confidence": "low",
+        "reasons": []
+    }
+
+
+def run_validation(device):
+    start_time = time.time()
+
+    device_type = device.get("type", "generic")
+    normalized_type, checks = get_validation_profile(device_type)
+
+    results = []
+    open_ports = set()
+    ip = device.get("ip", "").strip()
+
+    for check in checks:
+        result = run_check(device, check)
+        result["source"] = "profile"
+        results.append(result)
+
+        if result.get("status") == "pass" and result.get("check", "").startswith("port:"):
+            try:
+                port = int(result["check"].split(":", 1)[1])
+                open_ports.add(port)
+            except Exception:
+                pass
+
+    if ip:
+        for port in sorted(set(COMMON_PORTS + AV_FINGERPRINT_PORTS)):
+            if port in open_ports:
+                continue
+
+            if quick_tcp_probe(ip, port, timeout=0.75):
+                open_ports.add(port)
+                results.append(make_result(
+                    f"port:{port}",
+                    "pass",
+                    detail="Discovered via quick probe",
+                    extra={"port": port, "source": "quick_probe"}
+                ))
+
+    service_map = {}
+    http_details = {}
+
+    for port in sorted(open_ports):
+        service_map[str(port)] = SERVICE_MAP_LOOKUP.get(port, "unknown")
+
+        if port in (80, 443, 8080, 8443):
+            http_data = http_probe(ip, port)
+            if http_data:
+                http_details[str(port)] = http_data
+
+    fingerprint = infer_fingerprint(normalized_type, open_ports, http_details)
+
+    return {
+        "device": device.get("name") or device.get("ip") or "Unnamed device",
+        "name": device.get("name") or device.get("ip") or "Unnamed device",
+        "ip": device.get("ip", ""),
+        "type": normalized_type,
+        "original_type": device_type,
+        "latency_ms": format_latency_ms(start_time),
+        "open_ports": sorted(open_ports),
+        "service_map": service_map,
+        "http": http_details,
+        "fingerprint": fingerprint,
+        "results": results,
+        "overall": summarize_results(results),
+    }
+
+
+def run_validation_for_all(devices, max_workers=DEFAULT_MAX_WORKERS):
+    devices = devices or []
+    if not devices:
+        return []
+
+    results = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(run_validation, device): device for device in devices}
+
+        for future in as_completed(future_map):
+            device = future_map[future]
+            try:
+                results.append(future.result())
+            except Exception as e:
+                results.append({
+                    "device": device.get("name") or device.get("ip") or "Unnamed device",
+                    "name": device.get("name") or device.get("ip") or "Unnamed device",
+                    "ip": device.get("ip", ""),
+                    "type": normalize_device_type(device.get("type", "generic")),
+                    "original_type": device.get("type", "generic"),
+                    "results": [
+                        make_result("validation", "error", detail=str(e))
+                    ],
+                    "overall": "error",
+                })
+
+    # Stable display order: sort back by device name / IP
+    results.sort(key=lambda d: (d.get("name") or "", d.get("ip") or ""))
+    return results

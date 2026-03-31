@@ -1,0 +1,480 @@
+{% extends 'base.html' %}
+{% block title %}— Diagnostics{% endblock %}
+{% block content %}
+<div class="page-title">Diagnostics</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} — {{ s.site_location or '' }}</div>
+
+<div class="cards" id="summary-cards" style="display:none">
+  <div class="card">
+    <div class="card-label">Overall status</div>
+    <div class="card-value" id="overall-status">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Checks passed</div>
+    <div class="card-value" id="checks-passed" style="color:#4ade80">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Warnings</div>
+    <div class="card-value" id="checks-warn" style="color:#fbbf24">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Failed</div>
+    <div class="card-value" id="checks-fail" style="color:#f87171">—</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Devices checked</div>
+    <div class="card-value" id="devices-checked">—</div>
+  </div>
+</div>
+
+<div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:1rem;align-items:center;flex-wrap:wrap">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <select id="vlan-select" class="input" style="min-width:220px">
+      <option value="">Auto (default)</option>
+      {% for v in s.vlans %}
+        <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
+      {% endfor %}
+    </select>
+
+    <button class="btn btn-primary" id="run-btn" onclick="runChecks()">▶ Run all checks</button>
+    <button class="btn" id="discover-btn" onclick="discoverHosts()">🔎 Discover Hosts</button>
+    <button class="btn" id="cancel-discover-btn" onclick="cancelDiscovery()" style="display:none">✖ Cancel Discovery</button>
+  </div>
+
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="addSelected()">➕ Add Selected</button>
+    <button class="btn" onclick="downloadCSV()">⬇ Export CSV</button>
+    <button class="btn" onclick="openReport()">📄 Open Report</button>
+    <button class="btn" onclick="window.location.href='/tools/devices'">Manage devices</button>
+
+<div class="panel" style="margin-bottom:1rem">
+  <div class="panel-header">Paste Device List</div>
+  <div class="panel-body">
+
+    <textarea id="pasted-device-text"
+      style="width:100%; min-height:160px; font-family:monospace; resize:vertical;"
+      placeholder="Name	IP	VLAN	Type	MAC	Vendor	Notes
+DSP-01	192.168.1.20	10	DSP	00:11:22:33:44:55	Biamp	Main DSP
+SW-01	192.168.1.10	10	network-device		Cisco	Core switch"></textarea>
+
+    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn" onclick="previewPastedDevices()">👁 Preview</button>
+      <button class="btn btn-primary" onclick="importPastedDevices()">➕ Import</button>
+      <button class="btn" onclick="clearPastedDevices()">✖ Clear</button>
+    </div>
+
+    <div id="paste-import-summary" style="margin-top:10px;"></div>
+    <div id="paste-import-invalid" style="margin-top:10px;"></div>
+    <div id="paste-import-preview" style="margin-top:10px; overflow-x:auto;"></div>
+
+  </div>
+</div>
+
+  </div>
+</div>
+
+<div id="running-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem">
+  Running checks — this may take up to 60 seconds...
+</div>
+
+<div id="discovering-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem">
+  Discovering live hosts on selected subnet...
+</div>
+
+<div class="panel" id="base-panel" style="display:none">
+  <div class="panel-header">Network checks</div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead><tr><th>Check</th><th>Status</th><th>Latency</th><th>Detail</th></tr></thead>
+      <tbody id="base-results"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel" id="device-panel" style="display:none">
+  <div class="panel-header">Device checks</div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead><tr><th>Device</th><th>IP</th><th>Type</th><th>Status</th><th></th></tr></thead>
+      <tbody id="device-results"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel" id="discover-panel" style="display:none">
+  <div class="panel-header">Discovered hosts</div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead><tr><th><input type='checkbox' onclick='toggleAll(this)'></th><th>Hostname</th><th>IP</th><th>MAC / Vendor</th><th>Status</th><th>Likely type</th><th>Actions</th></tr></thead>
+      <tbody id="discover-results"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel" id="portscan-panel" style="display:none">
+  <div class="panel-header">Quick port scan output</div>
+  <div class="panel-body">
+    <pre id="portscan-output" style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:0"></pre>
+  </div>
+</div>
+
+<script>
+let discoverAbortController = null;
+
+function statusBadge(s){
+  const map = {
+    ok:    '<span class="badge badge-green">OK</span>',
+    warn:  '<span class="badge badge-amber">WARN</span>',
+    fail:  '<span class="badge badge-red">FAIL</span>',
+    error: '<span class="badge badge-red">ERROR</span>',
+    online:'<span class="badge badge-green">ONLINE</span>'
+  };
+  return map[s] || s;
+}
+
+function openReport(){
+  window.open('/tools/report/latest', '_blank');
+}
+
+function downloadCSV(){
+  fetch('/tools/api/checks/export_csv')
+    .then(r => r.json())
+    .then(d => {
+      if(d.csv){
+        window.location.href = '/tools/api/checks/download_csv';
+      } else {
+        alert('No CSV available yet — run diagnostics first');
+      }
+    });
+}
+
+function runChecks(){
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('run-btn').textContent = 'Running...';
+  document.getElementById('running-msg').style.display = 'block';
+  document.getElementById('summary-cards').style.display = 'none';
+  document.getElementById('base-panel').style.display = 'none';
+  document.getElementById('device-panel').style.display = 'none';
+
+  const vlan = document.getElementById('vlan-select').value;
+
+  fetch('/tools/api/checks/run', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ vlan: vlan })
+  })
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('run-btn').textContent = '▶ Run all checks';
+      document.getElementById('running-msg').style.display = 'none';
+
+      const allChecks = [
+        ...data.base,
+        ...data.devices.flatMap(d => d.checks)
+      ];
+
+      const passed  = allChecks.filter(c => c.status === 'ok').length;
+      const warned  = allChecks.filter(c => c.status === 'warn').length;
+      const failed  = allChecks.filter(c => c.status === 'fail' || c.status === 'error').length;
+      const overall = failed > 0 ? 'FAIL' : warned > 0 ? 'WARN' : 'READY';
+      const overallColor = failed > 0 ? '#f87171' : warned > 0 ? '#fbbf24' : '#4ade80';
+
+      document.getElementById('overall-status').textContent = overall;
+      document.getElementById('overall-status').style.color = overallColor;
+      document.getElementById('checks-passed').textContent = passed;
+      document.getElementById('checks-warn').textContent = warned;
+      document.getElementById('checks-fail').textContent = failed;
+      document.getElementById('devices-checked').textContent = data.devices.length;
+      document.getElementById('summary-cards').style.display = 'grid';
+
+      const baseBody = document.getElementById('base-results');
+      baseBody.innerHTML = '';
+      data.base.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${c.name}</td>
+          <td>${statusBadge(c.status)}</td>
+          <td style="font-family:monospace">${c.latency_ms ? c.latency_ms + ' ms' : '—'}</td>
+          <td><details><summary style="cursor:pointer;color:#6b7280;font-size:11px">detail</summary>
+          <pre style="font-size:10px;color:#9ca3af;margin-top:4px;white-space:pre-wrap">${c.detail}</pre></details></td>`;
+        baseBody.appendChild(tr);
+      });
+      document.getElementById('base-panel').style.display = 'block';
+
+      const devBody = document.getElementById('device-results');
+      devBody.innerHTML = '';
+      if(data.devices.length === 0){
+        devBody.innerHTML = '<tr><td colspan="5" style="color:#4b5563;text-align:center;padding:1rem">No saved devices matched this VLAN — use Discover Hosts or <a href="/tools/devices" style="color:#60a5fa">manage devices</a></td></tr>';
+      } else {
+        data.devices.forEach(d => {
+          const tr = document.createElement('tr');
+          const checksHtml = d.checks.map(c =>
+            `<div style="margin-bottom:4px">${statusBadge(c.status)} <span style="font-size:11px;color:#9ca3af">${c.check} ${c.latency_ms ? '— '+c.latency_ms+'ms' : ''}</span></div>`
+          ).join('');
+          tr.innerHTML = `
+            <td style="font-weight:500">${d.name}</td>
+            <td style="font-family:monospace">${d.ip}</td>
+            <td style="color:#6b7280">${d.type}</td>
+            <td>${statusBadge(d.overall)}</td>
+            <td><details><summary style="cursor:pointer;color:#6b7280;font-size:11px">checks</summary>
+            <div style="margin-top:6px">${checksHtml}</div></details></td>`;
+          devBody.appendChild(tr);
+        });
+      }
+      document.getElementById('device-panel').style.display = 'block';
+    })
+    .catch(e => {
+      document.getElementById('run-btn').disabled = false;
+      document.getElementById('run-btn').textContent = '▶ Run all checks';
+      document.getElementById('running-msg').style.display = 'none';
+      alert('Error running checks: ' + e);
+    });
+}
+
+function discoverHosts(){
+  if(discoverAbortController){
+    discoverAbortController.abort();
+  }
+
+  discoverAbortController = new AbortController();
+
+  document.getElementById('discover-btn').disabled = true;
+  document.getElementById('discover-btn').textContent = 'Discovering...';
+  document.getElementById('cancel-discover-btn').style.display = 'inline-block';
+  document.getElementById('discovering-msg').style.display = 'block';
+  document.getElementById('discover-panel').style.display = 'none';
+
+  const vlan = document.getElementById('vlan-select').value;
+
+  fetch('/tools/api/discover_hosts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ vlan: vlan }),
+    signal: discoverAbortController.signal
+  })
+    .then(r => r.json())
+    .then(data => {
+      discoverAbortController = null;
+      document.getElementById('discover-btn').disabled = false;
+      document.getElementById('discover-btn').textContent = '🔎 Discover Hosts';
+      document.getElementById('cancel-discover-btn').style.display = 'none';
+      document.getElementById('discovering-msg').style.display = 'none';
+
+      if(data.error){
+        alert(data.error);
+        return;
+      }
+
+      const tbody = document.getElementById('discover-results');
+      tbody.innerHTML = '';
+
+      if(!data.devices || data.devices.length === 0){
+        tbody.innerHTML = `<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No live hosts found on ${data.subnet}</td></tr>`;
+      } else {
+        data.devices.forEach(d => {
+          const hostname = d.hostname || '';
+          const safeHost = hostname.replace(/'/g, "\'");
+          const initialType = d.guessed_type || 'generic';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><input type='checkbox' class='host-check'></td>
+            <td>${hostname || '<span style="color:#6b7280">—</span>'}</td>
+            <td style="font-family:monospace">${d.ip}</td>
+            <td style="font-size:11px;color:#9ca3af">
+              ${d.mac ? `<div style="font-family:monospace">${d.mac}</div>` : '<div>—</div>'}
+              ${d.vendor ? `<div>${d.vendor}</div>` : ''}
+            </td>
+            <td>${statusBadge(d.status)}</td>
+            <td id="guess-${d.ip.replace(/\./g,'-')}" style="color:#9ca3af">
+              <strong>${initialType}</strong>
+              <div style="font-size:11px;color:#6b7280">fingerprinting...</div>
+            </td>
+            <td style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn" onclick="quickPortScan('${d.ip}')">Quick port scan</button>
+              <button class="btn btn-primary" onclick="addDiscovered('${d.ip}','${safeHost}')">Add to devices</button>
+            </td>`;
+          tbody.appendChild(tr);
+          fingerprintHost(d.ip);
+        });
+      }
+
+      document.getElementById('discover-panel').style.display = 'block';
+    })
+    .catch(e => {
+      document.getElementById('discover-btn').disabled = false;
+      document.getElementById('discover-btn').textContent = '🔎 Discover Hosts';
+      document.getElementById('cancel-discover-btn').style.display = 'none';
+      document.getElementById('discovering-msg').style.display = 'none';
+
+      if(e.name === 'AbortError'){
+        discoverAbortController = null;
+        return;
+      }
+
+      discoverAbortController = null;
+      alert('Error discovering hosts: ' + e);
+    });
+}
+
+function quickPortScan(ip){
+  document.getElementById('portscan-panel').style.display = 'block';
+  document.getElementById('portscan-output').textContent = 'Scanning ' + ip + '...';
+
+  fetch('/tools/api/portscan', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ host: ip })
+  })
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('portscan-output').textContent = d.output || d.error || 'No output';
+    })
+    .catch(e => {
+      document.getElementById('portscan-output').textContent = 'Error: ' + e;
+    });
+}
+
+function fingerprintHost(ip){
+  const row = document.getElementById('guess-' + ip.replace(/\./g,'-'));
+  let vendor = '';
+
+  const tr = row ? row.closest('tr') : null;
+  if(tr){
+    const vendorCell = tr.children[3];
+    if(vendorCell){
+      vendor = vendorCell.textContent || '';
+    }
+  }
+
+  fetch('/tools/api/fingerprint_host', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ip: ip, vendor: vendor })
+  })
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById('guess-' + ip.replace(/\./g,'-'));
+      if(!el) return;
+      if(d.error){
+        el.textContent = 'unknown';
+        return;
+      }
+      const ports = (d.open_ports || []).join(', ');
+      el.innerHTML = `<strong>${d.guessed_type || 'generic'}</strong>${ports ? `<div style="font-size:11px;color:#6b7280">${ports}</div>` : ''}`;
+    })
+    .catch(() => {
+      const el = document.getElementById('guess-' + ip.replace(/\./g,'-'));
+      if(el) el.textContent = 'unknown';
+    });
+}
+
+function addDiscovered(ip, hostname){
+  const vlan = document.getElementById('vlan-select').value;
+  const guessEl = document.getElementById('guess-' + ip.replace(/\./g,'-'));
+  let guessedType = 'generic';
+
+  if(guessEl){
+    const strong = guessEl.querySelector('strong');
+    if(strong && strong.textContent.trim()){
+      guessedType = strong.textContent.trim();
+    }
+  }
+
+  fetch('/tools/api/devices/add_discovered', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      ip: ip,
+      hostname: hostname,
+      vlan: vlan,
+      type: guessedType
+    })
+  })
+    .then(r => r.json())
+    .then(d => {
+      alert((d.message || 'Device added') + ' [' + guessedType + ']');
+    })
+    .catch(e => {
+      alert('Error adding device: ' + e);
+    });
+}
+function addSelected(){
+  const rows = document.querySelectorAll('#discover-results tr');
+  const vlan = document.getElementById('vlan-select').value;
+
+  const devices = [];
+
+  rows.forEach(tr => {
+    const checkbox = tr.querySelector('.host-check');
+    if(!checkbox || !checkbox.checked) return;
+
+    const ip = tr.children[2]?.textContent.trim();
+    const hostname = tr.children[1]?.textContent.trim();
+
+    // MAC + Vendor extraction
+    const macVendorCell = tr.children[3];
+    let mac = '';
+    let vendor = '';
+
+    if(macVendorCell){
+      const divs = macVendorCell.querySelectorAll('div');
+      if(divs[0]) mac = divs[0].textContent.trim();
+      if(divs[1]) vendor = divs[1].textContent.trim();
+    }
+
+    // Get guessed type (fingerprint result preferred)
+    const guessEl = tr.querySelector('[id^="guess-"]');
+    let type = 'generic';
+
+    if(guessEl){
+      const strong = guessEl.querySelector('strong');
+      if(strong && strong.textContent.trim()){
+        type = strong.textContent.trim();
+      } else {
+        const raw = guessEl.textContent.trim();
+        if(raw && raw !== 'checking...' && raw !== 'unknown'){
+          type = raw;
+        }
+      }
+    }
+
+    if(ip){
+      devices.push({
+        ip: ip,
+        hostname: hostname,
+        vlan: vlan,
+        type: type,
+        mac: mac,
+        vendor: vendor
+      });
+    }
+  });
+
+  if(devices.length === 0){
+    alert('No devices selected');
+    return;
+  }
+
+  console.log('Sending bulk devices:', devices);
+
+  fetch('/tools/api/devices/add_bulk', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      devices: devices
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    alert(`Added ${d.added || 0} devices`);
+  })
+  .catch(e => {
+    alert('Error adding devices: ' + e);
+  });
+}
+
+</script>
+{% endblock %}

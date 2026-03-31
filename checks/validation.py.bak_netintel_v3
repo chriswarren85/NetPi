@@ -1,0 +1,327 @@
+import subprocess
+import socket
+import time
+import ssl
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Lightweight defaults for fast UI-safe validation
+DEFAULT_PING_COUNT = 1
+DEFAULT_PING_TIMEOUT = 2
+DEFAULT_TCP_TIMEOUT = 2
+DEFAULT_HTTP_TIMEOUT = 3
+DEFAULT_MAX_WORKERS = 8
+
+# Device-type validation profiles
+# Keep this simple and easy to extend later.
+VALIDATION_RULES = {
+    "network-device": ["ping", "http", "ssh"],
+    "crestron": ["ping", "http", "https"],
+    "qsys": ["ping", "http", "port:1710"],
+    "dante": ["ping", "port:8700", "port:8800"],
+    "novastar": ["ping", "port:5200"],
+    "lighting": ["ping", "artnet", "sacn"],
+    "barco_ctrl": ["ping", "http", "https"],
+    "sacn": ["ping", "port:5568"],
+    "artnet": ["ping", "port:6454"],
+    "grandma": ["ping", "port:80", "port:443"],
+    "generic": ["ping"],
+}
+
+# Aliases so existing NetPi device types can map cleanly
+TYPE_ALIASES = {
+    "crestron": "crestron",
+    "qsys": "qsys",
+    "dante": "dante",
+    "novastar": "novastar",
+    "barco_ctrl": "barco_ctrl",
+    "barco ctrl": "barco_ctrl",
+    "sacn": "sacn",
+    "artnet": "artnet",
+    "grandma": "grandma",
+    "lighting": "lighting",
+    "network-device": "network-device",
+    "network device": "network-device",
+    "generic": "generic",
+}
+
+# Named checks can expand to one or more primitive checks
+CHECK_EXPANDERS = {
+    "http": ["port:80"],
+    "https": ["port:443", "ssl"],
+    "ssh": ["port:22"],
+    "web": ["port:80", "port:443"],
+    "ssl": ["ssl"],
+    "artnet": ["port:6454"],
+    "sacn": ["port:5568"],
+}
+
+
+def normalize_device_type(device_type):
+    value = (device_type or "").strip().lower()
+    return TYPE_ALIASES.get(value, value or "generic")
+
+
+def get_validation_profile(device_type):
+    normalized = normalize_device_type(device_type)
+    checks = VALIDATION_RULES.get(normalized)
+
+    if not checks:
+        checks = VALIDATION_RULES["generic"]
+
+    expanded = []
+    for check in checks:
+        expanded.extend(expand_check(check))
+
+    # Deduplicate while preserving order
+    seen = set()
+    ordered = []
+    for item in expanded:
+        if item not in seen:
+            seen.add(item)
+            ordered.append(item)
+
+    return normalized, ordered
+
+
+def expand_check(check):
+    check = (check or "").strip().lower()
+    return CHECK_EXPANDERS.get(check, [check])
+
+
+def summarize_results(results):
+    statuses = [r.get("status") for r in results]
+
+    if "fail" in statuses:
+        return "fail"
+    if "warn" in statuses:
+        return "warn"
+    if "error" in statuses:
+        return "error"
+    return "pass"
+
+
+def format_latency_ms(start_time):
+    return round((time.time() - start_time) * 1000, 1)
+
+
+def make_result(check, status, detail="", latency_ms=None, extra=None):
+    payload = {
+        "check": check,
+        "status": status,
+        "detail": detail,
+    }
+    if latency_ms is not None:
+        payload["latency_ms"] = latency_ms
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def run_ping_check(ip):
+    start = time.time()
+    try:
+        result = subprocess.run(
+            ["ping", "-c", str(DEFAULT_PING_COUNT), "-W", str(DEFAULT_PING_TIMEOUT), ip],
+            capture_output=True,
+            text=True,
+            timeout=DEFAULT_PING_TIMEOUT + 2,
+        )
+
+        latency_ms = format_latency_ms(start)
+
+        if result.returncode == 0:
+            parsed_avg = None
+            for line in result.stdout.splitlines():
+                if "rtt" in line or "round-trip" in line:
+                    parts = line.split("=")
+                    if len(parts) > 1:
+                        stats = parts[1].strip().split("/")
+                        if len(stats) >= 2:
+                            parsed_avg = stats[1].strip()
+                    break
+
+            extra = {}
+            if parsed_avg is not None:
+                extra["reported_latency_ms"] = parsed_avg
+
+            return make_result(
+                "ping",
+                "pass",
+                detail=f"{ip} responded to ping",
+                latency_ms=latency_ms,
+                extra=extra,
+            )
+
+        return make_result(
+            "ping",
+            "fail",
+            detail=f"{ip} did not respond to ping",
+            latency_ms=latency_ms,
+        )
+
+    except subprocess.TimeoutExpired:
+        return make_result("ping", "fail", detail=f"Ping timed out for {ip}")
+    except Exception as e:
+        return make_result("ping", "error", detail=str(e))
+
+
+def run_tcp_port_check(ip, port):
+    check_name = f"port:{port}"
+    start = time.time()
+    sock = None
+
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(DEFAULT_TCP_TIMEOUT)
+        result = sock.connect_ex((ip, int(port)))
+        latency_ms = format_latency_ms(start)
+
+        if result == 0:
+            return make_result(
+                check_name,
+                "pass",
+                detail=f"TCP {port} open on {ip}",
+                latency_ms=latency_ms,
+                extra={"port": int(port)},
+            )
+
+        return make_result(
+            check_name,
+            "fail",
+            detail=f"TCP {port} closed or filtered on {ip}",
+            latency_ms=latency_ms,
+            extra={"port": int(port)},
+        )
+
+    except Exception as e:
+        return make_result(
+            check_name,
+            "error",
+            detail=str(e),
+            extra={"port": int(port)},
+        )
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+def run_ssl_check(ip, port=443):
+    start = time.time()
+    sock = None
+    wrapped = None
+
+    try:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        sock = socket.create_connection((ip, int(port)), timeout=DEFAULT_HTTP_TIMEOUT)
+        wrapped = context.wrap_socket(sock, server_hostname=ip)
+
+        cipher = wrapped.cipher()
+        version = wrapped.version()
+        latency_ms = format_latency_ms(start)
+
+        return make_result(
+            "ssl",
+            "pass",
+            detail=f"TLS handshake successful on {ip}:{port}",
+            latency_ms=latency_ms,
+            extra={
+                "port": int(port),
+                "tls_version": version,
+                "cipher": cipher[0] if cipher else None,
+            },
+        )
+
+    except Exception as e:
+        return make_result(
+            "ssl",
+            "fail",
+            detail=f"TLS handshake failed on {ip}:{port} - {e}",
+            extra={"port": int(port)},
+        )
+    finally:
+        for handle in (wrapped, sock):
+            if handle:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+
+
+def run_check(device, check):
+    ip = device.get("ip", "").strip()
+    if not ip:
+        return make_result(check, "error", detail="Device has no IP address")
+
+    check = (check or "").strip().lower()
+
+    if check == "ping":
+        return run_ping_check(ip)
+
+    if check.startswith("port:"):
+        try:
+            port = int(check.split(":", 1)[1])
+            return run_tcp_port_check(ip, port)
+        except ValueError:
+            return make_result(check, "error", detail=f"Invalid port definition: {check}")
+
+    if check == "ssl":
+        return run_ssl_check(ip, 443)
+
+    return make_result(check, "warn", detail=f"Check type not implemented yet: {check}")
+
+
+def run_validation(device):
+    device_type = device.get("type", "generic")
+    normalized_type, checks = get_validation_profile(device_type)
+
+    results = []
+    for check in checks:
+        results.append(run_check(device, check))
+
+    return {
+        "device": device.get("name") or device.get("ip") or "Unnamed device",
+        "name": device.get("name") or device.get("ip") or "Unnamed device",
+        "ip": device.get("ip", ""),
+        "type": normalized_type,
+        "original_type": device_type,
+        "results": results,
+        "overall": summarize_results(results),
+    }
+
+
+def run_validation_for_all(devices, max_workers=DEFAULT_MAX_WORKERS):
+    devices = devices or []
+    if not devices:
+        return []
+
+    results = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(run_validation, device): device for device in devices}
+
+        for future in as_completed(future_map):
+            device = future_map[future]
+            try:
+                results.append(future.result())
+            except Exception as e:
+                results.append({
+                    "device": device.get("name") or device.get("ip") or "Unnamed device",
+                    "name": device.get("name") or device.get("ip") or "Unnamed device",
+                    "ip": device.get("ip", ""),
+                    "type": normalize_device_type(device.get("type", "generic")),
+                    "original_type": device.get("type", "generic"),
+                    "results": [
+                        make_result("validation", "error", detail=str(e))
+                    ],
+                    "overall": "error",
+                })
+
+    # Stable display order: sort back by device name / IP
+    results.sort(key=lambda d: (d.get("name") or "", d.get("ip") or ""))
+    return results

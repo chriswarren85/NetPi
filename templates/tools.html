@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}— Network Tools{% endblock %}
+{% block content %}
+<div class="page-title">Network tools</div>
+<div class="page-sub">Ping, port scan, and traceroute</div>
+<div class="panel">
+  <div class="panel-header">Host</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label>IP address or hostname</label>
+        <input id="host-input" placeholder="e.g. 192.168.1.10" value="{{ request.args.get('host', '') }}">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="runTool('ping')">Ping</button>
+      <button class="btn" onclick="runTool('portscan')">Port scan</button>
+      <button class="btn" onclick="runTool('traceroute')">Traceroute</button>
+    </div>
+  </div>
+</div>
+<div class="panel" id="output-panel" style="display:none">
+  <div class="panel-header" id="output-title">Output</div>
+  <div class="panel-body">
+    <div class="output-box" id="output-box"></div>
+  </div>
+</div>
+<script>
+function runTool(tool){
+  const host = document.getElementById('host-input').value.trim();
+  if(!host){ alert('Please enter a host'); return; }
+  document.getElementById('output-panel').style.display = 'block';
+  document.getElementById('output-title').textContent = tool + ' — ' + host;
+  document.getElementById('output-box').textContent = 'Running...';
+  fetch('/tools/api/'+tool, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({host})
+  }).then(r=>r.json()).then(d=>{
+    document.getElementById('output-box').textContent = d.output || d.error || 'No output';
+  });
+}
+window.onload = function(){
+  const host = new URLSearchParams(window.location.search).get('host');
+  if(host){ document.getElementById('host-input').value=host; runTool('ping'); }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{
+  "project_name": "Test",
+  "job_number": "#123456789",
+  "client_name": "Test",
+  "site_location": "Test",
+  "dns_suffix": ".av",
+  "ntp_server": "192.168.1.50",
+  "vlans": [
+    {
+      "id": 1,
+      "name": "AV_Control",
+      "vlan_id": "50",
+      "subnet": "10.110.50.0/24",
+      "dhcp_range_start": "",
+      "dhcp_range_end": "",
+      "gateway": "10.110.50.1",
+      "device_types": [
+        "AV Devices"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 2,
+      "name": "AV Video",
+      "vlan_id": "20",
+      "subnet": "",
+      "dhcp_range_start": "",
+      "dhcp_range_end": "",
+      "gateway": "",
+      "device_types": [
+        "Barco SAS",
+        "Novastar"
+      ],
+      "notes": ""
+    },
+    {
+      "id": 3,
+      "name": "Corporate/IT",
+      "vlan_id": "30",
+      "subnet": "",
+      "dhcp_range_start": "",
+      "dhcp_range_end": "",
+      "gateway": "",
+      "device_types": [],
+      "notes": ""
+    },
+    {
+      "id": 4,
+      "name": "Management",
+      "vlan_id": "",
+      "subnet": "",
+      "dhcp_range_start": "",
+      "dhcp_range_end": "",
+      "gateway": "",
+      "device_types": [],
+      "notes": ""
+    },
+    {
+      "id": 5,
+      "name": "Audio Dante",
+      "vlan_id": "",
+      "subnet": "",
+      "dhcp_range_start": "",
+      "dhcp_range_end": "",
+      "gateway": "",
+      "device_types": [
+        "Dante",
+        "Audinate"
+      ],
+      "notes": ""
+    }
+  ]
+}

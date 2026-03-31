@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}— Settings{% endblock %}
+{% block content %}
+<div class="page-title">Settings</div>
+<div class="page-sub">Global project configuration — all tools use these settings</div>
+<div id="success" class="success-msg">Settings saved successfully.</div>
+<form method="POST" action="/tools/settings">
+  <div class="panel">
+    <div class="panel-header">Project info</div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div class="form-group"><label>Project name</label><input name="project_name" value="{{ s.project_name }}"></div>
+        <div class="form-group"><label>Job number</label><input name="job_number" value="{{ s.job_number }}"></div>
+        <div class="form-group"><label>Client name</label><input name="client_name" value="{{ s.client_name }}"></div>
+        <div class="form-group"><label>Site location</label><input name="site_location" value="{{ s.site_location }}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>DNS suffix (e.g. .av)</label><input name="dns_suffix" value="{{ s.dns_suffix }}"></div>
+        <div class="form-group"><label>NTP server IP</label><input name="ntp_server" value="{{ s.ntp_server }}"></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">VLAN groups</div>
+    <div class="panel-body">
+      {% for v in s.vlans %}
+      <div class="vlan-card">
+        <div class="vlan-title">
+          <span class="badge badge-blue">VLAN {{ loop.index }}</span>
+          <input name="vlan_name[]" value="{{ v.name }}" style="width:180px;display:inline-block">
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>VLAN ID / tag</label><input name="vlan_tag[]" value="{{ v.vlan_id }}" placeholder="e.g. 10"></div>
+          <div class="form-group"><label>Subnet</label><input name="vlan_subnet[]" value="{{ v.subnet }}" placeholder="e.g. 192.168.10.0/24"></div>
+          <div class="form-group"><label>Gateway</label><input name="vlan_gateway[]" value="{{ v.gateway }}" placeholder="e.g. 192.168.10.1"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>DHCP range start</label><input name="vlan_dhcp_start[]" value="{{ v.dhcp_range_start }}" placeholder="e.g. 192.168.10.50"></div>
+          <div class="form-group"><label>DHCP range end</label><input name="vlan_dhcp_end[]" value="{{ v.dhcp_range_end }}" placeholder="e.g. 192.168.10.200"></div>
+          <div class="form-group"><label>Notes</label><input name="vlan_notes[]" value="{{ v.notes }}"></div>
+        </div>
+        <div class="form-group">
+          <label>Device types (comma separated)</label>
+          <input name="vlan_id[]" value="{{ v.vlan_id }}" style="display:none">
+          <input name="device_types_{{ loop.index0 }}[]" value="{{ v.device_types | join(', ') }}" placeholder="e.g. Crestron, Barco CTRL, Novastar">
+        </div>
+      </div>
+      {% endfor %}
+      <button type="button" class="btn" onclick="addVlan()">+ Add custom VLAN</button>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-primary">Save settings</button>
+</form>
+<script>
+  {% if request.method == 'POST' %}
+  document.getElementById('success').style.display='block';
+  {% endif %}
+  function addVlan(){
+    const body = document.querySelector('.panel:last-of-type .panel-body');
+    const idx = document.querySelectorAll('.vlan-card').length;
+    const card = document.createElement('div');
+    card.className = 'vlan-card';
+    card.innerHTML = `
+      <div class="vlan-title">
+        <span class="badge badge-blue">VLAN ${idx+1}</span>
+        <input name="vlan_name[]" value="Custom" style="width:180px;display:inline-block">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>VLAN ID / tag</label><input name="vlan_tag[]" value="" placeholder="e.g. 10"></div>
+        <div class="form-group"><label>Subnet</label><input name="vlan_subnet[]" value="" placeholder="e.g. 192.168.10.0/24"></div>
+        <div class="form-group"><label>Gateway</label><input name="vlan_gateway[]" value="" placeholder="e.g. 192.168.10.1"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>DHCP range start</label><input name="vlan_dhcp_start[]" value="" placeholder="e.g. 192.168.10.50"></div>
+        <div class="form-group"><label>DHCP range end</label><input name="vlan_dhcp_end[]" value="" placeholder="e.g. 192.168.10.200"></div>
+        <div class="form-group"><label>Notes</label><input name="vlan_notes[]" value=""></div>
+      </div>
+      <div class="form-group">
+        <label>Device types (comma separated)</label>
+        <input name="vlan_id[]" value="" style="display:none">
+        <input name="device_types_${idx}[]" value="" placeholder="e.g. Crestron, Barco CTRL">
+      </div>`;
+    body.insertBefore(card, body.lastElementChild);
+  }
+</script>
+{% endblock %}

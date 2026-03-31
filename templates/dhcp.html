@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}— DHCP Leases{% endblock %}
+{% block content %}
+<div class="page-title">DHCP leases</div>
+<div class="page-sub">Current DHCP leases from Pi-hole</div>
+<div class="panel">
+  <div class="panel-header"><span>Active leases</span><span style="color:#6b7280;font-size:12px">{{ leases|length }} total</span></div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead><tr><th>IP address</th><th>MAC address</th><th>Hostname</th><th>Expires</th></tr></thead>
+      <tbody>
+        {% for l in leases %}
+        <tr>
+          <td style="font-family:monospace">{{ l.ip }}</td>
+          <td style="font-family:monospace;color:#6b7280">{{ l.mac }}</td>
+          <td>{{ l.hostname }}</td>
+          <td style="color:#6b7280">{{ l.expires }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="color:#4b5563;text-align:center;padding:1rem">No leases found — Pi-hole may not be acting as DHCP server</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
