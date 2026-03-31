@@ -613,3 +613,14 @@ ASSUME:
   - Added lightweight system-rule target port evidence collection using existing TCP probing helper
   - Populated `required_target_ports`, `observed_target_ports`, and `target_open_ports` for Q-SYS Core to NV checks
   - Switched system rule pass/fail to use observed network evidence instead of broad device `overall` validation status
+
+### Last Update
+- Feature: Stricter Q-SYS inference and clearer system skip messaging
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Tightened Q-SYS role inference so generic web devices are no longer treated as Q-SYS from weak signals alone
+  - Prevented low-confidence Q-SYS fingerprint fallback from reinforcing stale or weak auto-typing
+  - Improved system validation skip reasons with Q-SYS-specific missing-device messages

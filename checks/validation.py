@@ -601,6 +601,12 @@ def infer_fingerprint(normalized_type, open_ports, http_details):
         }
 
     if normalized_type in ("qsys", "dante", "crestron"):
+        if normalized_type == "qsys":
+            return {
+                "platform": "unknown",
+                "confidence": "low",
+                "reasons": []
+            }
         return {
             "platform": normalized_type,
             "confidence": "low",
@@ -763,24 +769,71 @@ SYSTEM_VALIDATION_RULES = [
     {
         "name": "qsys_core_to_nv",
         "relationship_type": "media_flow",
-        "source_types": ["qsys-core", "qsys"],
+        "source_types": ["qsys-core"],
         "target_types": ["qsys-nv-endpoint", "qsys-nv-decoder"],
         "required_target_ports": [443, 554],
         "port_mode": "all",
         "description": "Q-SYS Core should see NV control and media services on the endpoint",
-        "inference_note": "Readiness inferred from target port evidence, not source-initiated media flow"
+        "inference_note": "Readiness inferred from target port evidence, not source-initiated media flow",
+        "source_label": "Q-SYS core",
+        "target_label": "Q-SYS NV endpoint"
     },
     {
         "name": "qsys_core_to_touchpanel",
         "relationship_type": "control",
-        "source_types": ["qsys-core", "qsys"],
+        "source_types": ["qsys-core"],
         "target_types": ["qsys-touchpanel"],
         "required_target_ports": [443],
         "port_mode": "any",
         "description": "Q-SYS Core should relate to Q-SYS touch panels in the same AV system",
-        "inference_note": "Relationship inferred from role-aware device classification and reachable UI service"
+        "inference_note": "Relationship inferred from role-aware device classification and reachable UI service",
+        "source_label": "Q-SYS core",
+        "target_label": "Q-SYS touchpanel"
     }
 ]
+
+
+def _humanize_system_role(rule, key):
+    explicit = (rule.get(key) or "").strip()
+    if explicit:
+        return explicit
+
+    allowed = set(rule.get("source_types" if key == "source_label" else "target_types", []))
+
+    if "qsys-core" in allowed:
+        return "Q-SYS core"
+    if "qsys-touchpanel" in allowed:
+        return "Q-SYS touchpanel"
+    if "qsys-nv-endpoint" in allowed or "qsys-nv-decoder" in allowed:
+        return "Q-SYS NV endpoint"
+    if "crestron_control" in allowed or "crestron" in allowed:
+        return "Crestron control processor"
+    if "biamp" in allowed or "tesira" in allowed:
+        return "Biamp/Tesira device"
+    if "crestron_uc" in allowed:
+        return "Crestron UC engine"
+    if "tp1070" in allowed or "touchpanel" in allowed or "crestron_touchpanel" in allowed:
+        return "touchpanel"
+
+    return "required device"
+
+
+def _missing_system_reasons(rule, sources, targets):
+    source_label = _humanize_system_role(rule, "source_label")
+    target_label = _humanize_system_role(rule, "target_label")
+    reasons = []
+
+    if not sources and targets:
+        reasons.append(f"{target_label} detected but no {source_label} found")
+    elif not sources:
+        reasons.append(f"No {source_label} present in device list")
+
+    if not targets and sources:
+        reasons.append(f"{source_label} detected but no {target_label} found")
+    elif not targets:
+        reasons.append(f"No {target_label} present in device list")
+
+    return reasons
 
 
 def _system_devices_by_types(devices, allowed_types):
@@ -915,9 +968,7 @@ def run_system_validation(devices, validations_by_ip=None):
                 "observed_target_ports": [],
                 "target_open_ports": [],
                 "inference": rule.get("inference_note", ""),
-                "reasons": [
-                    "Required device types not present in device list"
-                ],
+                "reasons": _missing_system_reasons(rule, sources, targets),
             })
             continue
 

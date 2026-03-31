@@ -377,14 +377,40 @@ def classify_platform_to_type(platform):
     return (None, 0.0, "no_match")
 
 
+def platform_confidence_multiplier(platform, confidence):
+    p = normalize_platform_name(platform)
+    c = (confidence or "").strip().lower()
+
+    if p == "qsys":
+        return {
+            "high": 1.0,
+            "medium": 0.82,
+            "low": 0.35,
+        }.get(c, 0.0)
+
+    return {
+        "high": 1.0,
+        "medium": 0.92,
+        "low": 0.5,
+    }.get(c, 0.0)
+
+
 def decide_auto_promoted_type(device, validation):
     current_type = (device.get("type") or "").strip().lower()
 
-    observed = ((validation.get("observed_platform") or {}).get("platform") or "")
-    fingerprint = ((validation.get("fingerprint") or {}).get("platform") or "")
+    observed_data = validation.get("observed_platform") or {}
+    fingerprint_data = validation.get("fingerprint") or {}
+
+    observed = (observed_data.get("platform") or "")
+    fingerprint = (fingerprint_data.get("platform") or "")
+    observed_confidence = platform_confidence_multiplier(observed, observed_data.get("confidence"))
+    fingerprint_confidence = platform_confidence_multiplier(fingerprint, fingerprint_data.get("confidence"))
 
     primary_type, primary_conf, primary_reason = classify_platform_to_type(observed)
     secondary_type, secondary_conf, secondary_reason = classify_platform_to_type(fingerprint)
+
+    primary_conf *= observed_confidence
+    secondary_conf *= fingerprint_confidence
 
     if primary_conf >= secondary_conf:
         chosen_type, conf, reason, source = primary_type, primary_conf, primary_reason, "observed_platform"
@@ -430,36 +456,82 @@ def decide_auto_promoted_type(device, validation):
 def infer_av_role(device, validation):
     name = (device.get("name") or "").lower()
     vendor = (device.get("vendor") or "").lower()
+    notes = (device.get("notes") or "").lower()
+    current_type = (device.get("type") or "").lower()
     observed = ((validation.get("observed_platform") or {}).get("platform") or "").lower()
+    observed_confidence = ((validation.get("observed_platform") or {}).get("confidence") or "").lower()
     fingerprint = ((validation.get("fingerprint") or {}).get("platform") or "").lower()
+    fingerprint_confidence = ((validation.get("fingerprint") or {}).get("confidence") or "").lower()
+    http = validation.get("http") or {}
+    title_text = " ".join(str(v.get("title", "")) for v in http.values()).lower()
+    open_ports = set(validation.get("open_ports") or [])
 
-    text = f"{name} {vendor} {observed} {fingerprint}"
+    text = f"{name} {vendor} {notes} {current_type} {observed} {fingerprint} {title_text}"
+
+    def has_any_token(value, tokens):
+        return any(token in value for token in tokens)
+
+    qsys_role_types = {
+        "qsys-core",
+        "qsys-touchpanel",
+        "qsys-nv-endpoint",
+        "qsys-nv-decoder",
+        "qsys-peripheral",
+    }
+    qsys_name_signal = has_any_token(name, ["qsys", "q-sys"])
+    qsys_notes_signal = has_any_token(notes, ["qsys", "q-sys"])
+    qsys_vendor_signal = has_any_token(vendor, ["qsys", "q-sys", "qsc"])
+    qsys_title_signal = has_any_token(title_text, ["qsys", "q-sys"])
+    qsys_control_signal = 1710 in open_ports
+    qsys_platform_signal = (
+        (fingerprint == "qsys" and fingerprint_confidence in ("medium", "high"))
+        or (observed == "qsys" and observed_confidence in ("medium", "high"))
+    )
+    qsys_context_signal = (
+        qsys_name_signal
+        or qsys_notes_signal
+        or qsys_vendor_signal
+        or qsys_title_signal
+        or qsys_control_signal
+        or current_type in qsys_role_types
+    )
 
     # Strong name/model fallback first
-    if any(x in name for x in ["nv-32-h", "nv32-h", "nv-32", "nv32"]):
+    if current_type == "qsys-nv-decoder":
         return "qsys-nv-decoder"
-    if any(x in name for x in ["nv-21", "nv21"]):
+    if current_type == "qsys-nv-endpoint":
         return "qsys-nv-endpoint"
-    if "core" in name:
+    if current_type == "qsys-core":
         return "qsys-core"
-    if "tsc" in name:
+    if current_type == "qsys-touchpanel":
         return "qsys-touchpanel"
-    if "qio" in name:
+    if current_type == "qsys-peripheral":
         return "qsys-peripheral"
 
     # Q-SYS
-    if "qsc" in text or "q-sys" in text or "qsys" in text:
-        if "core" in text:
-            return "qsys-core"
-        if "nv-32-h" in text or "nv32-h" in text or "nv-32" in text or "nv32" in text:
-            return "qsys-nv-decoder"
-        if "nv-21" in text or "nv21" in text:
-            return "qsys-nv-endpoint"
-        if "tsc" in text or "touch panel" in text or "touchpanel" in text:
-            return "qsys-touchpanel"
-        if "qio" in text:
-            return "qsys-peripheral"
+    if qsys_context_signal and has_any_token(text, ["nv-32-h", "nv32-h", "nv-32", "nv32"]):
+        return "qsys-nv-decoder"
+    if qsys_context_signal and has_any_token(text, ["nv-21", "nv21"]):
+        return "qsys-nv-endpoint"
+    if qsys_context_signal and has_any_token(text, ["tsc", "qsys-tp", "qsys tp", "touch panel", "touchpanel"]):
+        return "qsys-touchpanel"
+    if qsys_context_signal and "qio" in text:
+        return "qsys-peripheral"
+    if (qsys_control_signal or qsys_vendor_signal or qsys_name_signal or qsys_notes_signal) and "core" in text:
+        return "qsys-core"
+    if qsys_control_signal:
         return "qsys"
+    if qsys_vendor_signal:
+        return "qsys"
+    if qsys_platform_signal and (qsys_name_signal or qsys_notes_signal or current_type in qsys_role_types):
+        return "qsys"
+    if qsys_name_signal and (qsys_title_signal or current_type in qsys_role_types):
+        return "qsys"
+
+    # Q-SYS legacy fallback only with meaningful corroboration
+    if "qsc" in text or "q-sys" in text or "qsys" in text:
+        if (qsys_control_signal or qsys_vendor_signal or qsys_platform_signal) and "core" in text:
+            return "qsys-core"
 
     # Crestron
     if "crestron" in text:
@@ -1391,7 +1463,12 @@ def build_basic_type_groups(devices):
         if not isinstance(d, dict):
             continue
 
-        t = (d.get("type") or "unknown").strip().lower()
+        role = (d.get("av_role") or "").strip().lower()
+        stored_type = (d.get("type") or "unknown").strip().lower()
+        t = role or stored_type
+
+        if t.startswith("qsys") and not role:
+            continue
         if t in ignore_types:
             continue
         if t not in av_types:
@@ -1653,7 +1730,6 @@ def api_validate_systems():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
-
 
 
 
