@@ -240,8 +240,11 @@ function renderDiscoveredHosts(devices, subnet, state){
     const fingerprint = fingerprintResults[d.ip] || null;
     const fingerprintPorts = Array.isArray(fingerprint?.open_ports) ? fingerprint.open_ports : [];
     const fingerprintType = (fingerprint && fingerprint.guessed_type) || d.guessed_type || 'generic';
+    const suggestionLine = (fingerprint && fingerprint.suggested_type)
+      ? `<div style="font-size:11px;color:#9ca3af">Suggested: ${escapeHtml(fingerprint.suggested_type)} (${escapeHtml(fingerprint.confidence_label || 'low')})</div>`
+      : '';
     const fingerprintDetail = fingerprint
-      ? (fingerprintPorts.length ? `<div style="font-size:11px;color:#6b7280">${escapeHtml(fingerprintPorts.join(', '))}</div>` : '')
+      ? `${fingerprintPorts.length ? `<div style="font-size:11px;color:#6b7280">${escapeHtml(fingerprintPorts.join(', '))}</div>` : ''}${suggestionLine}`
       : (fingerprintFailures.has(d.ip)
         ? '<div style="font-size:11px;color:#6b7280">fingerprint unavailable</div>'
         : '<div style="font-size:11px;color:#6b7280">fingerprinting...</div>');
@@ -538,7 +541,10 @@ function fingerprintHost(ip, vendor){
         throw new Error(d.error);
       }
       const ports = (d.open_ports || []).join(', ');
-      el.innerHTML = `<strong>${escapeHtml(d.guessed_type || 'generic')}</strong>${ports ? `<div style="font-size:11px;color:#6b7280">${escapeHtml(ports)}</div>` : ''}`;
+      const suggestion = d.suggested_type
+        ? `<div style="font-size:11px;color:#9ca3af">Suggested: ${escapeHtml(d.suggested_type)} (${escapeHtml(d.confidence_label || 'low')})</div>`
+        : '';
+      el.innerHTML = `<strong>${escapeHtml(d.guessed_type || 'generic')}</strong>${ports ? `<div style="font-size:11px;color:#6b7280">${escapeHtml(ports)}</div>` : ''}${suggestion}`;
       return d;
     })
     .catch(error => {

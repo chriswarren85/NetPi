@@ -442,12 +442,30 @@ function renderDetectedSystems(data){
 }
 
 function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function getSuggestedType(r, currentType){
   if(!r) return null;
 
-  let detected = null;
+  if(r.type_suggestion && typeof r.type_suggestion === 'object'){
+    const suggestion = r.type_suggestion;
+    if(suggestion.suggested_type){
+      return {
+        type: suggestion.suggested_type,
+        label: suggestion.confidence_label || 'none',
+        score: Number(suggestion.confidence_score || 0),
+        reasons: Array.isArray(suggestion.suggestion_reasons) ? suggestion.suggestion_reasons : []
+      };
+    }
+  }
 
+  let detected = null;
   if(r.observed_platform && r.observed_platform.platform && r.observed_platform.platform !== "unknown"){
     detected = r.observed_platform.platform;
   } else if(r.fingerprint && r.fingerprint.platform && r.fingerprint.platform !== "unknown"){
@@ -455,9 +473,8 @@ function getSuggestedType(r, currentType){
   }
 
   if(!detected) return null;
-
   if(currentType === "generic" || currentType !== detected){
-    return detected;
+    return {type: detected, label: 'low', score: 0, reasons: []};
   }
 
   return null;
@@ -471,14 +488,6 @@ function applySuggestedType(ip, newType){
     return d;
   });
   renderTable();
-}
-
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 function addDevice(){
@@ -557,10 +566,13 @@ function renderTable(){
 
           let suggested = null; try { suggested = getSuggestedType(r, d.type); } catch (e) { console.error("getSuggestedType failed", e, r, d); }
         if(suggested){
-            const safeSuggested = String(suggested || "").replace(/'/g, "\\'");
-            validationHtml += '<div style="margin-top:4px"><strong>Suggest:</strong> ' + escapeHtml(suggested) + ' ';
+            const safeSuggested = String(suggested.type || "").replace(/'/g, "\\'");
+            const reasonText = Array.isArray(suggested.reasons) && suggested.reasons.length
+              ? '<div style="font-size:10px;color:#9ca3af;margin-top:2px">' + escapeHtml(suggested.reasons[0]) + '</div>'
+              : '';
+            validationHtml += '<div style="margin-top:4px"><strong>Suggest:</strong> ' + escapeHtml(suggested.type) + ' (' + escapeHtml(suggested.label || 'low') + ') ';
             validationHtml += '<button class="btn btn-primary" style="font-size:10px;padding:2px 6px;margin-left:6px" onclick="applySuggestedType(\'' + safeIp + '\', \'' + safeSuggested + '\')">Apply</button>';
-            validationHtml += '</div>';
+            validationHtml += reasonText + '</div>';
           validationHtml += '</div>';
         }
 

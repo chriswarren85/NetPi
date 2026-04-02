@@ -844,3 +844,15 @@ ame as the saved label
   - Added a readable JSON-backed evidence store at data/device_evidence.json with reusable record_device_observation(...) helper logic
   - Discovery, fingerprint_host, validate_device, validate_all, and validate_systems now record live observed device evidence including identity, hostnames, ports, HTTP summary, and platform/type hints
   - Learning remains conservative and explainable: evidence accumulates without weak learned guesses silently overriding saved device truth
+
+### Last Update
+- Feature: Confidence-scored suggested device types from learned evidence
+- Files modified:
+  - app.py
+  - templates/devices.html
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added conservative confidence-scored type suggestions backed by current validation plus stored learned evidence
+  - Surfaced suggested_type, confidence_score, confidence_label, and suggestion_reasons in safe backend responses without changing existing fields
+  - Explicit saved device truth still outranks learned suggestions, while weak buckets like generic/web-device/linux-web-device can now surface stronger advisory suggestions

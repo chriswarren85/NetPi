@@ -1323,7 +1323,288 @@ def normalize_platform_name(value):
 
 def weak_device_type(device_type):
     s = (device_type or "").strip().lower()
-    return s in ("", "generic", "unknown", "device", "other")
+    return s in (
+        "", "generic", "unknown", "device", "other",
+        "web-device", "linux-web-device", "network-device",
+        "ssh-device", "telnet-device", "snmp-device",
+        "rtsp-device", "windows-host", "mqtt-device",
+    )
+
+
+def _suggestion_score_label(score):
+    if score >= 80:
+        return "high"
+    if score >= 55:
+        return "medium"
+    if score >= 35:
+        return "low"
+    return "none"
+
+
+def _suggestion_port_set(validation):
+    ports = set()
+    for port in (validation.get("open_ports") or []):
+        if str(port).isdigit():
+            ports.add(int(port))
+    evidence = validation.get("evidence") if isinstance(validation.get("evidence"), dict) else {}
+    for port in (evidence.get("open_ports") or []):
+        if str(port).isdigit():
+            ports.add(int(port))
+    return ports
+
+
+def _suggestion_text_blob(device, validation):
+    http = validation.get("http") if isinstance(validation.get("http"), dict) else {}
+    title_text = " ".join(str(v.get("title", "")) for v in http.values()).lower()
+    server_text = " ".join(str(v.get("server", "")) for v in http.values()).lower()
+    evidence = validation.get("evidence") if isinstance(validation.get("evidence"), dict) else {}
+    http_summary = evidence.get("http") if isinstance(evidence.get("http"), dict) else {}
+    raw_parts = [
+        device.get("name"),
+        device.get("hostname"),
+        device.get("vendor"),
+        device.get("notes"),
+        device.get("type"),
+        title_text,
+        server_text,
+        http_summary.get("title"),
+        http_summary.get("server"),
+    ]
+    return " ".join(str(part or "") for part in raw_parts).lower()
+
+
+def _candidate_family(type_name):
+    normalized = (type_name or "").strip().lower()
+    if normalized.startswith("qsys-nv"):
+        return "qsys-nv"
+    if normalized.startswith("qsys"):
+        return "qsys"
+    if normalized.startswith("crestron"):
+        return "crestron"
+    if normalized in ("biamp", "tesira"):
+        return "biamp"
+    return normalized
+
+
+def _type_specificity(type_name):
+    normalized = (type_name or "").strip().lower()
+    if normalized in ("", "generic", "unknown", "web-device", "linux-web-device"):
+        return 0
+    if normalized in ("qsys", "crestron", "biamp"):
+        return 1
+    if normalized in ("qsys-core", "qsys-touchpanel", "qsys-nv", "crestron_control", "crestron_touchpanel", "crestron_uc"):
+        return 2
+    if normalized in ("qsys-nv21", "qsys-nv32"):
+        return 3
+    return 1
+
+
+def _add_type_candidate(candidates, candidate_type, points, reason):
+    candidate_type = normalize_platform_name(candidate_type)
+    if not candidate_type or candidate_type in ("unknown", "generic", "web-device", "linux-web-device"):
+        return
+
+    entry = candidates.setdefault(candidate_type, {"score": 0, "reasons": []})
+    entry["score"] += int(points)
+    if reason and reason not in entry["reasons"]:
+        entry["reasons"].append(reason)
+
+
+def _resolve_evidence_record(device, validation=None):
+    validation = validation or {}
+    observation = _build_device_observation(device, source="suggestion_lookup", result=validation, extra={})
+    candidates = _observation_identity_candidates(observation)
+    if not candidates:
+        return None
+
+    store = load_device_evidence()
+    candidate_keys = {key for _, key in candidates}
+
+    for _, key in candidates:
+        if key in store:
+            return copy.deepcopy(store.get(key))
+
+    for record in store.values():
+        if not isinstance(record, dict):
+            continue
+        aliases = set((record.get("identity") or {}).get("aliases") or [])
+        if aliases.intersection(candidate_keys):
+            return copy.deepcopy(record)
+
+    return None
+
+
+def build_type_suggestion(device, validation=None):
+    device = device or {}
+    validation = validation or {}
+    current_type = (device.get("type") or validation.get("type") or "").strip().lower()
+    fingerprint = validation.get("fingerprint") if isinstance(validation.get("fingerprint"), dict) else {}
+    observed = validation.get("observed_platform") if isinstance(validation.get("observed_platform"), dict) else {}
+    evidence_record = _resolve_evidence_record(device, validation)
+    ports = _suggestion_port_set(validation)
+    text = _suggestion_text_blob(device, validation)
+    vendor_guess = guess_type_from_vendor(device.get("vendor", ""))
+
+    candidates = {}
+
+    fingerprint_platform = normalize_platform_name(fingerprint.get("platform"))
+    fingerprint_confidence = (fingerprint.get("confidence") or "").strip().lower()
+    if fingerprint_platform and fingerprint_platform != "unknown":
+        _add_type_candidate(
+            candidates,
+            fingerprint_platform,
+            {"high": 58, "medium": 42, "low": 18}.get(fingerprint_confidence, 0),
+            f"Validation fingerprint suggested {fingerprint_platform} ({fingerprint_confidence or 'unknown'} confidence)",
+        )
+
+    observed_platform = normalize_platform_name(observed.get("platform"))
+    observed_confidence = (observed.get("confidence") or "").strip().lower()
+    if observed_platform and observed_platform != "unknown":
+        _add_type_candidate(
+            candidates,
+            observed_platform,
+            {"high": 34, "medium": 24, "low": 10}.get(observed_confidence, 0),
+            f"Observed platform suggested {observed_platform} ({observed_confidence or 'unknown'} confidence)",
+        )
+
+    if vendor_guess and not weak_device_type(vendor_guess):
+        _add_type_candidate(candidates, vendor_guess, 14, f"Vendor/OUI matched {vendor_guess}")
+
+    if 1710 in ports:
+        _add_type_candidate(candidates, "qsys-core", 34, "Observed Q-SYS control port 1710")
+        _add_type_candidate(candidates, "qsys", 20, "Observed Q-SYS control port 1710")
+
+    if any(port in ports for port in (41794, 41795, 41796)):
+        _add_type_candidate(candidates, "crestron", 24, "Observed Crestron-like control ports 41794/41795/41796")
+
+    if "crestron" in text:
+        _add_type_candidate(candidates, "crestron", 16, "Hostname or HTTP evidence referenced Crestron")
+    if any(token in text for token in ("cp4", "mc4", "rmc4", "pro4")):
+        _add_type_candidate(candidates, "crestron_control", 34, "Hostname pattern matched Crestron control processor naming")
+        if fingerprint_platform == "crestron" or any(port in ports for port in (41794, 41795, 41796)):
+            _add_type_candidate(candidates, "crestron_control", 32, "Crestron control naming was reinforced by live protocol evidence")
+    if any(token in text for token in ("tsw", "tss", "touchpanel", "touch panel")):
+        _add_type_candidate(candidates, "crestron_touchpanel", 30, "Hostname or HTTP evidence matched Crestron touchpanel naming")
+    if any(token in text for token in ("uc-", "flex", "teams")):
+        _add_type_candidate(candidates, "crestron_uc", 26, "Hostname or HTTP evidence matched Crestron UC naming")
+
+    if any(token in text for token in ("q-sys", "qsys", "qsc")):
+        _add_type_candidate(candidates, "qsys", 16, "Hostname or HTTP evidence referenced Q-SYS")
+    if "core" in text and any(token in text for token in ("q-sys", "qsys", "qsc")):
+        _add_type_candidate(candidates, "qsys-core", 20, "Hostname or HTTP evidence matched Q-SYS Core naming")
+        if fingerprint_platform == "qsys" or 1710 in ports:
+            _add_type_candidate(candidates, "qsys-core", 30, "Q-SYS Core naming was reinforced by control-port or fingerprint evidence")
+    if any(token in text for token in ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")):
+        _add_type_candidate(candidates, "qsys-touchpanel", 28, "Hostname or HTTP evidence matched Q-SYS touchpanel naming")
+    if any(token in text for token in ("nv-21", "nv21")):
+        _add_type_candidate(candidates, "qsys-nv21", 42, "Hostname or HTTP evidence matched Q-SYS NV-21 naming")
+        _add_type_candidate(candidates, "qsys-nv", 28, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+        _add_type_candidate(candidates, "qsys", 10, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+        if fingerprint_platform == "qsys":
+            _add_type_candidate(candidates, "qsys-nv21", 20, "Q-SYS NV-21 naming was reinforced by fingerprint evidence")
+    if any(token in text for token in ("nv-32", "nv32")):
+        _add_type_candidate(candidates, "qsys-nv32", 42, "Hostname or HTTP evidence matched Q-SYS NV-32 naming")
+        _add_type_candidate(candidates, "qsys-nv", 28, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+        _add_type_candidate(candidates, "qsys", 10, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+        if fingerprint_platform == "qsys":
+            _add_type_candidate(candidates, "qsys-nv32", 20, "Q-SYS NV-32 naming was reinforced by fingerprint evidence")
+
+    if any(token in text for token in ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp", 26, "Hostname or HTTP evidence referenced Biamp/Tesira")
+
+    learned = evidence_record.get("learned") if isinstance(evidence_record, dict) else {}
+    learned_type = normalize_platform_name((learned or {}).get("suggested_type"))
+    learned_confidence = ((learned or {}).get("confidence") or "").strip().lower()
+    learned_count = int((learned or {}).get("observation_count", 0) or 0)
+    if learned_type and learned_type not in ("unknown", "generic", "web-device", "linux-web-device"):
+        learned_points = {"high": 26, "medium": 18, "low": 10}.get(learned_confidence, 0)
+        learned_points += min(max(learned_count - 1, 0) * 4, 16)
+        _add_type_candidate(
+            candidates,
+            learned_type,
+            learned_points,
+            f"Repeated learned evidence previously suggested {learned_type} across {learned_count or 1} observation(s)",
+        )
+
+    guessed_types = ((evidence_record or {}).get("history") or {}).get("guessed_types") or {}
+    for candidate_type, data in guessed_types.items():
+        if not isinstance(data, dict):
+            continue
+        guess_count = int(data.get("count", 0) or 0)
+        if guess_count >= 2:
+            _add_type_candidate(
+                candidates,
+                candidate_type,
+                min(guess_count * 4, 12),
+                f"Repeated guessed type {candidate_type} seen across {guess_count} observations",
+            )
+
+    if not candidates:
+        return {
+            "suggested_type": "",
+            "confidence_score": 0,
+            "confidence_label": "none",
+            "suggestion_reasons": [],
+            "advisory_only": True,
+            "basis": "no_match",
+        }
+
+    ranked = sorted(
+        (
+            {
+                "type": candidate_type,
+                "score": min(int(data.get("score", 0) or 0), 100),
+                "reasons": list(data.get("reasons") or []),
+            }
+            for candidate_type, data in candidates.items()
+        ),
+        key=lambda item: (item["score"], len(item["reasons"])),
+        reverse=True,
+    )
+
+    best = ranked[0]
+    for candidate in ranked[1:]:
+        if _candidate_family(candidate.get("type")) != _candidate_family(best.get("type")):
+            continue
+        if _type_specificity(candidate.get("type")) <= _type_specificity(best.get("type")):
+            continue
+        if int(candidate.get("score", 0)) + 18 < int(best.get("score", 0)):
+            continue
+        best = candidate
+        break
+
+    suggested_type = best["type"]
+    confidence_score = best["score"]
+    confidence_label = _suggestion_score_label(confidence_score)
+    advisory_only = False
+
+    if not weak_device_type(current_type):
+        if current_type == suggested_type:
+            suggested_type = ""
+            advisory_only = True
+        elif _candidate_family(current_type) == _candidate_family(best["type"]) and _type_specificity(current_type) >= _type_specificity(best["type"]):
+            suggested_type = ""
+            advisory_only = True
+        elif _candidate_family(current_type) == _candidate_family(best["type"]) and confidence_score < 85:
+            suggested_type = ""
+            advisory_only = True
+        elif confidence_score < 90:
+            suggested_type = ""
+            advisory_only = True
+    elif weak_device_type(best["type"]) or confidence_score < 35:
+        suggested_type = ""
+        advisory_only = True
+
+    return {
+        "suggested_type": suggested_type,
+        "confidence_score": confidence_score,
+        "confidence_label": confidence_label,
+        "suggestion_reasons": best["reasons"][:4],
+        "advisory_only": advisory_only,
+        "basis": best["type"],
+        "current_type": current_type,
+        "evidence_key": ((evidence_record or {}).get("identity") or {}).get("key", ""),
+    }
 
 
 def classify_platform_to_type(platform):
@@ -1549,6 +1830,12 @@ def api_validate_device():
 
         auto_type = decide_auto_promoted_type(device, result)
         result["auto_type"] = auto_type
+        type_suggestion = build_type_suggestion(device, result)
+        result["type_suggestion"] = type_suggestion
+        result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+        result["confidence_score"] = type_suggestion.get("confidence_score", 0)
+        result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
+        result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
 
         role = infer_av_role(device, result)
         if role:
@@ -1588,6 +1875,12 @@ def api_validate_all():
         fingerprint_updates = []
 
         for device, result in zip(devices, results):
+            type_suggestion = build_type_suggestion(device, result)
+            result["type_suggestion"] = type_suggestion
+            result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+            result["confidence_score"] = type_suggestion.get("confidence_score", 0)
+            result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
+            result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
             role = infer_av_role(device, result)
             key = _stable_fingerprint_key(device, result)
             if key:
@@ -1893,6 +2186,8 @@ def fingerprint_host():
         if device_updated:
             save_devices_file(devices)
 
+        type_suggestion = build_type_suggestion(updated_device or device, validation)
+
         try:
             record_device_observation(
                 updated_device or device,
@@ -1912,6 +2207,11 @@ def fingerprint_host():
             "ip": ip,
             "open_ports": open_ports,
             "guessed_type": guessed,
+            "type_suggestion": type_suggestion,
+            "suggested_type": type_suggestion.get("suggested_type") or "",
+            "confidence_score": type_suggestion.get("confidence_score", 0),
+            "confidence_label": type_suggestion.get("confidence_label") or "none",
+            "suggestion_reasons": list(type_suggestion.get("suggestion_reasons") or []),
             "device_updated": device_updated,
             "updated_device": updated_device
         })
@@ -2726,6 +3026,12 @@ def api_validate_systems():
 
         for device, result in zip(devices, validation_results):
             item = dict(device)
+            type_suggestion = build_type_suggestion(item, result)
+            result["type_suggestion"] = type_suggestion
+            result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+            result["confidence_score"] = type_suggestion.get("confidence_score", 0)
+            result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
+            result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
             role = infer_av_role(device, result)
             if role:
                 item["av_role"] = role
