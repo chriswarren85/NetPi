@@ -825,3 +825,12 @@ ame as the saved label
   - Preserved the existing one-shot discovery endpoint for compatibility with current discovery/add/fingerprinting flows
 
 
+### Last Update
+- Feature: Reusable background job model for long-running tasks
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Refactored in-memory job handling into a small reusable background job pattern with shared creation, lookup, update, and cancellation helpers
+  - Discovery is now the first implementation of the shared job model without changing its current endpoints or progressive UX behavior
+  - Future long-running actions should reuse the same job pattern so visible status and partial results stay consistent

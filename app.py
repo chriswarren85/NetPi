@@ -23,8 +23,8 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
 DEVICES_FILE  = os.path.join(os.path.dirname(__file__), 'devices.json')
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
-DISCOVERY_JOBS = {}
-DISCOVERY_JOBS_LOCK = threading.Lock()
+BACKGROUND_JOBS = {}
+BACKGROUND_JOBS_LOCK = threading.Lock()
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -184,70 +184,161 @@ def _discovery_status_message(status, devices_found_count, subnet):
     return ""
 
 
-def _snapshot_discovery_job(job):
-    return {
+def _snapshot_background_job(job):
+    progress = copy.deepcopy(job.get("progress") or {})
+    results = copy.deepcopy(job.get("results") or {})
+    snapshot = {
         "job_id": job["job_id"],
+        "kind": job.get("kind") or "",
         "status": job["status"],
         "message": job.get("message") or "",
         "started_at": job["started_at"],
         "updated_at": job["updated_at"],
-        "devices_found_count": job.get("devices_found_count", 0),
-        "devices": copy.deepcopy(job.get("devices") or []),
-        "subnet": job.get("subnet") or "",
+        "progress": progress,
+        "results": results,
         "error": job.get("error") or ""
     }
 
+    if snapshot["kind"] == "discover_hosts":
+        snapshot["devices_found_count"] = progress.get("devices_found_count", 0)
+        snapshot["devices"] = copy.deepcopy(results.get("devices") or [])
+        snapshot["subnet"] = results.get("subnet") or ""
 
-def _get_discovery_job(job_id):
-    with DISCOVERY_JOBS_LOCK:
-        return DISCOVERY_JOBS.get(job_id)
+    return snapshot
 
 
-def _update_discovery_job(job_id, **changes):
-    with DISCOVERY_JOBS_LOCK:
-        job = DISCOVERY_JOBS.get(job_id)
+def _get_background_job(job_id):
+    with BACKGROUND_JOBS_LOCK:
+        return BACKGROUND_JOBS.get(job_id)
+
+
+def _update_background_job(
+    job_id,
+    *,
+    status=None,
+    message=None,
+    error=None,
+    progress_updates=None,
+    results_updates=None,
+    mutate_fn=None,
+    **extra
+):
+    with BACKGROUND_JOBS_LOCK:
+        job = BACKGROUND_JOBS.get(job_id)
         if not job:
             return None
-        job.update(changes)
+
+        if mutate_fn:
+            mutate_fn(job)
+        if status is not None:
+            job["status"] = status
+        if message is not None:
+            job["message"] = message
+        if error is not None:
+            job["error"] = error
+        if progress_updates:
+            progress = job.setdefault("progress", {})
+            progress.update(progress_updates)
+        if results_updates:
+            results = job.setdefault("results", {})
+            results.update(results_updates)
+        if extra:
+            job.update(extra)
+
         job["updated_at"] = utc_now_iso()
-        return _snapshot_discovery_job(job)
+        return _snapshot_background_job(job)
 
 
-def _append_discovery_device(job_id, device):
-    with DISCOVERY_JOBS_LOCK:
-        job = DISCOVERY_JOBS.get(job_id)
-        if not job:
-            return None
-
-        devices = job.setdefault("devices", [])
-        devices.append(device)
-        job["devices_found_count"] = len(devices)
-        job["message"] = _discovery_status_message(job.get("status"), len(devices), job.get("subnet"))
-        job["updated_at"] = utc_now_iso()
-        return _snapshot_discovery_job(job)
-
-
-def _create_discovery_job(subnet):
+def _create_background_job(kind, *, message="", progress=None, results=None, **extra):
     job_id = uuid.uuid4().hex
     now = utc_now_iso()
     job = {
         "job_id": job_id,
+        "kind": kind,
         "status": "queued",
-        "message": _discovery_status_message("queued", 0, subnet),
+        "message": message,
         "started_at": now,
         "updated_at": now,
-        "devices_found_count": 0,
-        "devices": [],
-        "subnet": subnet,
+        "progress": copy.deepcopy(progress or {}),
+        "results": copy.deepcopy(results or {}),
         "error": "",
-        "cancel_requested": False,
-        "process": None
     }
+    job.update(extra)
 
-    with DISCOVERY_JOBS_LOCK:
-        DISCOVERY_JOBS[job_id] = job
+    with BACKGROUND_JOBS_LOCK:
+        BACKGROUND_JOBS[job_id] = job
 
-    return _snapshot_discovery_job(job)
+    return _snapshot_background_job(job)
+
+
+def _start_background_job(target, *args):
+    thread = threading.Thread(target=target, args=args, daemon=True)
+    thread.start()
+    return thread
+
+
+def _cancel_background_job(job_id, *, expected_kind=None, message=None):
+    with BACKGROUND_JOBS_LOCK:
+        job = BACKGROUND_JOBS.get(job_id)
+        if not job:
+            return None
+        if expected_kind and (job.get("kind") or "") != expected_kind:
+            return None
+        if job.get("status") in ("completed", "failed", "cancelled"):
+            return _snapshot_background_job(job)
+
+        job["cancel_requested"] = True
+        job["status"] = "cancelled"
+        if message is not None:
+            job["message"] = message
+        job["updated_at"] = utc_now_iso()
+        process = job.get("process")
+
+    if process:
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+    return _snapshot_background_job(_get_background_job(job_id))
+
+
+def _create_discovery_job(subnet):
+    return _create_background_job(
+        "discover_hosts",
+        message=_discovery_status_message("queued", 0, subnet),
+        progress={"devices_found_count": 0},
+        results={
+            "devices": [],
+            "subnet": subnet
+        },
+        cancel_requested=False,
+        process=None
+    )
+
+
+def _get_discovery_job(job_id):
+    job = _get_background_job(job_id)
+    if not job or (job.get("kind") or "") != "discover_hosts":
+        return None
+    return job
+
+
+def _snapshot_discovery_job(job):
+    return _snapshot_background_job(job)
+
+
+def _append_discovery_device(job_id, device):
+    def mutate(job):
+        results = job.setdefault("results", {})
+        devices = results.setdefault("devices", [])
+        devices.append(device)
+        count = len(devices)
+        job.setdefault("progress", {})["devices_found_count"] = count
+        subnet = results.get("subnet") or ""
+        job["message"] = _discovery_status_message(job.get("status"), count, subnet)
+
+    return _update_background_job(job_id, mutate_fn=mutate)
 
 
 def _parse_discovery_line(line):
@@ -317,7 +408,7 @@ def _discover_hosts_for_subnet(subnet, job_id=None):
     )
 
     if job_id:
-        _update_discovery_job(job_id, process=process)
+        _update_background_job(job_id, process=process)
 
     try:
         for raw_line in iter(process.stdout.readline, ''):
@@ -350,7 +441,7 @@ def _discover_hosts_for_subnet(subnet, job_id=None):
         if job_id:
             job = _get_discovery_job(job_id)
             if job and job.get("cancel_requested"):
-                _update_discovery_job(
+                _update_background_job(
                     job_id,
                     status="cancelled",
                     message=_discovery_status_message("cancelled", len(devices), subnet),
@@ -364,7 +455,7 @@ def _discover_hosts_for_subnet(subnet, job_id=None):
         return devices
     finally:
         if job_id:
-            _update_discovery_job(job_id, process=None)
+            _update_background_job(job_id, process=None)
         if process.stdout:
             process.stdout.close()
         if process.stderr:
@@ -376,8 +467,8 @@ def _run_discovery_job(job_id):
     if not job:
         return
 
-    subnet = job.get("subnet") or ""
-    _update_discovery_job(
+    subnet = ((job.get("results") or {}).get("subnet") or "")
+    _update_background_job(
         job_id,
         status="running",
         message=_discovery_status_message("running", 0, subnet),
@@ -388,14 +479,14 @@ def _run_discovery_job(job_id):
         devices = _discover_hosts_for_subnet(subnet, job_id=job_id)
         final_job = _get_discovery_job(job_id)
         if final_job and final_job.get("status") != "cancelled":
-            _update_discovery_job(
+            _update_background_job(
                 job_id,
                 status="completed",
                 message=_discovery_status_message("completed", len(devices), subnet),
                 error=""
             )
     except Exception as exc:
-        _update_discovery_job(
+        _update_background_job(
             job_id,
             status="failed",
             message=f"Discovery failed on {subnet or 'selected subnet'}: {exc}",
@@ -1287,8 +1378,7 @@ def start_discover_hosts():
         return jsonify({"error": "No subnet available"}), 400
 
     job = _create_discovery_job(subnet)
-    thread = threading.Thread(target=_run_discovery_job, args=(job["job_id"],), daemon=True)
-    thread.start()
+    _start_background_job(_run_discovery_job, job["job_id"])
 
     return jsonify(job), 202
 
@@ -1304,25 +1394,17 @@ def discover_hosts_status(job_id):
 
 @app.route("/tools/api/discover_hosts/cancel/<job_id>", methods=["POST"])
 def cancel_discover_hosts(job_id):
-    with DISCOVERY_JOBS_LOCK:
-        job = DISCOVERY_JOBS.get(job_id)
-        if not job:
-            return jsonify({"error": "Discovery job not found"}), 404
+    job = _get_discovery_job(job_id)
+    if not job:
+        return jsonify({"error": "Discovery job not found"}), 404
 
-        if job.get("status") in ("completed", "failed", "cancelled"):
-            return jsonify(_snapshot_discovery_job(job))
-
-        job["cancel_requested"] = True
-        job["status"] = "cancelled"
-        job["message"] = _discovery_status_message("cancelled", job.get("devices_found_count", 0), job.get("subnet"))
-        job["updated_at"] = utc_now_iso()
-        process = job.get("process")
-
-    if process:
-        try:
-            process.terminate()
-        except Exception:
-            pass
+    count = ((job.get("progress") or {}).get("devices_found_count", 0))
+    subnet = ((job.get("results") or {}).get("subnet") or "")
+    _cancel_background_job(
+        job_id,
+        expected_kind="discover_hosts",
+        message=_discovery_status_message("cancelled", count, subnet)
+    )
 
     job = _get_discovery_job(job_id)
     return jsonify(_snapshot_discovery_job(job))
