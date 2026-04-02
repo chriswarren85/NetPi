@@ -2,6 +2,9 @@ from flask import Flask, render_template, request, jsonify, redirect, send_file
 import json, os, subprocess, csv
 from datetime import datetime
 import copy
+import socket
+import threading
+import uuid
 from checks.network import run_base_checks
 from checks.devices import run_device_checks
 import io
@@ -20,6 +23,8 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
 DEVICES_FILE  = os.path.join(os.path.dirname(__file__), 'devices.json')
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
+DISCOVERY_JOBS = {}
+DISCOVERY_JOBS_LOCK = threading.Lock()
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -142,6 +147,260 @@ def resolve_subnet(settings):
         if subnet:
             return subnet
     return '192.168.1.0/24'
+
+
+def utc_now_iso():
+    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def resolve_selected_subnet(settings, selected_vlan=""):
+    selected_vlan = (selected_vlan or "").strip()
+    if selected_vlan:
+        for vlan in settings.get("vlans", []):
+            if (vlan.get("name") or "").strip() == selected_vlan:
+                subnet = (vlan.get("subnet") or "").strip()
+                if subnet:
+                    return subnet
+                break
+
+    subnet = resolve_subnet(settings)
+    return (subnet or "").strip()
+
+
+def _discovery_status_message(status, devices_found_count, subnet):
+    target = subnet or "selected subnet"
+    noun = "host" if devices_found_count == 1 else "hosts"
+
+    if status == "queued":
+        return f"Queued discovery for {target}."
+    if status == "running":
+        return f"Discovery running on {target}: {devices_found_count} live {noun} found so far."
+    if status == "completed":
+        return f"Discovery completed on {target}: {devices_found_count} live {noun} found."
+    if status == "cancelled":
+        return f"Discovery cancelled on {target} after finding {devices_found_count} live {noun}."
+    if status == "failed":
+        return f"Discovery failed on {target}."
+    return ""
+
+
+def _snapshot_discovery_job(job):
+    return {
+        "job_id": job["job_id"],
+        "status": job["status"],
+        "message": job.get("message") or "",
+        "started_at": job["started_at"],
+        "updated_at": job["updated_at"],
+        "devices_found_count": job.get("devices_found_count", 0),
+        "devices": copy.deepcopy(job.get("devices") or []),
+        "subnet": job.get("subnet") or "",
+        "error": job.get("error") or ""
+    }
+
+
+def _get_discovery_job(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        return DISCOVERY_JOBS.get(job_id)
+
+
+def _update_discovery_job(job_id, **changes):
+    with DISCOVERY_JOBS_LOCK:
+        job = DISCOVERY_JOBS.get(job_id)
+        if not job:
+            return None
+        job.update(changes)
+        job["updated_at"] = utc_now_iso()
+        return _snapshot_discovery_job(job)
+
+
+def _append_discovery_device(job_id, device):
+    with DISCOVERY_JOBS_LOCK:
+        job = DISCOVERY_JOBS.get(job_id)
+        if not job:
+            return None
+
+        devices = job.setdefault("devices", [])
+        devices.append(device)
+        job["devices_found_count"] = len(devices)
+        job["message"] = _discovery_status_message(job.get("status"), len(devices), job.get("subnet"))
+        job["updated_at"] = utc_now_iso()
+        return _snapshot_discovery_job(job)
+
+
+def _create_discovery_job(subnet):
+    job_id = uuid.uuid4().hex
+    now = utc_now_iso()
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "message": _discovery_status_message("queued", 0, subnet),
+        "started_at": now,
+        "updated_at": now,
+        "devices_found_count": 0,
+        "devices": [],
+        "subnet": subnet,
+        "error": "",
+        "cancel_requested": False,
+        "process": None
+    }
+
+    with DISCOVERY_JOBS_LOCK:
+        DISCOVERY_JOBS[job_id] = job
+
+    return _snapshot_discovery_job(job)
+
+
+def _parse_discovery_line(line):
+    if 'Host:' not in line:
+        return None
+
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+
+    ip = parts[1]
+    hostname = ''
+    mac = ''
+    vendor = ''
+
+    if len(parts) > 2 and parts[2].startswith('(') and parts[2].endswith(')'):
+        hostname = parts[2].strip('()')
+
+    if 'MAC Address:' in line:
+        try:
+            mac_part = line.split('MAC Address:', 1)[1].strip()
+            if ' (' in mac_part and mac_part.endswith(')'):
+                mac = mac_part.split(' (', 1)[0].strip()
+                vendor = mac_part.split(' (', 1)[1][:-1].strip()
+            else:
+                mac = mac_part.strip()
+        except Exception:
+            mac = ''
+            vendor = ''
+
+    if not hostname:
+        try:
+            hostname = socket.gethostbyaddr(ip)[0]
+        except Exception:
+            hostname = ''
+
+    if not hostname:
+        try:
+            mdns = subprocess.check_output(
+                ['avahi-resolve-address', ip],
+                stderr=subprocess.DEVNULL,
+                timeout=3
+            ).decode().strip()
+            if '\t' in mdns:
+                hostname = mdns.split('\t', 1)[1].strip()
+        except Exception:
+            hostname = ''
+
+    return {
+        "ip": ip,
+        "hostname": hostname,
+        "mac": mac,
+        "vendor": vendor,
+        "guessed_type": guess_type_from_vendor(vendor),
+        "status": "online"
+    }
+
+
+def _discover_hosts_for_subnet(subnet, job_id=None):
+    devices = []
+    process = subprocess.Popen(
+        ['sudo', 'nmap', '-sn', '--open', subnet, '-oG', '-'],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1
+    )
+
+    if job_id:
+        _update_discovery_job(job_id, process=process)
+
+    try:
+        for raw_line in iter(process.stdout.readline, ''):
+            if job_id:
+                job = _get_discovery_job(job_id)
+                if not job:
+                    break
+                if job.get("cancel_requested"):
+                    try:
+                        process.terminate()
+                    except Exception:
+                        pass
+                    break
+
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            device = _parse_discovery_line(line)
+            if not device:
+                continue
+
+            devices.append(device)
+            if job_id:
+                _append_discovery_device(job_id, device)
+
+        returncode = process.wait(timeout=5)
+        stderr_output = (process.stderr.read() or '').strip()
+
+        if job_id:
+            job = _get_discovery_job(job_id)
+            if job and job.get("cancel_requested"):
+                _update_discovery_job(
+                    job_id,
+                    status="cancelled",
+                    message=_discovery_status_message("cancelled", len(devices), subnet),
+                    error=""
+                )
+                return devices
+
+        if returncode != 0:
+            raise RuntimeError(stderr_output or f"nmap exited with status {returncode}")
+
+        return devices
+    finally:
+        if job_id:
+            _update_discovery_job(job_id, process=None)
+        if process.stdout:
+            process.stdout.close()
+        if process.stderr:
+            process.stderr.close()
+
+
+def _run_discovery_job(job_id):
+    job = _get_discovery_job(job_id)
+    if not job:
+        return
+
+    subnet = job.get("subnet") or ""
+    _update_discovery_job(
+        job_id,
+        status="running",
+        message=_discovery_status_message("running", 0, subnet),
+        error=""
+    )
+
+    try:
+        devices = _discover_hosts_for_subnet(subnet, job_id=job_id)
+        final_job = _get_discovery_job(job_id)
+        if final_job and final_job.get("status") != "cancelled":
+            _update_discovery_job(
+                job_id,
+                status="completed",
+                message=_discovery_status_message("completed", len(devices), subnet),
+                error=""
+            )
+    except Exception as exc:
+        _update_discovery_job(
+            job_id,
+            status="failed",
+            message=f"Discovery failed on {subnet or 'selected subnet'}: {exc}",
+            error=str(exc)
+        )
 
 
 def find_dhcp_lease_file():
@@ -1001,79 +1260,13 @@ def download_csv():
 def discover_hosts():
     s = load_settings()
     data = request.json or {}
-    selected_vlan = data.get("vlan")
-
-    subnet = None
-    if selected_vlan:
-        for vlan in s.get("vlans", []):
-            if vlan.get("name") == selected_vlan:
-                subnet = vlan.get("subnet")
-                break
-
-    if not subnet:
-        subnet = resolve_subnet(s)
+    subnet = resolve_selected_subnet(s, data.get("vlan"))
 
     if not subnet:
         return jsonify({"error": "No subnet available"}), 400
 
     try:
-        result = subprocess.check_output(
-            ['sudo', 'nmap', '-sn', '--open', subnet, '-oG', '-'],
-            timeout=90
-        ).decode()
-
-        devices = []
-        for line in result.splitlines():
-            if 'Host:' in line:
-                parts = line.split()
-                ip = parts[1]
-                hostname = ''
-                mac = ''
-                vendor = ''
-
-                if len(parts) > 2 and parts[2].startswith('(') and parts[2].endswith(')'):
-                    hostname = parts[2].strip('()')
-
-                if 'MAC Address:' in line:
-                    try:
-                        mac_part = line.split('MAC Address:', 1)[1].strip()
-                        if ' (' in mac_part and mac_part.endswith(')'):
-                            mac = mac_part.split(' (', 1)[0].strip()
-                            vendor = mac_part.split(' (', 1)[1][:-1].strip()
-                        else:
-                            mac = mac_part.strip()
-                    except Exception:
-                        mac = ''
-                        vendor = ''
-
-                if not hostname:
-                    try:
-                        hostname = socket.gethostbyaddr(ip)[0]
-                    except Exception:
-                        hostname = ''
-
-                if not hostname:
-                    try:
-                        mdns = subprocess.check_output(
-                            ['avahi-resolve-address', ip],
-                            stderr=subprocess.DEVNULL,
-                            timeout=3
-                        ).decode().strip()
-                        if '	' in mdns:
-                            hostname = mdns.split('	', 1)[1].strip()
-                    except Exception:
-                        hostname = ''
-
-                guessed_type = guess_type_from_vendor(vendor)
-
-                devices.append({
-                    "ip": ip,
-                    "hostname": hostname,
-                    "mac": mac,
-                    "vendor": vendor,
-                    "guessed_type": guessed_type,
-                    "status": "online"
-                })
+        devices = _discover_hosts_for_subnet(subnet)
 
         return jsonify({
             "subnet": subnet,
@@ -1082,6 +1275,57 @@ def discover_hosts():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/tools/api/discover_hosts/start", methods=["POST"])
+def start_discover_hosts():
+    s = load_settings()
+    data = request.json or {}
+    subnet = resolve_selected_subnet(s, data.get("vlan"))
+
+    if not subnet:
+        return jsonify({"error": "No subnet available"}), 400
+
+    job = _create_discovery_job(subnet)
+    thread = threading.Thread(target=_run_discovery_job, args=(job["job_id"],), daemon=True)
+    thread.start()
+
+    return jsonify(job), 202
+
+
+@app.route("/tools/api/discover_hosts/status/<job_id>")
+def discover_hosts_status(job_id):
+    job = _get_discovery_job(job_id)
+    if not job:
+        return jsonify({"error": "Discovery job not found"}), 404
+
+    return jsonify(_snapshot_discovery_job(job))
+
+
+@app.route("/tools/api/discover_hosts/cancel/<job_id>", methods=["POST"])
+def cancel_discover_hosts(job_id):
+    with DISCOVERY_JOBS_LOCK:
+        job = DISCOVERY_JOBS.get(job_id)
+        if not job:
+            return jsonify({"error": "Discovery job not found"}), 404
+
+        if job.get("status") in ("completed", "failed", "cancelled"):
+            return jsonify(_snapshot_discovery_job(job))
+
+        job["cancel_requested"] = True
+        job["status"] = "cancelled"
+        job["message"] = _discovery_status_message("cancelled", job.get("devices_found_count", 0), job.get("subnet"))
+        job["updated_at"] = utc_now_iso()
+        process = job.get("process")
+
+    if process:
+        try:
+            process.terminate()
+        except Exception:
+            pass
+
+    job = _get_discovery_job(job_id)
+    return jsonify(_snapshot_discovery_job(job))
 
 
 

@@ -813,3 +813,15 @@ ame as the saved label
   - Tightened diagnostics discovery UI state transitions for idle, scanning, completed-with-results, completed-without-results, and failure cases
   - Ensured discovery results always refresh from the latest backend response and that loading/button states clear reliably after completion, cancellation, or error
   - Improved Add All Discovered feedback to use the latest discovered result set and show clearer visible status messaging
+### Last Update
+- Feature: Progressive diagnostics host discovery jobs
+- Files modified:
+  - app.py
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Diagnostics discovery now starts an in-memory backend job and polls status so discovered hosts appear progressively instead of only after the full scan completes
+  - Added visible running, completion, failure, and cancellation state messaging so long-running diagnostics actions do not feel frozen
+  - Preserved the existing one-shot discovery endpoint for compatibility with current discovery/add/fingerprinting flows
+
+
