@@ -17,6 +17,8 @@ from checks.validation import (
 app = Flask(__name__)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
 DEVICES_FILE  = os.path.join(os.path.dirname(__file__), 'devices.json')
+DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -257,6 +259,146 @@ def load_devices():
 def save_devices_file(devices):
     with open(DEVICES_FILE, 'w') as f:
         json.dump({'devices': devices}, f, indent=2)
+
+
+def load_fingerprints():
+    if not os.path.exists(FINGERPRINTS_FILE):
+        return {}
+
+    try:
+        with open(FINGERPRINTS_FILE) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_fingerprints(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(FINGERPRINTS_FILE, 'w') as f:
+        json.dump(data or {}, f, indent=2, sort_keys=True)
+
+
+def _fingerprint_confidence_rank(value):
+    return {
+        "high": 3,
+        "medium": 2,
+        "low": 1,
+    }.get((value or "").strip().lower(), 0)
+
+
+def _stable_fingerprint_key(device, result=None):
+    result = result or {}
+    mac = (device.get("mac") or "").strip()
+    evidence_mac = ((result.get("evidence") or {}).get("mac") or "").strip()
+    candidate_mac = mac or evidence_mac
+
+    if candidate_mac and candidate_mac not in ("—", "-", "unknown"):
+        return f"mac:{candidate_mac.upper()}"
+
+    ip = (device.get("ip") or result.get("ip") or "").strip()
+    if ip:
+        return f"ip:{ip}"
+
+    return None
+
+
+def merge_fingerprint(existing, new):
+    existing = dict(existing or {})
+    new = dict(new or {})
+    merged = dict(existing)
+
+    merged["last_seen"] = new.get("last_seen") or existing.get("last_seen") or ""
+
+    for field in ("ip", "mac", "vendor", "type", "av_role"):
+        new_value = (new.get(field) or "").strip() if isinstance(new.get(field), str) else new.get(field)
+        old_value = (existing.get(field) or "").strip() if isinstance(existing.get(field), str) else existing.get(field)
+        if new_value:
+            if field == "type" and old_value and old_value not in ("", "generic", "unknown") and new_value in ("", "generic", "unknown"):
+                continue
+            merged[field] = new_value
+        elif field not in merged:
+            merged[field] = old_value
+
+    existing_ports = {int(port) for port in (existing.get("open_ports") or []) if str(port).isdigit()}
+    new_ports = {int(port) for port in (new.get("open_ports") or []) if str(port).isdigit()}
+    merged["open_ports"] = sorted(existing_ports.union(new_ports))
+
+    service_map = {}
+    for service in existing.get("services") or []:
+        if isinstance(service, dict) and service.get("port") is not None:
+            service_map[int(service.get("port"))] = service.get("name", "unknown")
+    for service in new.get("services") or []:
+        if isinstance(service, dict) and service.get("port") is not None:
+            port = int(service.get("port"))
+            name = service.get("name", "unknown")
+            if port not in service_map or (service_map.get(port) in ("", "unknown") and name not in ("", "unknown")):
+                service_map[port] = name
+    merged["services"] = [{"port": port, "name": service_map[port]} for port in sorted(service_map.keys())]
+
+    existing_http = existing.get("http") or {}
+    new_http = new.get("http") or {}
+    merged_http = {
+        "title": (existing_http.get("title") or ""),
+        "server": (existing_http.get("server") or ""),
+        "headers": dict(existing_http.get("headers") or {}),
+    }
+    if new_http.get("title"):
+        merged_http["title"] = new_http.get("title")
+    if new_http.get("server"):
+        merged_http["server"] = new_http.get("server")
+    for key, value in (new_http.get("headers") or {}).items():
+        if key and value:
+            merged_http["headers"][key] = value
+    merged["http"] = merged_http
+
+    existing_fp = existing.get("fingerprint") or {}
+    new_fp = new.get("fingerprint") or {}
+    if _fingerprint_confidence_rank(new_fp.get("confidence")) >= _fingerprint_confidence_rank(existing_fp.get("confidence")):
+        merged["fingerprint"] = {
+            "platform": new_fp.get("platform", "") or existing_fp.get("platform", ""),
+            "confidence": new_fp.get("confidence", "") or existing_fp.get("confidence", ""),
+            "reasons": list(new_fp.get("reasons", []) or existing_fp.get("reasons", []) or []),
+        }
+    else:
+        merged["fingerprint"] = existing_fp
+
+    merged["evidence"] = dict(existing.get("evidence") or {})
+    merged["evidence"].update(new.get("evidence") or {})
+
+    return merged
+
+
+def _build_fingerprint_entry(device, result, av_role=None):
+    evidence = dict((result or {}).get("evidence") or {})
+    return {
+        "ip": (device.get("ip") or result.get("ip") or "").strip(),
+        "mac": (device.get("mac") or evidence.get("mac") or "").strip(),
+        "vendor": (device.get("vendor") or evidence.get("vendor") or "").strip(),
+        "type": (result.get("type") or device.get("type") or evidence.get("type") or "").strip(),
+        "av_role": (av_role or result.get("av_role") or "").strip(),
+        "open_ports": list(evidence.get("open_ports") or result.get("open_ports") or []),
+        "http": evidence.get("http") or {},
+        "services": list(evidence.get("services") or []),
+        "fingerprint": dict(result.get("fingerprint") or evidence.get("fingerprint") or {}),
+        "evidence": evidence,
+        "last_seen": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+    }
+
+
+def update_fingerprint_store(entries):
+    fingerprints = load_fingerprints()
+
+    for entry in entries or []:
+        if not isinstance(entry, dict):
+            continue
+        key = entry.get("key")
+        record = entry.get("record")
+        if not key or not isinstance(record, dict):
+            continue
+        fingerprints[key] = merge_fingerprint(fingerprints.get(key, {}), record)
+
+    save_fingerprints(fingerprints)
 
 def save_run(results):
     runs_dir = os.path.join(os.path.dirname(__file__), 'runs')
@@ -673,6 +815,23 @@ def api_validate_all():
     try:
         devices = load_devices()
         results = run_validation_for_all(devices)
+        fingerprint_updates = []
+
+        for device, result in zip(devices, results):
+            role = infer_av_role(device, result)
+            key = _stable_fingerprint_key(device, result)
+            if key:
+                fingerprint_updates.append({
+                    "key": key,
+                    "record": _build_fingerprint_entry(device, result, av_role=role),
+                })
+
+        if fingerprint_updates:
+            try:
+                update_fingerprint_store(fingerprint_updates)
+            except Exception:
+                pass
+
         detected = {
             "systems": [],
             "mode": "",
@@ -1789,6 +1948,7 @@ def api_validate_systems():
 
         enriched_devices = []
         validations_by_ip = {}
+        fingerprint_updates = []
 
         for device, result in zip(devices, validation_results):
             item = dict(device)
@@ -1798,6 +1958,18 @@ def api_validate_systems():
                 result["av_role"] = role
             enriched_devices.append(item)
             validations_by_ip[result.get("ip", "")] = result
+            key = _stable_fingerprint_key(device, result)
+            if key:
+                fingerprint_updates.append({
+                    "key": key,
+                    "record": _build_fingerprint_entry(item, result, av_role=role),
+                })
+
+        if fingerprint_updates:
+            try:
+                update_fingerprint_store(fingerprint_updates)
+            except Exception:
+                pass
 
         results = run_system_validation(enriched_devices, validations_by_ip)
         connectivity_results = []

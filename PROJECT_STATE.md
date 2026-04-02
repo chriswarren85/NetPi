@@ -782,3 +782,15 @@ ame as the saved label
   - Added a frontend-only Connectivity Matrix subsection under System Checks on the Devices page
   - Rendered `connectivity`, `connectivity_summary`, and `connectivity_note` without changing existing system-check or detected-systems render flows
   - Added resilient empty, all-skipped, and error-state handling for connectivity responses
+### Last Update
+- Feature: Evidence harvesting and fingerprint storage foundation
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - data/fingerprints.json
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added per-device `evidence` blocks to validation results, including observed ports, summarized HTTP evidence, vendor, MAC, services, and fingerprint details
+  - Added JSON-backed fingerprint persistence in `data/fingerprints.json` with `load_fingerprints()`, `save_fingerprints()`, and `merge_fingerprint()` helpers
+  - Wired `validate_all` and `validate_systems` to merge observed device evidence over time using MAC as the preferred key and IP as fallback
+  - Merge behavior preserves stronger type/fingerprint data, unions ports/services, accumulates HTTP headers, and updates `last_seen`

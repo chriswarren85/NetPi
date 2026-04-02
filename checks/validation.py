@@ -456,11 +456,69 @@ def http_probe(ip, port):
         server = resp.getheader("Server", "")
         if server:
             payload["server"] = server
+        headers = {}
+        for key, value in resp.getheaders():
+            if not key:
+                continue
+            lowered = str(key).strip().lower()
+            if not lowered or lowered in headers:
+                continue
+            headers[lowered] = str(value)
+        if headers:
+            payload["headers"] = headers
         if title:
             payload["title"] = title
         return payload
     except Exception:
         return None
+
+
+def build_validation_evidence(device, normalized_type, open_ports, service_map, http_details, fingerprint):
+    vendor = (device.get("vendor") or "").strip()
+    mac = (device.get("mac") or "").strip()
+
+    http_summary = {
+        "title": "",
+        "server": "",
+        "headers": {},
+    }
+
+    preferred_http = None
+    for port_key in ("443", "80", "8443", "8080"):
+        if port_key in http_details:
+            preferred_http = http_details.get(port_key) or {}
+            break
+
+    if not preferred_http and http_details:
+        first_key = sorted(http_details.keys())[0]
+        preferred_http = http_details.get(first_key) or {}
+
+    if preferred_http:
+        http_summary["title"] = preferred_http.get("title", "") or ""
+        http_summary["server"] = preferred_http.get("server", "") or ""
+        http_summary["headers"] = preferred_http.get("headers", {}) or {}
+
+    services = []
+    for port in sorted(open_ports):
+        services.append({
+            "port": int(port),
+            "name": service_map.get(str(port), "unknown"),
+        })
+
+    return {
+        "ip": (device.get("ip") or "").strip(),
+        "open_ports": sorted(int(port) for port in open_ports),
+        "http": http_summary,
+        "vendor": vendor,
+        "mac": mac,
+        "services": services,
+        "fingerprint": {
+            "platform": fingerprint.get("platform", ""),
+            "confidence": fingerprint.get("confidence", ""),
+            "reasons": list(fingerprint.get("reasons", []) or []),
+        },
+        "type": normalized_type,
+    }
 
 
 
@@ -689,6 +747,14 @@ def run_validation(device):
         "http": http_details,
         "fingerprint": fingerprint,
         "observed_platform": observed_platform,
+        "evidence": build_validation_evidence(
+            device,
+            normalized_type,
+            open_ports,
+            service_map,
+            http_details,
+            fingerprint,
+        ),
         "results": results,
         "overall": summarize_results(results),
     }
