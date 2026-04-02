@@ -773,3 +773,12 @@ ame as the saved label
   - Added backend-only `connectivity`, `connectivity_summary`, and `connectivity_note` response fields
   - Added failure-safe handling so connectivity matrix evaluation errors do not break base system validation output
   - Deferred all UI rendering changes for a later segment
+### Last Update
+- Feature: Connectivity matrix UI rendering on Devices page
+- Files modified:
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a frontend-only Connectivity Matrix subsection under System Checks on the Devices page
+  - Rendered `connectivity`, `connectivity_summary`, and `connectivity_note` without changing existing system-check or detected-systems render flows
+  - Added resilient empty, all-skipped, and error-state handling for connectivity responses

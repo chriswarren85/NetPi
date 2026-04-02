@@ -132,6 +132,12 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
   <div class="panel-body">
     <div id="system-summary" style="margin-bottom:10px;"></div>
     <div id="system-results" style="overflow-x:auto;"></div>
+      <div id="connectivity-panel" style="margin-top:14px;">
+        <div style="font-weight:600;margin-bottom:8px;">Connectivity Matrix</div>
+        <div id="connectivity-summary" style="margin-bottom:10px;color:#d1d5db;">Run System Validation to view connectivity matrix results.</div>
+        <div id="connectivity-note" style="margin-bottom:10px;"></div>
+        <div id="connectivity-results" style="overflow-x:auto;"></div>
+      </div>
       <div id="detected-systems-panel" style="margin-top:14px;">
         <div style="font-weight:600;margin-bottom:8px;">Detected Systems</div>
         <div id="detected-systems-list">No detected systems yet.</div>
@@ -147,6 +153,9 @@ let pastedPreview = [];
 let validationResults = {};
 
 let systemResults = [];
+let connectivityResults = [];
+let connectivitySummary = {};
+let connectivityNote = "";
 
 async function runSystemValidation(){
   try {
@@ -160,8 +169,12 @@ async function runSystemValidation(){
 
     if(data.ok){
       systemResults = data.results || [];
+      connectivityResults = Array.isArray(data.connectivity) ? data.connectivity : [];
+      connectivitySummary = data.connectivity_summary || {};
+      connectivityNote = data.connectivity_note || "";
       renderSystemResults();
-        renderDetectedSystems(data);
+      renderConnectivityResults();
+      renderDetectedSystems(data);
     } else {
       alert(data.error || "System validation failed");
     }
@@ -231,6 +244,92 @@ function renderSystemResults(){
   } else {
     summary.innerHTML = "<b>⚠ Incomplete system detected</b>";
   }
+}
+
+
+function renderConnectivityResults(){
+  const summaryEl = document.getElementById("connectivity-summary");
+  const noteEl = document.getElementById("connectivity-note");
+  const resultsEl = document.getElementById("connectivity-results");
+
+  if(!summaryEl || !noteEl || !resultsEl) return;
+
+  const counts = connectivitySummary || {};
+  const pass = Number(counts.pass || 0);
+  const fail = Number(counts.fail || 0);
+  const warn = Number(counts.warn || 0);
+  const info = Number(counts.info || 0);
+  const skipped = Number(counts.skipped || 0);
+  const errorText = counts.error || "";
+
+  if(errorText){
+    summaryEl.innerHTML = "<b>⚠ Connectivity matrix error</b>";
+    noteEl.innerHTML = '<div style="padding:8px 10px;background:#3f1d1d;border:1px solid #7f1d1d;border-radius:6px;color:#fecaca;">'
+      + escapeHtml(connectivityNote || errorText)
+      + '</div>';
+    resultsEl.innerHTML = '<div style="color:#9ca3af;">Connectivity matrix results are unavailable for this run.</div>';
+    return;
+  }
+
+  let summaryBits = [];
+  summaryBits.push("pass: " + pass);
+  summaryBits.push("fail: " + fail);
+  summaryBits.push("warn: " + warn);
+  summaryBits.push("info: " + info);
+  summaryBits.push("skipped: " + skipped);
+  summaryEl.innerHTML = "<b>Connectivity summary</b> <span style=\"color:#9ca3af\">(" + escapeHtml(summaryBits.join(" | ")) + ")</span>";
+
+  if(connectivityNote){
+    noteEl.innerHTML = '<div style="padding:8px 10px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#d1d5db;">'
+      + escapeHtml(connectivityNote)
+      + '</div>';
+  } else {
+    noteEl.innerHTML = "";
+  }
+
+  if(!connectivityResults.length){
+    resultsEl.innerHTML = '<div style="color:#6b7280;">No connectivity matrix results returned.</div>';
+    return;
+  }
+
+  const allSkipped = connectivityResults.every(item => String(item.status || "").toLowerCase() === "skipped");
+  if(allSkipped){
+    resultsEl.innerHTML = '<div style="color:#9ca3af;margin-bottom:8px;">All connectivity rules were skipped for the current device inventory.</div>';
+  } else {
+    resultsEl.innerHTML = "";
+  }
+
+  let html = '<table><thead><tr><th>Rule</th><th>Status</th><th>Path</th><th>Protocol / Ports</th><th>Severity</th><th>Notes</th></tr></thead><tbody>';
+
+  connectivityResults.forEach(item => {
+    const status = String(item.status || "unknown");
+    const icon = status === "pass" ? "✔" : (status === "fail" ? "✖" : (status === "warn" ? "⚠" : (status === "info" ? "ℹ" : "↷")));
+    const sourceLabel = item.source_device || item.from_device || item.source_ip || item.from_ip || "?";
+    const destLabel = item.dest_device || item.to_device || item.dest_ip || item.to_ip || "?";
+    const path = sourceLabel + " → " + destLabel;
+    const ports = Array.isArray(item.ports) && item.ports.length
+      ? item.ports.join(", ")
+      : (Array.isArray(item.required_target_ports) && item.required_target_ports.length ? item.required_target_ports.join(", ") : "—");
+    const observedPorts = Array.isArray(item.observed_ports) && item.observed_ports.length
+      ? item.observed_ports.join(", ")
+      : (Array.isArray(item.observed_target_ports) && item.observed_target_ports.length ? item.observed_target_ports.join(", ") : "");
+    const protocolPorts = (item.protocol || item.relationship_type || "?") + " / " + ports + (observedPorts ? " (obs: " + observedPorts + ")" : "");
+    const severity = item.severity || item.required_level || "required";
+    const note = item.message || ((Array.isArray(item.reasons) && item.reasons.length) ? item.reasons[0] : (item.notes || item.description || ""));
+    const ruleLabel = item.system_check || item.rule_id || item.description || item.category || "connectivity_rule";
+
+    html += "<tr>"
+      + "<td>" + escapeHtml(ruleLabel) + "</td>"
+      + "<td>" + icon + " " + escapeHtml(status) + "</td>"
+      + "<td>" + escapeHtml(path) + "</td>"
+      + "<td>" + escapeHtml(protocolPorts) + "</td>"
+      + "<td>" + escapeHtml(severity) + "</td>"
+      + "<td>" + escapeHtml(note) + "</td>"
+      + "</tr>";
+  });
+
+  html += "</tbody></table>";
+  resultsEl.innerHTML += html;
 }
 
 
