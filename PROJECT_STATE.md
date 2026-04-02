@@ -762,3 +762,14 @@ ame as the saved label
   - Updated /tools/api/fingerprint_host to reuse the same un_validation() path as alidate_all, including HTTP title and observed platform evidence
   - guessed_type now prefers the rich validation fingerprint and observed platform results before falling back to weak web-device style guesses
   - Preserved the existing response shape and conservative saved-device type persistence behavior
+
+### Last Update
+- Feature: Connectivity matrix backend wired into validate_systems response
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Wired the Segment 1 connectivity evaluator into `POST /tools/api/validate_systems` without changing existing `results` or `detected_systems` response keys
+  - Added backend-only `connectivity`, `connectivity_summary`, and `connectivity_note` response fields
+  - Added failure-safe handling so connectivity matrix evaluation errors do not break base system validation output
+  - Deferred all UI rendering changes for a later segment

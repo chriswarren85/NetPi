@@ -3,6 +3,7 @@ import socket
 import time
 import ssl
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from checks.connectivity_matrix import get_connectivity_rules, format_ports_for_display
 
 # Lightweight defaults for fast UI-safe validation
 DEFAULT_PING_COUNT = 1
@@ -969,3 +970,384 @@ def run_system_validation(devices, validations_by_ip=None):
                 results.append(_evaluate_system_rule(rule, source_device, target_device, validations_by_ip))
 
     return results
+
+
+CONNECTIVITY_ROLE_ALIASES = {
+    "crestron-processor": {"crestron-processor", "crestron_control", "crestron-control", "crestron"},
+    "crestron-touchpanel": {"crestron-touchpanel", "crestron_touchpanel", "touchpanel", "tp1070"},
+    "uc-engine": {"uc-engine", "crestron_uc", "crestron-uc"},
+    "crestron-device": {
+        "crestron-device", "crestron", "crestron-processor", "crestron-touchpanel",
+        "crestron_control", "crestron_touchpanel", "crestron_uc"
+    },
+    "dante-device": {"dante-device", "dante"},
+    "biamp-device": {"biamp-device", "biamp", "tesira"},
+    "qsys": {"qsys", "qsys-core"},
+    "qsys-touchpanel": {"qsys-touchpanel"},
+    "novastar": {"novastar"},
+    "samsung-display": {"samsung-display"},
+    "barco-encoder": {"barco-encoder"},
+    "barco-decoder": {"barco-decoder"},
+    "barco-ctrl-server": {"barco-ctrl-server"},
+    "barco-ha-server": {"barco-ha-server"},
+    "tesira-control-host": {"tesira-control-host"},
+    "xio-managed-device": {"xio-managed-device"},
+}
+
+VIRTUAL_DESTINATION_ROLES = {"internet", "dns", "ntp"}
+
+
+def _connectivity_device_roles(device):
+    roles = set()
+
+    for value in (device.get("av_role"), device.get("type"), device.get("_normalized_type")):
+        text = (value or "").strip().lower()
+        if text:
+            roles.add(text)
+
+    vendor = (device.get("vendor") or "").strip().lower()
+    name = (device.get("name") or "").strip().lower()
+    notes = (device.get("notes") or "").strip().lower()
+    combined = f"{vendor} {name} {notes}"
+
+    if "samsung" in combined:
+        roles.add("samsung-display")
+
+    return roles
+
+
+def _device_matches_connectivity_roles(device, allowed_roles):
+    device_roles = _connectivity_device_roles(device)
+
+    for role in allowed_roles or []:
+        normalized_role = (role or "").strip().lower()
+        aliases = CONNECTIVITY_ROLE_ALIASES.get(normalized_role, {normalized_role})
+        if device_roles.intersection(aliases):
+            return True
+
+    return False
+
+
+def _connectivity_devices_by_roles(devices, allowed_roles):
+    return [dict(device) for device in (devices or []) if _device_matches_connectivity_roles(device, allowed_roles)]
+
+
+def _normalize_scope_value(value):
+    return (value or "").strip().lower()
+
+
+def _scope_pair_allowed(rule, source_device, dest_device):
+    scope = _normalize_scope_value(rule.get("scope"))
+    if scope not in ("same_vlan", "cross_vlan"):
+        return True
+
+    source_vlan = (source_device.get("vlan") or "").strip()
+    dest_vlan = (dest_device.get("vlan") or "").strip()
+
+    if not source_vlan or not dest_vlan:
+        return True
+
+    if scope == "same_vlan":
+        return source_vlan == dest_vlan
+
+    return source_vlan != dest_vlan
+
+
+def _scope_confidence_note(rule, source_device, dest_device):
+    scope = _normalize_scope_value(rule.get("scope"))
+    if scope not in ("same_vlan", "cross_vlan"):
+        return ""
+
+    source_vlan = (source_device.get("vlan") or "").strip()
+    dest_vlan = (dest_device.get("vlan") or "").strip()
+
+    if not source_vlan or not dest_vlan:
+        return "VLAN scope could not be fully confirmed from the saved device data."
+
+    return ""
+
+
+def _dedupe_connectivity_pairs(rule, pairs):
+    if not rule.get("bidirectional"):
+        return pairs
+
+    seen = set()
+    deduped = []
+
+    for source_device, dest_device in pairs:
+        source_key = source_device.get("ip") or source_device.get("name") or ""
+        dest_key = dest_device.get("ip") or dest_device.get("name") or ""
+        pair_key = tuple(sorted([source_key, dest_key]))
+        if pair_key in seen:
+            continue
+        seen.add(pair_key)
+        deduped.append((source_device, dest_device))
+
+    return deduped
+
+
+def _make_connectivity_result(rule, source_device, dest_device, status, message, notes="", observed_ports=None):
+    return {
+        "rule_id": rule.get("id"),
+        "category": rule.get("category", ""),
+        "source_device": source_device.get("name") or source_device.get("ip") or "Unknown source",
+        "source_ip": source_device.get("ip"),
+        "dest_device": dest_device.get("name") or dest_device.get("ip") or "Unknown destination",
+        "dest_ip": dest_device.get("ip"),
+        "protocol": rule.get("protocol", ""),
+        "ports": list(rule.get("ports", [])),
+        "status": status,
+        "severity": rule.get("required_level", "required"),
+        "scope": rule.get("scope", ""),
+        "message": message,
+        "notes": notes or rule.get("notes", ""),
+        "observed_ports": observed_ports or [],
+    }
+
+
+def _make_virtual_connectivity_result(rule, source_device, destination_name, status, message, notes=""):
+    return {
+        "rule_id": rule.get("id"),
+        "category": rule.get("category", ""),
+        "source_device": source_device.get("name") or source_device.get("ip") or "Unknown source",
+        "source_ip": source_device.get("ip"),
+        "dest_device": destination_name,
+        "dest_ip": None,
+        "protocol": rule.get("protocol", ""),
+        "ports": list(rule.get("ports", [])),
+        "status": status,
+        "severity": rule.get("required_level", "required"),
+        "scope": rule.get("scope", ""),
+        "message": message,
+        "notes": notes or rule.get("notes", ""),
+        "observed_ports": [],
+    }
+
+
+def _connectivity_failure_status(rule):
+    return "fail" if rule.get("required_level") == "required" else "warn"
+
+
+def _is_tcp_observable(rule):
+    protocol = (rule.get("protocol") or "").strip().lower()
+    return protocol == "tcp" and all(isinstance(port, int) for port in (rule.get("ports") or []))
+
+
+def _evaluate_virtual_connectivity_rule(rule, source_device, validations_by_ip):
+    source_ip = source_device.get("ip", "")
+    source_validation = validations_by_ip.get(source_ip, {})
+    destination_name = ((rule.get("dest_roles") or ["dependency"])[0] or "dependency").upper()
+
+    if not _has_validation_evidence(source_validation):
+        return _make_virtual_connectivity_result(
+            rule,
+            source_device,
+            destination_name,
+            _connectivity_failure_status(rule),
+            f"FAIL: {(source_device.get('name') or source_ip)} source validation is unavailable; outbound {rule.get('protocol')}/{format_ports_for_display(rule.get('ports'))} not assessed",
+            notes="Source device did not present enough validation evidence for outbound dependency assessment.",
+        )
+
+    return _make_virtual_connectivity_result(
+        rule,
+        source_device,
+        destination_name,
+        "warn",
+        f"WARN: {(source_device.get('name') or source_ip)} outbound {rule.get('protocol')}/{format_ports_for_display(rule.get('ports'))} dependency is listed but not directly provable from the current probe method",
+        notes=rule.get("notes", ""),
+    )
+
+
+def _evaluate_probe_limited_connectivity_rule(rule, source_device, dest_device, validations_by_ip):
+    source_ip = source_device.get("ip", "")
+    dest_ip = dest_device.get("ip", "")
+    source_validation = validations_by_ip.get(source_ip, {})
+    target_validation = validations_by_ip.get(dest_ip, {})
+    source_name = source_device.get("name") or source_ip
+    dest_name = dest_device.get("name") or dest_ip
+
+    if not _has_validation_evidence(source_validation) or not _has_validation_evidence(target_validation):
+        return _make_connectivity_result(
+            rule,
+            source_device,
+            dest_device,
+            _connectivity_failure_status(rule),
+            f"FAIL: {source_name} -> {dest_name} {rule.get('protocol')}/{format_ports_for_display(rule.get('ports'))} could not be assessed because one or both endpoints lack validation evidence",
+            notes=rule.get("notes", ""),
+        )
+
+    return _make_connectivity_result(
+        rule,
+        source_device,
+        dest_device,
+        "warn",
+        f"WARN: {source_name} -> {dest_name} {rule.get('protocol')}/{format_ports_for_display(rule.get('ports'))} is scope-sensitive; full end-to-end proof is not available from the current probe method",
+        notes=rule.get("notes", ""),
+    )
+
+
+def _evaluate_tcp_connectivity_rule(rule, source_device, dest_device, validations_by_ip):
+    source_ip = source_device.get("ip", "")
+    dest_ip = dest_device.get("ip", "")
+    source_validation = validations_by_ip.get(source_ip, {})
+    target_validation = validations_by_ip.get(dest_ip, {})
+    source_name = source_device.get("name") or source_ip
+    dest_name = dest_device.get("name") or dest_ip
+
+    required_ports = list(rule.get("ports", []))
+    observed_ports = set(_extract_validation_open_ports(target_validation))
+
+    if dest_ip:
+        for port in required_ports:
+            if port in observed_ports:
+                continue
+            if quick_tcp_probe(dest_ip, int(port), timeout=0.35):
+                observed_ports.add(int(port))
+
+    observed_required_ports = sorted(port for port in required_ports if port in observed_ports)
+    source_ok = _has_validation_evidence(source_validation)
+    target_ok = _has_validation_evidence(target_validation) or bool(observed_required_ports)
+    ports_ok = len(observed_required_ports) == len(required_ports)
+    status = "pass" if (source_ok and target_ok and ports_ok) else _connectivity_failure_status(rule)
+
+    if status == "pass":
+        notes = _scope_confidence_note(rule, source_device, dest_device)
+        message = f"PASS: {source_name} -> {dest_name} tcp/{format_ports_for_display(required_ports)} reachable"
+        if notes:
+            status = "info"
+            message = f"INFO: {source_name} -> {dest_name} tcp/{format_ports_for_display(required_ports)} observed but VLAN scope could not be fully confirmed"
+        return _make_connectivity_result(
+            rule,
+            source_device,
+            dest_device,
+            status,
+            message,
+            notes=notes,
+            observed_ports=observed_required_ports,
+        )
+
+    if not source_ok:
+        notes = "Source device did not present enough validation evidence."
+    elif not target_ok:
+        notes = "Destination device did not present enough validation evidence."
+    else:
+        missing_ports = [port for port in required_ports if port not in observed_required_ports]
+        notes = f"Expected ports not observed from NetPi probe path: {format_ports_for_display(missing_ports)}"
+
+    return _make_connectivity_result(
+        rule,
+        source_device,
+        dest_device,
+        status,
+        f"FAIL: {source_name} -> {dest_name} tcp/{format_ports_for_display(required_ports)} blocked or not observed",
+        notes=notes,
+        observed_ports=observed_required_ports,
+    )
+
+
+def _connectivity_rule_pairs(rule, devices):
+    source_roles = [role for role in (rule.get("source_roles") or []) if role not in VIRTUAL_DESTINATION_ROLES]
+    dest_roles = [role for role in (rule.get("dest_roles") or []) if role not in VIRTUAL_DESTINATION_ROLES]
+    sources = _connectivity_devices_by_roles(devices, source_roles)
+
+    if any(role in VIRTUAL_DESTINATION_ROLES for role in (rule.get("dest_roles") or [])):
+        return sources, []
+
+    targets = _connectivity_devices_by_roles(devices, dest_roles)
+    pairs = []
+
+    for source_device in sources:
+        for dest_device in targets:
+            if source_device.get("ip") == dest_device.get("ip"):
+                continue
+            if not _scope_pair_allowed(rule, source_device, dest_device):
+                continue
+            pairs.append((source_device, dest_device))
+
+    return sources, _dedupe_connectivity_pairs(rule, pairs)
+
+
+def _skipped_connectivity_result(rule, message):
+    return {
+        "rule_id": rule.get("id"),
+        "category": rule.get("category", ""),
+        "source_device": None,
+        "source_ip": None,
+        "dest_device": None,
+        "dest_ip": None,
+        "protocol": rule.get("protocol", ""),
+        "ports": list(rule.get("ports", [])),
+        "status": "skipped",
+        "severity": rule.get("required_level", "required"),
+        "scope": rule.get("scope", ""),
+        "message": f"SKIPPED: {message}",
+        "notes": rule.get("notes", ""),
+        "observed_ports": [],
+    }
+
+
+def run_connectivity_validation(devices, validations_by_ip=None):
+    devices = devices or []
+
+    if validations_by_ip is None:
+        validation_results = run_validation_for_all(devices)
+        validations_by_ip = {item.get("ip", ""): item for item in validation_results}
+
+    results = []
+
+    for rule in get_connectivity_rules():
+        source_roles = set(rule.get("source_roles", []))
+        dest_roles = set(rule.get("dest_roles", []))
+        sources, pairs = _connectivity_rule_pairs(rule, devices)
+
+        if not sources:
+            results.append(_skipped_connectivity_result(
+                rule,
+                f"Rule not evaluated because no matching source role exists for {', '.join(sorted(source_roles)) or 'source'}",
+            ))
+            continue
+
+        if dest_roles.intersection(VIRTUAL_DESTINATION_ROLES):
+            for source_device in sources:
+                results.append(_evaluate_virtual_connectivity_rule(rule, source_device, validations_by_ip))
+            continue
+
+        targets = _connectivity_devices_by_roles(devices, rule.get("dest_roles", []))
+        if not targets:
+            results.append(_skipped_connectivity_result(
+                rule,
+                f"Rule not evaluated because no matching destination role exists for {', '.join(sorted(dest_roles)) or 'destination'}",
+            ))
+            continue
+
+        if not pairs:
+            results.append(_skipped_connectivity_result(
+                rule,
+                "Rule not evaluated because no source/destination pairs matched the requested VLAN scope",
+            ))
+            continue
+
+        for source_device, dest_device in pairs:
+            if _is_tcp_observable(rule):
+                results.append(_evaluate_tcp_connectivity_rule(rule, source_device, dest_device, validations_by_ip))
+            else:
+                results.append(_evaluate_probe_limited_connectivity_rule(rule, source_device, dest_device, validations_by_ip))
+
+    return results
+
+
+def summarize_connectivity_results(results):
+    summary = {
+        "pass": 0,
+        "fail": 0,
+        "warn": 0,
+        "info": 0,
+        "skipped": 0,
+    }
+
+    for item in results or []:
+        status = (item.get("status") or "").strip().lower()
+        if status in summary:
+            summary[status] += 1
+
+    return summary

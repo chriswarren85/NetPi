@@ -6,7 +6,13 @@ from checks.devices import run_device_checks
 import io
 import ipaddress
 import re
-from checks.validation import run_validation, run_validation_for_all
+from checks.validation import (
+    run_validation,
+    run_validation_for_all,
+    run_system_validation,
+    run_connectivity_validation,
+    summarize_connectivity_results,
+)
 
 app = Flask(__name__)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
@@ -1772,9 +1778,6 @@ def api_auto_type_devices():
 @app.route("/tools/api/validate_systems", methods=["POST"])
 def api_validate_systems():
     try:
-        import json
-        from pathlib import Path
-        from checks.validation import run_system_validation
         payload = request.get_json(silent=True) or {}
 
         devices = payload.get("devices")
@@ -1797,6 +1800,30 @@ def api_validate_systems():
             validations_by_ip[result.get("ip", "")] = result
 
         results = run_system_validation(enriched_devices, validations_by_ip)
+        connectivity_results = []
+        connectivity_summary = {
+            "pass": 0,
+            "fail": 0,
+            "warn": 0,
+            "info": 0,
+            "skipped": 0,
+        }
+        connectivity_note = ""
+
+        try:
+            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+            connectivity_summary = summarize_connectivity_results(connectivity_results)
+        except Exception as connectivity_error:
+            connectivity_results = []
+            connectivity_summary = {
+                "pass": 0,
+                "fail": 0,
+                "warn": 1,
+                "info": 0,
+                "skipped": 0,
+                "error": str(connectivity_error),
+            }
+            connectivity_note = "Connectivity matrix evaluation failed; base system validation results remain available."
 
         detected = build_detected_systems(enriched_devices, results)
 
@@ -1804,6 +1831,9 @@ def api_validate_systems():
             "ok": True,
             "count": len(results),
             "results": results,
+            "connectivity": connectivity_results,
+            "connectivity_summary": connectivity_summary,
+            "connectivity_note": connectivity_note,
             "detected_systems": detected,
         })
     except Exception as e:
