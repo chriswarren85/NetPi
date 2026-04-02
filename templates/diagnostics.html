@@ -60,6 +60,8 @@
   Discovering live hosts on selected subnet...
 </div>
 
+<div id="discover-summary" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem"></div>
+
 <div id="fingerprint-added-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem"></div>
 
 <div class="panel" id="base-panel" style="display:none">
@@ -102,6 +104,91 @@
 <script>
 let discoverAbortController = null;
 let lastAddedIps = [];
+let latestDiscoveredDevices = [];
+let latestDiscoveredSubnet = '';
+let latestDiscoveryState = 'idle';
+
+function setDiscoveryUiState(state, message){
+  latestDiscoveryState = state;
+
+  const discoverBtn = document.getElementById('discover-btn');
+  const addAllBtn = document.getElementById('add-all-discovered-btn');
+  const cancelBtn = document.getElementById('cancel-discover-btn');
+  const discoveringMsg = document.getElementById('discovering-msg');
+  const summary = document.getElementById('discover-summary');
+
+  discoverBtn.disabled = state === 'scanning';
+  discoverBtn.textContent = state === 'scanning' ? 'Discovering...' : '🔎 Discover Hosts';
+  cancelBtn.style.display = state === 'scanning' ? 'inline-block' : 'none';
+  discoveringMsg.style.display = state === 'scanning' ? 'block' : 'none';
+
+  const canAddAll = state === 'completed' && latestDiscoveredDevices.length > 0;
+  addAllBtn.disabled = !canAddAll;
+
+  if(message){
+    summary.textContent = message;
+    summary.style.display = 'block';
+    if(state === 'failed'){
+      summary.style.color = '#f87171';
+    } else if(state === 'completed' && latestDiscoveredDevices.length > 0){
+      summary.style.color = '#4ade80';
+    } else if(state === 'scanning'){
+      summary.style.color = '#9ca3af';
+    } else {
+      summary.style.color = '#6b7280';
+    }
+  } else {
+    summary.textContent = '';
+    summary.style.display = 'none';
+  }
+}
+
+function renderDiscoveredHosts(devices, subnet){
+  const panel = document.getElementById('discover-panel');
+  const tbody = document.getElementById('discover-results');
+
+  latestDiscoveredDevices = Array.isArray(devices) ? devices.slice() : [];
+  latestDiscoveredSubnet = subnet || '';
+
+  tbody.innerHTML = '';
+  panel.style.display = 'block';
+  setFingerprintAddedState([], '');
+
+  if(!latestDiscoveredDevices.length){
+    const emptySubnet = latestDiscoveredSubnet || 'selected subnet';
+    tbody.innerHTML = `<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No live hosts found on ${emptySubnet}</td></tr>`;
+    setDiscoveryUiState('completed', `Discovery completed: 0 live hosts found on ${emptySubnet}.`);
+    return;
+  }
+
+  latestDiscoveredDevices.forEach(d => {
+    const hostname = d.hostname || '';
+    const safeHost = hostname.replace(/'/g, "\\'");
+    const initialType = d.guessed_type || 'generic';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type='checkbox' class='host-check'></td>
+      <td>${hostname || '<span style="color:#6b7280">—</span>'}</td>
+      <td style="font-family:monospace">${d.ip}</td>
+      <td style="font-size:11px;color:#9ca3af">
+        ${d.mac ? `<div style="font-family:monospace">${d.mac}</div>` : '<div>—</div>'}
+        ${d.vendor ? `<div>${d.vendor}</div>` : ''}
+      </td>
+      <td>${statusBadge(d.status)}</td>
+      <td id="guess-${d.ip.replace(/\./g,'-')}" style="color:#9ca3af">
+        <strong>${initialType}</strong>
+        <div style="font-size:11px;color:#6b7280">fingerprinting...</div>
+      </td>
+      <td style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="quickPortScan('${d.ip}')">Quick port scan</button>
+        <button class="btn btn-primary" onclick="addDiscovered('${d.ip}','${safeHost}')">Add to devices</button>
+      </td>`;
+    tbody.appendChild(tr);
+    fingerprintHost(d.ip).catch(() => {});
+  });
+
+  setDiscoveryUiState('completed', `Discovery completed: ${latestDiscoveredDevices.length} live host${latestDiscoveredDevices.length === 1 ? '' : 's'} found on ${latestDiscoveredSubnet || 'selected subnet'}.`);
+}
 
 function setFingerprintAddedState(ips, message){
   lastAddedIps = Array.isArray(ips) ? ips.filter(Boolean) : [];
@@ -240,11 +327,10 @@ function discoverHosts(){
 
   discoverAbortController = new AbortController();
 
-  document.getElementById('discover-btn').disabled = true;
-  document.getElementById('discover-btn').textContent = 'Discovering...';
-  document.getElementById('cancel-discover-btn').style.display = 'inline-block';
-  document.getElementById('discovering-msg').style.display = 'block';
+  latestDiscoveredDevices = [];
+  latestDiscoveredSubnet = '';
   document.getElementById('discover-panel').style.display = 'none';
+  setDiscoveryUiState('scanning', 'Discovering live hosts on the selected subnet...');
 
   const vlan = document.getElementById('vlan-select').value;
 
@@ -257,66 +343,31 @@ function discoverHosts(){
     .then(r => r.json())
     .then(data => {
       discoverAbortController = null;
-      document.getElementById('discover-btn').disabled = false;
-      document.getElementById('discover-btn').textContent = '🔎 Discover Hosts';
-      document.getElementById('cancel-discover-btn').style.display = 'none';
-      document.getElementById('discovering-msg').style.display = 'none';
 
       if(data.error){
+        latestDiscoveredDevices = [];
+        latestDiscoveredSubnet = data.subnet || '';
+        document.getElementById('discover-panel').style.display = 'block';
+        document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#f87171;text-align:center;padding:1rem">${data.error}</td></tr>`;
+        setDiscoveryUiState('failed', `Discovery failed${latestDiscoveredSubnet ? ' on ' + latestDiscoveredSubnet : ''}: ${data.error}`);
         alert(data.error);
         return;
       }
 
-      const tbody = document.getElementById('discover-results');
-      tbody.innerHTML = '';
-      document.getElementById('add-all-discovered-btn').disabled = true;
-      setFingerprintAddedState([], '');
-
-      if(!data.devices || data.devices.length === 0){
-        tbody.innerHTML = `<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No live hosts found on ${data.subnet}</td></tr>`;
-      } else {
-        data.devices.forEach(d => {
-          const hostname = d.hostname || '';
-          const safeHost = hostname.replace(/'/g, "\'");
-          const initialType = d.guessed_type || 'generic';
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><input type='checkbox' class='host-check'></td>
-            <td>${hostname || '<span style="color:#6b7280">—</span>'}</td>
-            <td style="font-family:monospace">${d.ip}</td>
-            <td style="font-size:11px;color:#9ca3af">
-              ${d.mac ? `<div style="font-family:monospace">${d.mac}</div>` : '<div>—</div>'}
-              ${d.vendor ? `<div>${d.vendor}</div>` : ''}
-            </td>
-            <td>${statusBadge(d.status)}</td>
-            <td id="guess-${d.ip.replace(/\./g,'-')}" style="color:#9ca3af">
-              <strong>${initialType}</strong>
-              <div style="font-size:11px;color:#6b7280">fingerprinting...</div>
-            </td>
-            <td style="display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn" onclick="quickPortScan('${d.ip}')">Quick port scan</button>
-              <button class="btn btn-primary" onclick="addDiscovered('${d.ip}','${safeHost}')">Add to devices</button>
-            </td>`;
-          tbody.appendChild(tr);
-          fingerprintHost(d.ip);
-        });
-        document.getElementById('add-all-discovered-btn').disabled = false;
-      }
-
-      document.getElementById('discover-panel').style.display = 'block';
+      renderDiscoveredHosts(data.devices || [], data.subnet || '');
     })
     .catch(e => {
-      document.getElementById('discover-btn').disabled = false;
-      document.getElementById('discover-btn').textContent = '🔎 Discover Hosts';
-      document.getElementById('cancel-discover-btn').style.display = 'none';
-      document.getElementById('discovering-msg').style.display = 'none';
-
       if(e.name === 'AbortError'){
         discoverAbortController = null;
+        setDiscoveryUiState('idle', 'Discovery cancelled.');
         return;
       }
 
       discoverAbortController = null;
+      latestDiscoveredDevices = [];
+      document.getElementById('discover-panel').style.display = 'block';
+      document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#f87171;text-align:center;padding:1rem">Error discovering hosts: ${String(e)}</td></tr>`;
+      setDiscoveryUiState('failed', 'Discovery failed. See error details and try again.');
       alert('Error discovering hosts: ' + e);
     });
 }
@@ -471,12 +522,18 @@ function collectDiscoveredDevices(selectedOnly){
 }
 
 function addAllDiscovered(){
+  const btn = document.getElementById('add-all-discovered-btn');
   const devices = collectDiscoveredDevices(false);
 
   if(devices.length === 0){
+    setDiscoveryUiState(latestDiscoveryState === 'scanning' ? 'scanning' : 'completed', 'No discovered devices are currently available to add.');
     alert('No discovered devices to add');
     return;
   }
+
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+  setDiscoveryUiState('completed', `Adding ${devices.length} discovered device${devices.length === 1 ? '' : 's'}...`);
 
   fetch('/tools/api/devices/add_all_discovered', {
     method: 'POST',
@@ -489,7 +546,10 @@ function addAllDiscovered(){
   })
   .then(r => r.json())
   .then(d => {
+    btn.textContent = 'Add All Discovered';
     if(d.error){
+      btn.disabled = latestDiscoveredDevices.length === 0;
+      setDiscoveryUiState('failed', `Add All Discovered failed: ${d.error}`);
       alert(d.error);
       return;
     }
@@ -499,9 +559,14 @@ function addAllDiscovered(){
     } else {
       setFingerprintAddedState([], 'No newly added devices to fingerprint.');
     }
+    btn.disabled = latestDiscoveredDevices.length === 0;
+    setDiscoveryUiState('completed', `Add All complete: ${d.added || 0} added, ${d.skipped_existing || 0} already existed, ${d.total_seen || devices.length} total seen.`);
     alert(`Added ${d.added || 0} of ${d.total_seen || 0} discovered hosts (${d.skipped_existing || 0} skipped existing)`);
   })
   .catch(e => {
+    btn.textContent = 'Add All Discovered';
+    btn.disabled = latestDiscoveredDevices.length === 0;
+    setDiscoveryUiState('failed', 'Add All Discovered failed. See error details and try again.');
     alert('Error adding discovered devices: ' + e);
   });
 }

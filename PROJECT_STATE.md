@@ -804,3 +804,12 @@ ame as the saved label
   - Fixed `run_validation_for_all()` to preserve input device order so validate-all/system fingerprint persistence no longer cross-pairs results between devices
   - Ensured validation evidence uses the same observed validation result data path, including extracted open ports and HTTP summary data
   - Hardened fingerprint merging with deep-copy behavior and key/IP guards so stored records keep the correct device identity and `evidence.ip`
+### Last Update
+- Feature: Diagnostics discovery UI responsiveness and state handling improvements
+- Files modified:
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Tightened diagnostics discovery UI state transitions for idle, scanning, completed-with-results, completed-without-results, and failure cases
+  - Ensured discovery results always refresh from the latest backend response and that loading/button states clear reliably after completion, cancellation, or error
+  - Improved Add All Discovered feedback to use the latest discovered result set and show clearer visible status messaging
