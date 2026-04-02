@@ -834,3 +834,13 @@ ame as the saved label
   - Refactored in-memory job handling into a small reusable background job pattern with shared creation, lookup, update, and cancellation helpers
   - Discovery is now the first implementation of the shared job model without changing its current endpoints or progressive UX behavior
   - Future long-running actions should reuse the same job pattern so visible status and partial results stay consistent
+### Last Update
+- Feature: Conservative live-network evidence capture groundwork
+- Files modified:
+  - app.py
+  - data/device_evidence.json
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a readable JSON-backed evidence store at data/device_evidence.json with reusable record_device_observation(...) helper logic
+  - Discovery, fingerprint_host, validate_device, validate_all, and validate_systems now record live observed device evidence including identity, hostnames, ports, HTTP summary, and platform/type hints
+  - Learning remains conservative and explainable: evidence accumulates without weak learned guesses silently overriding saved device truth

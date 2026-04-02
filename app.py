@@ -23,8 +23,10 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
 DEVICES_FILE  = os.path.join(os.path.dirname(__file__), 'devices.json')
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
+DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, 'device_evidence.json')
 BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
+DEVICE_EVIDENCE_LOCK = threading.Lock()
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -351,6 +353,8 @@ def _parse_discovery_line(line):
 
     ip = parts[1]
     hostname = ''
+    reverse_dns = ''
+    mdns_name = ''
     mac = ''
     vendor = ''
 
@@ -372,6 +376,7 @@ def _parse_discovery_line(line):
     if not hostname:
         try:
             hostname = socket.gethostbyaddr(ip)[0]
+            reverse_dns = hostname
         except Exception:
             hostname = ''
 
@@ -384,8 +389,30 @@ def _parse_discovery_line(line):
             ).decode().strip()
             if '\t' in mdns:
                 hostname = mdns.split('\t', 1)[1].strip()
+                mdns_name = hostname
         except Exception:
             hostname = ''
+
+    try:
+        record_device_observation(
+            {
+                "ip": ip,
+                "hostname": hostname,
+                "mac": mac,
+                "vendor": vendor,
+                "type": "",
+            },
+            source="discovery",
+            extra={
+                "hostname": hostname,
+                "reverse_dns": reverse_dns,
+                "mdns_name": mdns_name,
+                "guessed_type": guess_type_from_vendor(vendor),
+                "inventory_type": "",
+            },
+        )
+    except Exception:
+        pass
 
     return {
         "ip": ip,
@@ -630,12 +657,350 @@ def save_fingerprints(data):
         json.dump(data or {}, f, indent=2, sort_keys=True)
 
 
+def load_device_evidence():
+    if not os.path.exists(DEVICE_EVIDENCE_FILE):
+        return {}
+
+    try:
+        with open(DEVICE_EVIDENCE_FILE) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_device_evidence(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(DEVICE_EVIDENCE_FILE, 'w') as f:
+        json.dump(data or {}, f, indent=2, sort_keys=True)
+
+
 def _fingerprint_confidence_rank(value):
     return {
         "high": 3,
         "medium": 2,
         "low": 1,
     }.get((value or "").strip().lower(), 0)
+
+
+def _normalize_identity_mac(value):
+    mac = (value or "").strip().upper()
+    if not mac or mac in ("—", "-", "UNKNOWN"):
+        return ""
+    return mac
+
+
+def _normalize_identity_hostname(value):
+    hostname = (value or "").strip()
+    lowered = hostname.lower()
+    if not hostname or lowered in ("unknown", "n/a", "none", "-", "—"):
+        return ""
+    if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", hostname):
+        return ""
+    if "." not in hostname and "-" not in hostname and len(hostname) < 3:
+        return ""
+    return hostname
+
+
+def _observation_identity_candidates(observation):
+    observation = observation or {}
+    mac = _normalize_identity_mac(observation.get("mac"))
+    hostname = _normalize_identity_hostname(observation.get("stable_hostname"))
+    ip = (observation.get("ip") or "").strip()
+
+    candidates = []
+    if mac:
+        candidates.append(("mac", f"mac:{mac}"))
+    if hostname:
+        candidates.append(("hostname", f"hostname:{hostname.lower()}"))
+    if ip:
+        candidates.append(("ip", f"ip:{ip}"))
+    return candidates
+
+
+def _identity_priority(key):
+    if str(key).startswith("mac:"):
+        return 3
+    if str(key).startswith("hostname:"):
+        return 2
+    if str(key).startswith("ip:"):
+        return 1
+    return 0
+
+
+def _merge_unique_strings(existing, *values):
+    merged = []
+    seen = set()
+
+    for value in list(existing or []) + list(values):
+        text = (value or "").strip()
+        if not text:
+            continue
+        lowered = text.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        merged.append(text)
+
+    return merged
+
+
+def _merge_unique_ports(existing, *values):
+    ports = {int(port) for port in (existing or []) if str(port).isdigit()}
+    for value in values:
+        for port in (value or []):
+            if str(port).isdigit():
+                ports.add(int(port))
+    return sorted(ports)
+
+
+def _bump_count_map(counter_map, key, *, strength="", seen_at="", source="", reasons=None):
+    key = (key or "").strip()
+    if not key:
+        return counter_map
+
+    strength = (strength or "").strip().lower()
+    source = (source or "").strip()
+    reasons = [str(item).strip() for item in (reasons or []) if str(item).strip()]
+
+    bucket = dict(counter_map.get(key) or {})
+    bucket["count"] = int(bucket.get("count", 0) or 0) + 1
+    bucket["best_strength"] = (
+        strength
+        if _fingerprint_confidence_rank(strength) >= _fingerprint_confidence_rank(bucket.get("best_strength"))
+        else bucket.get("best_strength", "")
+    )
+    if seen_at:
+        bucket["last_seen"] = seen_at
+    bucket["sources"] = _merge_unique_strings(bucket.get("sources") or [], source)
+    bucket["reasons"] = _merge_unique_strings(bucket.get("reasons") or [], *reasons)
+    counter_map[key] = bucket
+    return counter_map
+
+
+def _strongest_candidate(candidates):
+    best_type = ""
+    best_data = {}
+    best_rank = -1
+    best_count = -1
+
+    for candidate_type, data in (candidates or {}).items():
+        strength_rank = _fingerprint_confidence_rank((data or {}).get("best_strength"))
+        count = int((data or {}).get("count", 0) or 0)
+        if strength_rank > best_rank or (strength_rank == best_rank and count > best_count):
+            best_type = candidate_type
+            best_data = data or {}
+            best_rank = strength_rank
+            best_count = count
+
+    return best_type, best_data
+
+
+def _build_device_observation(device, *, source="", result=None, extra=None):
+    device = device or {}
+    result = result or {}
+    extra = extra or {}
+    evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
+    fingerprint = result.get("fingerprint") if isinstance(result.get("fingerprint"), dict) else {}
+    observed_platform = result.get("observed_platform") if isinstance(result.get("observed_platform"), dict) else {}
+    http_summary = evidence.get("http") if isinstance(evidence.get("http"), dict) else {}
+
+    stable_hostname = ""
+    for candidate in (
+        extra.get("stable_hostname"),
+        extra.get("hostname"),
+        extra.get("reverse_dns"),
+        extra.get("mdns_name"),
+        device.get("hostname"),
+    ):
+        stable_hostname = _normalize_identity_hostname(candidate)
+        if stable_hostname:
+            break
+
+    open_ports = list(evidence.get("open_ports") or result.get("open_ports") or extra.get("open_ports") or [])
+
+    return {
+        "source": (source or extra.get("source") or "").strip(),
+        "seen_at": utc_now_iso(),
+        "ip": (device.get("ip") or result.get("ip") or evidence.get("ip") or extra.get("ip") or "").strip(),
+        "mac": _normalize_identity_mac(device.get("mac") or evidence.get("mac") or extra.get("mac")),
+        "vendor": (device.get("vendor") or evidence.get("vendor") or extra.get("vendor") or "").strip(),
+        "hostname": (extra.get("hostname") or device.get("hostname") or "").strip(),
+        "reverse_dns": (extra.get("reverse_dns") or "").strip(),
+        "mdns_name": (extra.get("mdns_name") or "").strip(),
+        "stable_hostname": stable_hostname,
+        "open_ports": [int(port) for port in open_ports if str(port).isdigit()],
+        "http_title": (http_summary.get("title") or extra.get("http_title") or "").strip(),
+        "http_server": (http_summary.get("server") or extra.get("http_server") or "").strip(),
+        "validation_fingerprint_platform": normalize_platform_name(fingerprint.get("platform")),
+        "validation_fingerprint_confidence": (fingerprint.get("confidence") or "").strip().lower(),
+        "observed_platform": normalize_platform_name(observed_platform.get("platform")),
+        "observed_platform_confidence": (observed_platform.get("confidence") or "").strip().lower(),
+        "guessed_type": (extra.get("guessed_type") or "").strip(),
+        "inventory_type": (extra.get("inventory_type") or device.get("type") or "").strip(),
+    }
+
+
+def _merge_device_evidence_record(existing, observation, identity_key, identity_kind):
+    existing = copy.deepcopy(existing or {})
+    observation = copy.deepcopy(observation or {})
+    seen_at = observation.get("seen_at") or utc_now_iso()
+
+    latest = copy.deepcopy(existing.get("latest") or {})
+    latest.update({k: v for k, v in observation.items() if k != "seen_at"})
+    latest["open_ports"] = _merge_unique_ports([], observation.get("open_ports"))
+
+    identity = copy.deepcopy(existing.get("identity") or {})
+    identity["key"] = identity_key
+    identity["key_type"] = identity_kind
+    if observation.get("ip"):
+        identity["ip"] = observation.get("ip")
+    if observation.get("mac"):
+        identity["mac"] = observation.get("mac")
+    if observation.get("stable_hostname"):
+        identity["stable_hostname"] = observation.get("stable_hostname")
+    identity["aliases"] = _merge_unique_strings(
+        identity.get("aliases") or [],
+        identity_key,
+        *(key for _, key in _observation_identity_candidates(observation)),
+    )
+
+    source = observation.get("source") or "unknown"
+    sources = copy.deepcopy(existing.get("sources") or {})
+    sources[source] = int(sources.get(source, 0) or 0) + 1
+
+    history = copy.deepcopy(existing.get("history") or {})
+    history["ips"] = _merge_unique_strings(history.get("ips") or [], observation.get("ip"))
+    history["hostnames"] = _merge_unique_strings(
+        history.get("hostnames") or [],
+        observation.get("hostname"),
+        observation.get("reverse_dns"),
+        observation.get("mdns_name"),
+        observation.get("stable_hostname"),
+    )
+    history["vendors"] = _merge_unique_strings(history.get("vendors") or [], observation.get("vendor"))
+    history["open_ports"] = _merge_unique_ports(history.get("open_ports") or [], observation.get("open_ports"))
+
+    guessed_types = copy.deepcopy(history.get("guessed_types") or {})
+    if observation.get("guessed_type"):
+        _bump_count_map(
+            guessed_types,
+            observation.get("guessed_type"),
+            strength="low",
+            seen_at=seen_at,
+            source=source,
+            reasons=["observed guessed_type"],
+        )
+    history["guessed_types"] = guessed_types
+
+    fingerprint_platforms = copy.deepcopy(history.get("validation_fingerprint_platforms") or {})
+    if observation.get("validation_fingerprint_platform") and observation.get("validation_fingerprint_platform") != "unknown":
+        _bump_count_map(
+            fingerprint_platforms,
+            observation.get("validation_fingerprint_platform"),
+            strength=observation.get("validation_fingerprint_confidence"),
+            seen_at=seen_at,
+            source=source,
+            reasons=["validation fingerprint"],
+        )
+    history["validation_fingerprint_platforms"] = fingerprint_platforms
+
+    observed_platforms = copy.deepcopy(history.get("observed_platforms") or {})
+    if observation.get("observed_platform") and observation.get("observed_platform") != "unknown":
+        _bump_count_map(
+            observed_platforms,
+            observation.get("observed_platform"),
+            strength=observation.get("observed_platform_confidence"),
+            seen_at=seen_at,
+            source=source,
+            reasons=["observed platform"],
+        )
+    history["observed_platforms"] = observed_platforms
+
+    learned_candidates = copy.deepcopy((existing.get("learned") or {}).get("type_candidates") or {})
+    if observation.get("validation_fingerprint_platform") and observation.get("validation_fingerprint_platform") != "unknown":
+        _bump_count_map(
+            learned_candidates,
+            observation.get("validation_fingerprint_platform"),
+            strength=observation.get("validation_fingerprint_confidence"),
+            seen_at=seen_at,
+            source=source,
+            reasons=["validation fingerprint"],
+        )
+    if observation.get("observed_platform") and observation.get("observed_platform") != "unknown":
+        observed_strength = observation.get("observed_platform_confidence")
+        if _fingerprint_confidence_rank(observed_strength) > 1:
+            observed_strength = "medium"
+        _bump_count_map(
+            learned_candidates,
+            observation.get("observed_platform"),
+            strength=observed_strength,
+            seen_at=seen_at,
+            source=source,
+            reasons=["observed platform"],
+        )
+    if observation.get("guessed_type"):
+        _bump_count_map(
+            learned_candidates,
+            observation.get("guessed_type"),
+            strength="low",
+            seen_at=seen_at,
+            source=source,
+            reasons=["observed guessed_type"],
+        )
+
+    suggested_type, suggested_data = _strongest_candidate(learned_candidates)
+    learned = copy.deepcopy(existing.get("learned") or {})
+    learned["type_candidates"] = learned_candidates
+    learned["suggested_type"] = suggested_type
+    learned["confidence"] = (suggested_data.get("best_strength") or "low") if suggested_type else ""
+    learned["observation_count"] = int(suggested_data.get("count", 0) or 0) if suggested_type else 0
+    learned["basis"] = copy.deepcopy(suggested_data.get("reasons") or []) if suggested_type else []
+    learned["inventory_type"] = observation.get("inventory_type") or learned.get("inventory_type") or ""
+    learned["will_override_inventory_type"] = False
+    learned["note"] = "Conservative evidence only. Weak learned signals do not rewrite saved device truth."
+
+    return {
+        "identity": identity,
+        "first_seen": existing.get("first_seen") or seen_at,
+        "last_seen": seen_at,
+        "seen_count": int(existing.get("seen_count", 0) or 0) + 1,
+        "last_source": source,
+        "sources": sources,
+        "latest": latest,
+        "history": history,
+        "learned": learned,
+    }
+
+
+def record_device_observation(device, *, source="", result=None, extra=None):
+    observation = _build_device_observation(device, source=source, result=result, extra=extra)
+    candidates = _observation_identity_candidates(observation)
+    if not candidates:
+        return None
+
+    primary_kind, primary_key = candidates[0]
+
+    with DEVICE_EVIDENCE_LOCK:
+        store = load_device_evidence()
+        existing_key = next((key for _, key in candidates if key in store), None)
+        target_key = existing_key or primary_key
+        target_kind = primary_kind if target_key == primary_key else next(
+            (kind for kind, key in candidates if key == target_key),
+            primary_kind,
+        )
+
+        if existing_key and primary_key != existing_key and _identity_priority(primary_key) > _identity_priority(existing_key):
+            base_record = copy.deepcopy(store.pop(existing_key, {}))
+            target_key = primary_key
+            target_kind = primary_kind
+        else:
+            base_record = copy.deepcopy(store.get(target_key, {}))
+
+        store[target_key] = _merge_device_evidence_record(base_record, observation, target_key, target_kind)
+        save_device_evidence(store)
+
+    return target_key
 
 
 def _stable_fingerprint_key(device, result=None):
@@ -1189,6 +1554,19 @@ def api_validate_device():
         if role:
             result["av_role"] = role
 
+        try:
+            record_device_observation(
+                device,
+                source="validate_device",
+                result=result,
+                extra={
+                    "guessed_type": auto_type.get("proposed_type") or "",
+                    "inventory_type": device.get("type") or "",
+                },
+            )
+        except Exception:
+            pass
+
 
         return jsonify({
             "ok": True,
@@ -1217,6 +1595,19 @@ def api_validate_all():
                     "key": key,
                     "record": _build_fingerprint_entry(device, result, av_role=role),
                 })
+            try:
+                auto_type = decide_auto_promoted_type(device, result)
+                record_device_observation(
+                    device,
+                    source="validate_all",
+                    result=result,
+                    extra={
+                        "guessed_type": auto_type.get("proposed_type") or "",
+                        "inventory_type": device.get("type") or "",
+                    },
+                )
+            except Exception:
+                pass
 
         if fingerprint_updates:
             try:
@@ -1501,6 +1892,21 @@ def fingerprint_host():
 
         if device_updated:
             save_devices_file(devices)
+
+        try:
+            record_device_observation(
+                updated_device or device,
+                source="fingerprint_host",
+                result=validation,
+                extra={
+                    "ip": ip,
+                    "vendor": vendor,
+                    "guessed_type": guessed,
+                    "inventory_type": ((updated_device or device) or {}).get("type", ""),
+                },
+            )
+        except Exception:
+            pass
 
         return jsonify({
             "ip": ip,
@@ -2332,6 +2738,19 @@ def api_validate_systems():
                     "key": key,
                     "record": _build_fingerprint_entry(item, result, av_role=role),
                 })
+            try:
+                auto_type = decide_auto_promoted_type(device, result)
+                record_device_observation(
+                    item,
+                    source="validate_systems",
+                    result=result,
+                    extra={
+                        "guessed_type": auto_type.get("proposed_type") or "",
+                        "inventory_type": device.get("type") or "",
+                    },
+                )
+            except Exception:
+                pass
 
         if fingerprint_updates:
             try:
