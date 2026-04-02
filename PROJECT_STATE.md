@@ -794,3 +794,13 @@ ame as the saved label
   - Added JSON-backed fingerprint persistence in `data/fingerprints.json` with `load_fingerprints()`, `save_fingerprints()`, and `merge_fingerprint()` helpers
   - Wired `validate_all` and `validate_systems` to merge observed device evidence over time using MAC as the preferred key and IP as fallback
   - Merge behavior preserves stronger type/fingerprint data, unions ports/services, accumulates HTTP headers, and updates `last_seen`
+### Last Update
+- Feature: Evidence collection and fingerprint merge correctness fix
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Fixed `run_validation_for_all()` to preserve input device order so validate-all/system fingerprint persistence no longer cross-pairs results between devices
+  - Ensured validation evidence uses the same observed validation result data path, including extracted open ports and HTTP summary data
+  - Hardened fingerprint merging with deep-copy behavior and key/IP guards so stored records keep the correct device identity and `evidence.ip`

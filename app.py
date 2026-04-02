@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, send_file
 import json, os, subprocess, csv
 from datetime import datetime
+import copy
 from checks.network import run_base_checks
 from checks.devices import run_device_checks
 import io
@@ -303,10 +304,36 @@ def _stable_fingerprint_key(device, result=None):
     return None
 
 
+def _enforce_fingerprint_identity(key, record):
+    fixed = copy.deepcopy(record or {})
+    ip_value = (fixed.get("ip") or "").strip()
+    evidence = fixed.get("evidence") if isinstance(fixed.get("evidence"), dict) else {}
+    evidence_ip = (evidence.get("ip") or "").strip()
+
+    if key.startswith("ip:"):
+        key_ip = key.split(":", 1)[1].strip()
+        fixed["ip"] = key_ip
+        if evidence:
+            evidence["ip"] = key_ip
+            fixed["evidence"] = evidence
+        return fixed
+
+    if ip_value:
+        fixed["ip"] = ip_value
+    elif evidence_ip:
+        fixed["ip"] = evidence_ip
+
+    if evidence:
+        evidence["ip"] = fixed.get("ip", "")
+        fixed["evidence"] = evidence
+
+    return fixed
+
+
 def merge_fingerprint(existing, new):
-    existing = dict(existing or {})
-    new = dict(new or {})
-    merged = dict(existing)
+    existing = copy.deepcopy(existing or {})
+    new = copy.deepcopy(new or {})
+    merged = copy.deepcopy(existing)
 
     merged["last_seen"] = new.get("last_seen") or existing.get("last_seen") or ""
 
@@ -316,9 +343,9 @@ def merge_fingerprint(existing, new):
         if new_value:
             if field == "type" and old_value and old_value not in ("", "generic", "unknown") and new_value in ("", "generic", "unknown"):
                 continue
-            merged[field] = new_value
+            merged[field] = copy.deepcopy(new_value)
         elif field not in merged:
-            merged[field] = old_value
+            merged[field] = copy.deepcopy(old_value)
 
     existing_ports = {int(port) for port in (existing.get("open_ports") or []) if str(port).isdigit()}
     new_ports = {int(port) for port in (new.get("open_ports") or []) if str(port).isdigit()}
@@ -350,7 +377,7 @@ def merge_fingerprint(existing, new):
     for key, value in (new_http.get("headers") or {}).items():
         if key and value:
             merged_http["headers"][key] = value
-    merged["http"] = merged_http
+    merged["http"] = copy.deepcopy(merged_http)
 
     existing_fp = existing.get("fingerprint") or {}
     new_fp = new.get("fingerprint") or {}
@@ -361,26 +388,37 @@ def merge_fingerprint(existing, new):
             "reasons": list(new_fp.get("reasons", []) or existing_fp.get("reasons", []) or []),
         }
     else:
-        merged["fingerprint"] = existing_fp
+        merged["fingerprint"] = copy.deepcopy(existing_fp)
 
-    merged["evidence"] = dict(existing.get("evidence") or {})
-    merged["evidence"].update(new.get("evidence") or {})
+    merged["evidence"] = copy.deepcopy(existing.get("evidence") or {})
+    new_evidence = copy.deepcopy(new.get("evidence") or {})
+    merged["evidence"].update(new_evidence)
+
+    merged_ip = (merged.get("ip") or "").strip()
+    evidence_ip = ((merged.get("evidence") or {}).get("ip") or "").strip()
+    if merged_ip:
+        merged["evidence"]["ip"] = merged_ip
+    elif evidence_ip:
+        merged["ip"] = evidence_ip
 
     return merged
 
 
 def _build_fingerprint_entry(device, result, av_role=None):
-    evidence = dict((result or {}).get("evidence") or {})
+    result = copy.deepcopy(result or {})
+    evidence = copy.deepcopy(result.get("evidence") or {})
+    device_ip = (device.get("ip") or result.get("ip") or evidence.get("ip") or "").strip()
+    evidence["ip"] = device_ip
     return {
-        "ip": (device.get("ip") or result.get("ip") or "").strip(),
+        "ip": device_ip,
         "mac": (device.get("mac") or evidence.get("mac") or "").strip(),
         "vendor": (device.get("vendor") or evidence.get("vendor") or "").strip(),
         "type": (result.get("type") or device.get("type") or evidence.get("type") or "").strip(),
         "av_role": (av_role or result.get("av_role") or "").strip(),
         "open_ports": list(evidence.get("open_ports") or result.get("open_ports") or []),
-        "http": evidence.get("http") or {},
-        "services": list(evidence.get("services") or []),
-        "fingerprint": dict(result.get("fingerprint") or evidence.get("fingerprint") or {}),
+        "http": copy.deepcopy(evidence.get("http") or {}),
+        "services": copy.deepcopy(evidence.get("services") or []),
+        "fingerprint": copy.deepcopy(result.get("fingerprint") or evidence.get("fingerprint") or {}),
         "evidence": evidence,
         "last_seen": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
     }
@@ -396,7 +434,11 @@ def update_fingerprint_store(entries):
         record = entry.get("record")
         if not key or not isinstance(record, dict):
             continue
-        fingerprints[key] = merge_fingerprint(fingerprints.get(key, {}), record)
+        safe_record = _enforce_fingerprint_identity(key, record)
+        fingerprints[key] = _enforce_fingerprint_identity(
+            key,
+            merge_fingerprint(fingerprints.get(key, {}), safe_record),
+        )
 
     save_fingerprints(fingerprints)
 

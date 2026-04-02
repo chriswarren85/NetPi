@@ -476,6 +476,7 @@ def http_probe(ip, port):
 def build_validation_evidence(device, normalized_type, open_ports, service_map, http_details, fingerprint):
     vendor = (device.get("vendor") or "").strip()
     mac = (device.get("mac") or "").strip()
+    observed_ports = sorted(int(port) for port in (open_ports or []))
 
     http_summary = {
         "title": "",
@@ -499,7 +500,7 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
         http_summary["headers"] = preferred_http.get("headers", {}) or {}
 
     services = []
-    for port in sorted(open_ports):
+    for port in observed_ports:
         services.append({
             "port": int(port),
             "name": service_map.get(str(port), "unknown"),
@@ -507,7 +508,7 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
 
     return {
         "ip": (device.get("ip") or "").strip(),
-        "open_ports": sorted(int(port) for port in open_ports),
+        "open_ports": observed_ports,
         "http": http_summary,
         "vendor": vendor,
         "mac": mac,
@@ -734,6 +735,10 @@ def run_validation(device):
 
     fingerprint = infer_fingerprint(normalized_type, open_ports, http_details)
     observed_platform = infer_observed_platform(open_ports, http_details)
+    observed_open_ports = _extract_validation_open_ports({
+        "open_ports": sorted(open_ports),
+        "results": results,
+    })
 
     return {
         "device": device.get("name") or device.get("ip") or "Unnamed device",
@@ -742,7 +747,7 @@ def run_validation(device):
         "type": normalized_type,
         "original_type": device_type,
         "latency_ms": format_latency_ms(start_time),
-        "open_ports": sorted(open_ports),
+        "open_ports": observed_open_ports,
         "service_map": service_map,
         "http": http_details,
         "fingerprint": fingerprint,
@@ -750,7 +755,7 @@ def run_validation(device):
         "evidence": build_validation_evidence(
             device,
             normalized_type,
-            open_ports,
+            observed_open_ports,
             service_map,
             http_details,
             fingerprint,
@@ -765,17 +770,21 @@ def run_validation_for_all(devices, max_workers=DEFAULT_MAX_WORKERS):
     if not devices:
         return []
 
-    results = []
+    results = [None] * len(devices)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_map = {executor.submit(run_validation, device): device for device in devices}
+        future_map = {
+            executor.submit(run_validation, device): index
+            for index, device in enumerate(devices)
+        }
 
         for future in as_completed(future_map):
-            device = future_map[future]
+            index = future_map[future]
+            device = devices[index]
             try:
-                results.append(future.result())
+                results[index] = future.result()
             except Exception as e:
-                results.append({
+                results[index] = {
                     "device": device.get("name") or device.get("ip") or "Unnamed device",
                     "name": device.get("name") or device.get("ip") or "Unnamed device",
                     "ip": device.get("ip", ""),
@@ -785,11 +794,9 @@ def run_validation_for_all(devices, max_workers=DEFAULT_MAX_WORKERS):
                         make_result("validation", "error", detail=str(e))
                     ],
                     "overall": "error",
-                })
+                }
 
-    # Stable display order: sort back by device name / IP
-    results.sort(key=lambda d: (d.get("name") or "", d.get("ip") or ""))
-    return results
+    return [item for item in results if item is not None]
 
 
 SYSTEM_VALIDATION_RULES = [
