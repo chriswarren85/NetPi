@@ -11,6 +11,7 @@ import io
 import ipaddress
 import re
 from checks.validation import (
+    SYSTEM_VALIDATION_RULES,
     run_validation,
     run_validation_for_all,
     run_system_validation,
@@ -934,6 +935,114 @@ def build_runtime_system_groups(devices):
         })
 
     return system_groups
+
+
+def build_system_group_results(system_groups, system_results):
+    if not isinstance(system_groups, list):
+        return []
+
+    if not isinstance(system_results, list):
+        system_results = []
+
+    rule_map = {
+        (rule.get("name") or "").strip(): rule
+        for rule in (SYSTEM_VALIDATION_RULES or [])
+        if isinstance(rule, dict) and (rule.get("name") or "").strip()
+    }
+    alias_map = {
+        "crestron-processor": {"crestron-processor", "crestron_processor", "crestron-control", "crestron_control", "crestron"},
+        "crestron-touchpanel": {"crestron-touchpanel", "crestron_touchpanel", "touchpanel", "tp1070"},
+        "crestron-uc-engine": {"crestron-uc-engine", "crestron_uc", "crestron-uc", "uc-engine", "uc_engine"},
+        "qsys-core": {"qsys-core", "qsys_core", "qsys"},
+        "qsys-touchpanel": {"qsys-touchpanel", "qsys_touchpanel", "qsys"},
+        "qsys-nv-endpoint": {"qsys-nv-endpoint", "qsys_nv_endpoint", "qsys-nv-decoder", "qsys_nv_decoder", "qsys"},
+        "biamp-tesira": {"biamp-tesira", "biamp_tesira", "biamp", "tesira"},
+        "video-wall-processor": {"video-wall-processor", "video_wall_processor", "video-wall"},
+    }
+
+    def device_ref(device):
+        if not isinstance(device, dict):
+            return {}
+        return {
+            "name": device.get("name") or "",
+            "ip": device.get("ip") or "",
+            "effective_type": device.get("effective_type") or "",
+            "_resolved_type": device.get("_resolved_type") or "",
+            "av_role": device.get("av_role") or "",
+            "vlan": device.get("vlan") or "",
+        }
+
+    def type_variants(value):
+        normalized = normalize_platform_name(str(value or "").strip().lower()).replace("_", "-")
+        if not normalized:
+            return set()
+
+        variants = {
+            normalized,
+            normalized.replace("-", "_"),
+        }
+        variants.update(alias_map.get(normalized, set()))
+        return {variant for variant in variants if variant}
+
+    def group_matches_rule_types(group_devices, allowed_types):
+        allowed_variants = set()
+        for allowed_type in (allowed_types or []):
+            allowed_variants.update(type_variants(allowed_type))
+
+        if not allowed_variants:
+            return False
+
+        for device in (group_devices or []):
+            device_type = device.get("effective_type") or device.get("_resolved_type") or device.get("type") or ""
+            if type_variants(device_type).intersection(allowed_variants):
+                return True
+
+        return False
+
+    grouped_results = []
+
+    for group in system_groups:
+        group_devices = list(group.get("devices") or [])
+        group_ips = {
+            (device.get("ip") or "").strip()
+            for device in group_devices
+            if (device.get("ip") or "").strip()
+        }
+        related_results = []
+
+        for result in system_results:
+            if not isinstance(result, dict):
+                continue
+
+            from_ip = (result.get("from_ip") or "").strip()
+            to_ip = (result.get("to_ip") or "").strip()
+
+            if from_ip and to_ip:
+                if from_ip in group_ips and to_ip in group_ips:
+                    related_results.append(dict(result, group_relevance="within_group"))
+                continue
+
+            if result.get("status") != "skipped":
+                continue
+
+            rule = rule_map.get((result.get("system_check") or "").strip(), {})
+            source_match = group_matches_rule_types(group_devices, rule.get("source_types", []))
+            target_match = group_matches_rule_types(group_devices, rule.get("target_types", []))
+
+            if source_match or target_match:
+                relevance = "source_and_target" if source_match and target_match else ("source" if source_match else "target")
+                related_results.append(dict(result, group_relevance=relevance))
+
+        grouped_results.append({
+            "system_id": group.get("system_id") or "",
+            "types": list(group.get("types") or []),
+            "confidence": group.get("confidence") or "low",
+            "devices": [device_ref(device) for device in group_devices],
+            "results": related_results,
+            "result_count": len(related_results),
+        })
+
+    return grouped_results
 
 
 def load_devices():
@@ -3974,6 +4083,7 @@ def api_validate_systems():
                 "count": 0,
                 "results": [],
                 "system_groups": [],
+                "system_group_results": [],
                 "connectivity": [],
                 "connectivity_summary": connectivity_summary,
                 "connectivity_note": connectivity_note,
@@ -4016,6 +4126,7 @@ def api_validate_systems():
 
         system_groups = build_runtime_system_groups(enriched_devices)
         results = run_system_validation(enriched_devices, validations_by_ip)
+        system_group_results = build_system_group_results(system_groups, results)
         connectivity_results = []
         connectivity_summary = {
             "pass": 0,
@@ -4047,6 +4158,7 @@ def api_validate_systems():
             "count": len(results),
             "results": results,
             "system_groups": system_groups,
+            "system_group_results": system_group_results,
             "connectivity": connectivity_results,
             "connectivity_summary": connectivity_summary,
             "connectivity_note": connectivity_note,
