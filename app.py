@@ -3671,6 +3671,32 @@ def api_validate_systems():
         if vlan:
             devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
 
+        large_inventory_threshold = 25
+        skip_expensive_stages = (not explicit_devices) and (not vlan) and len(devices) > large_inventory_threshold
+        if skip_expensive_stages:
+            connectivity_summary = {
+                "pass": 0,
+                "fail": 0,
+                "warn": 0,
+                "info": 0,
+                "skipped": len(devices),
+            }
+            connectivity_note = f"Large inventory system validation was abbreviated for {len(devices)} devices; select a VLAN or smaller device scope to run connectivity matrix and detected systems."
+            detected = {
+                "systems": [],
+                "mode": "large_inventory_skipped",
+                "edge_count": 0,
+            }
+            return jsonify({
+                "ok": True,
+                "count": 0,
+                "results": [],
+                "connectivity": [],
+                "connectivity_summary": connectivity_summary,
+                "connectivity_note": connectivity_note,
+                "detected_systems": detected,
+            })
+
         validation_results = run_validation_for_all(devices)
 
         enriched_devices = []
@@ -3727,40 +3753,22 @@ def api_validate_systems():
             "skipped": 0,
         }
         connectivity_note = ""
-        large_inventory_threshold = 25
-        skip_expensive_stages = (not explicit_devices) and (not vlan) and len(devices) > large_inventory_threshold
-
-        if skip_expensive_stages:
+        try:
+            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+            connectivity_summary = summarize_connectivity_results(connectivity_results)
+        except Exception as connectivity_error:
+            connectivity_results = []
             connectivity_summary = {
                 "pass": 0,
                 "fail": 0,
-                "warn": 0,
+                "warn": 1,
                 "info": 0,
-                "skipped": len(enriched_devices),
+                "skipped": 0,
+                "error": str(connectivity_error),
             }
-            connectivity_note = f"Large inventory system validation was abbreviated for {len(enriched_devices)} devices; select a VLAN or smaller device scope to run connectivity matrix and detected systems."
-            detected = {
-                "systems": [],
-                "mode": "large_inventory_skipped",
-                "edge_count": 0,
-            }
-        else:
-            try:
-                connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
-                connectivity_summary = summarize_connectivity_results(connectivity_results)
-            except Exception as connectivity_error:
-                connectivity_results = []
-                connectivity_summary = {
-                    "pass": 0,
-                    "fail": 0,
-                    "warn": 1,
-                    "info": 0,
-                    "skipped": 0,
-                    "error": str(connectivity_error),
-                }
-                connectivity_note = "Connectivity matrix evaluation failed; base system validation results remain available."
+            connectivity_note = "Connectivity matrix evaluation failed; base system validation results remain available."
 
-            detected = build_detected_systems(enriched_devices, results)
+        detected = build_detected_systems(enriched_devices, results)
 
         return jsonify({
             "ok": True,
