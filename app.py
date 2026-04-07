@@ -694,6 +694,30 @@ def evaluate_safe_type_promotion(device, type_suggestion):
     }
 
 
+def resolve_effective_type(device, guessed_type="", type_suggestion=None):
+    device = device or {}
+    guessed_type = normalize_platform_name(guessed_type)
+    current_type = normalize_platform_name(device.get("type"))
+    type_suggestion = type_suggestion or {}
+
+    if guessed_type and not weak_device_type(guessed_type):
+        return guessed_type
+
+    promotion = evaluate_safe_type_promotion(device, type_suggestion)
+    if promotion.get("should_apply"):
+        promoted_type = normalize_platform_name(promotion.get("suggested_type"))
+        if promoted_type and not weak_device_type(promoted_type):
+            return promoted_type
+
+    if current_type and not weak_device_type(current_type):
+        return current_type
+
+    if guessed_type and guessed_type != "unknown":
+        return guessed_type
+
+    return current_type or ""
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -2433,6 +2457,7 @@ def api_validate_device():
         type_suggestion = build_type_suggestion(device, result)
         result["type_suggestion"] = type_suggestion
         result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+        result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion)
         result["confidence_score"] = type_suggestion.get("confidence_score", 0)
         result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
         result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
@@ -2480,9 +2505,11 @@ def api_validate_all():
         fingerprint_updates = []
 
         for device, result in zip(devices, results):
+            auto_type = decide_auto_promoted_type(device, result)
             type_suggestion = build_type_suggestion(device, result)
             result["type_suggestion"] = type_suggestion
             result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+            result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion)
             result["confidence_score"] = type_suggestion.get("confidence_score", 0)
             result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
             result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
@@ -2494,7 +2521,6 @@ def api_validate_all():
                     "record": _build_fingerprint_entry(device, result, av_role=role),
                 })
             try:
-                auto_type = decide_auto_promoted_type(device, result)
                 record_device_observation(
                     device,
                     source="validate_all",
@@ -2858,6 +2884,7 @@ def fingerprint_host():
             matched_inventory_device["type"] = promotion.get("suggested_type") or matched_inventory_device.get("type") or ""
             updated_device = dict(matched_inventory_device)
             device_updated = True
+        effective_type = resolve_effective_type(updated_device or device, guessed, type_suggestion)
 
         if device_updated:
             save_devices_file(devices)
@@ -2881,6 +2908,7 @@ def fingerprint_host():
             "ip": ip,
             "open_ports": open_ports,
             "guessed_type": guessed,
+            "effective_type": effective_type,
             "type_suggestion": type_suggestion,
             "suggested_type": type_suggestion.get("suggested_type") or "",
             "confidence_score": type_suggestion.get("confidence_score", 0),
@@ -3731,9 +3759,11 @@ def api_validate_systems():
 
         for device, result in zip(devices, validation_results):
             item = dict(device)
+            auto_type = decide_auto_promoted_type(device, result)
             type_suggestion = build_type_suggestion(item, result)
             result["type_suggestion"] = type_suggestion
             result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+            result["effective_type"] = resolve_effective_type(item, auto_type.get("proposed_type") or "", type_suggestion)
             result["confidence_score"] = type_suggestion.get("confidence_score", 0)
             result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
             result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
@@ -3750,7 +3780,6 @@ def api_validate_systems():
                     "record": _build_fingerprint_entry(item, result, av_role=role),
                 })
             try:
-                auto_type = decide_auto_promoted_type(device, result)
                 record_device_observation(
                     item,
                     source="validate_systems",

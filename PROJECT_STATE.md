@@ -929,3 +929,11 @@ ame as the saved label
 - Summary of changes:
   - Repeated safe signal_candidates can now reinforce reusable fingerprint_library classes for approved AV families such as Biamp, Q-SYS, Crestron, and video-wall processors
   - Promotion remains limited to repeated medium/high-strength signals and does not weaken Stage 6.6 identity safety or permit generic weak web evidence to invent risky classes
+### Last Update
+- Feature: Stage 7.6 effective_type for safe runtime type resolution
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added an additive effective_type field so direct strong detections remain primary while strong safe learned suggestions can provide the best runtime type when direct evidence stays weak
+  - Preserved guessed_type, suggested_type, and existing safety checks without allowing learned evidence to override strong direct detections
