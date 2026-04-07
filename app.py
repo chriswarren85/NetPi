@@ -832,7 +832,7 @@ def build_runtime_system_groups(devices):
 
             same_vlan = bool(device_vlan) and device_vlan == other_vlan
             same_family = bool(device_family) and device_family == other_family
-            should_group = same_vlan and (same_family or bool(other_family))
+            should_group = same_vlan and same_family
 
             if not should_group and same_family:
                 should_group = True
