@@ -766,6 +766,132 @@ def enrich_device_runtime(device):
     return item
 
 
+def build_runtime_system_groups(devices):
+    if not isinstance(devices, list):
+        return []
+
+    family_type_map = {
+        "qsys-core": "qsys",
+        "qsys-touchpanel": "qsys",
+        "qsys-nv-endpoint": "qsys",
+        "crestron-processor": "crestron",
+        "crestron-touchpanel": "crestron",
+        "crestron-uc-engine": "crestron",
+        "biamp-tesira": "biamp",
+        "barco": "video",
+        "nvx": "video",
+        "svsi": "video",
+    }
+    role_type_map = {
+        "qsys-core": "core",
+        "qsys-touchpanel": "control",
+        "qsys-nv-endpoint": "endpoint",
+        "crestron-processor": "core",
+        "crestron-touchpanel": "control",
+        "crestron-uc-engine": "endpoint",
+        "biamp-tesira": "dsp",
+        "barco": "video",
+        "nvx": "endpoint",
+        "svsi": "endpoint",
+    }
+
+    def normalized_effective_type(device):
+        if not isinstance(device, dict):
+            return ""
+        return normalize_platform_name(device.get("effective_type") or device.get("_resolved_type"))
+
+    def normalized_vlan(device):
+        if not isinstance(device, dict):
+            return ""
+        return str(device.get("vlan") or "").strip().lower()
+
+    def family_for_type(effective_type):
+        return family_type_map.get(effective_type or "", "")
+
+    group_records = []
+    assigned_indexes = set()
+
+    for index, device in enumerate(devices):
+        if index in assigned_indexes or not isinstance(device, dict):
+            continue
+
+        effective_type = normalized_effective_type(device)
+        device_vlan = normalized_vlan(device)
+        device_family = family_for_type(effective_type)
+
+        current_devices = [device]
+        assigned_indexes.add(index)
+
+        for other_index, other_device in enumerate(devices):
+            if other_index == index or other_index in assigned_indexes or not isinstance(other_device, dict):
+                continue
+
+            other_type = normalized_effective_type(other_device)
+            other_vlan = normalized_vlan(other_device)
+            other_family = family_for_type(other_type)
+
+            same_vlan = bool(device_vlan) and device_vlan == other_vlan
+            same_family = bool(device_family) and device_family == other_family
+            should_group = same_vlan and (same_family or bool(other_family))
+
+            if not should_group and same_family:
+                should_group = True
+
+            if should_group:
+                current_devices.append(other_device)
+                assigned_indexes.add(other_index)
+
+        unique_types = []
+        unique_roles = []
+        for group_device in current_devices:
+            group_type = normalized_effective_type(group_device)
+            if group_type and group_type not in unique_types:
+                unique_types.append(group_type)
+
+            inferred_role = role_type_map.get(group_type, "")
+            runtime_role = (group_device.get("av_role") or "").strip().lower()
+            if not inferred_role and runtime_role in {"core", "endpoint", "control", "dsp", "video"}:
+                inferred_role = runtime_role
+            if inferred_role and inferred_role not in unique_roles:
+                unique_roles.append(inferred_role)
+
+        group_vlans = {
+            normalized_vlan(group_device)
+            for group_device in current_devices
+            if normalized_vlan(group_device)
+        }
+        family_values = {
+            family_for_type(normalized_effective_type(group_device))
+            for group_device in current_devices
+            if family_for_type(normalized_effective_type(group_device))
+        }
+        if len(current_devices) <= 1:
+            confidence = "low"
+        elif len(group_vlans) == 1 and len(family_values) == 1:
+            confidence = "high"
+        else:
+            confidence = "medium"
+
+        group_records.append({
+            "devices": current_devices,
+            "types": unique_types,
+            "roles": unique_roles,
+            "confidence": confidence,
+        })
+
+    system_groups = []
+    for group_index, group_record in enumerate(group_records, start=1):
+        system_groups.append({
+            "system_id": f"system_{group_index}",
+            "devices": group_record["devices"],
+            "types": group_record["types"],
+            "roles": group_record["roles"],
+            "confidence": group_record["confidence"],
+        })
+
+    return system_groups
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -3803,6 +3929,7 @@ def api_validate_systems():
                 "ok": True,
                 "count": 0,
                 "results": [],
+                "system_groups": [],
                 "connectivity": [],
                 "connectivity_summary": connectivity_summary,
                 "connectivity_note": connectivity_note,
@@ -3843,6 +3970,7 @@ def api_validate_systems():
             except Exception:
                 pass
 
+        system_groups = build_runtime_system_groups(enriched_devices)
         results = run_system_validation(enriched_devices, validations_by_ip)
         connectivity_results = []
         connectivity_summary = {
@@ -3874,6 +4002,7 @@ def api_validate_systems():
             "ok": True,
             "count": len(results),
             "results": results,
+            "system_groups": system_groups,
             "connectivity": connectivity_results,
             "connectivity_summary": connectivity_summary,
             "connectivity_note": connectivity_note,

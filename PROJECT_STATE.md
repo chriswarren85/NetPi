@@ -937,3 +937,14 @@ ame as the saved label
 - Summary of changes:
   - Added an additive effective_type field so direct strong detections remain primary while strong safe learned suggestions can provide the best runtime type when direct evidence stays weak
   - Preserved guessed_type, suggested_type, and existing safety checks without allowing learned evidence to override strong direct detections
+
+### Last Update
+- Feature: Stage 8 runtime AV system grouping
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a read-only build_runtime_system_groups(...) helper that clusters enriched devices into runtime AV systems using effective runtime types, VLAN affinity, and safe first-pass AV family pairings
+  - Wired POST /tools/api/validate_systems to return additive system_groups data before unchanged system validation execution
+  - Preserved existing validation, relationship inference, and persistence behavior by keeping grouping runtime-only and non-destructive
+
