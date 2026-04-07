@@ -694,7 +694,41 @@ def evaluate_safe_type_promotion(device, type_suggestion):
     }
 
 
-def resolve_effective_type(device, guessed_type="", type_suggestion=None):
+def resolve_runtime_type_conflict_override(device, type_suggestion=None, validation=None):
+    device = device or {}
+    type_suggestion = type_suggestion or {}
+    validation = validation or {}
+
+    current_type = normalize_platform_name(device.get("type"))
+    if not current_type or weak_device_type(current_type):
+        return ""
+
+    fingerprint = validation.get("fingerprint") if isinstance(validation.get("fingerprint"), dict) else {}
+    observed_platform = validation.get("observed_platform") if isinstance(validation.get("observed_platform"), dict) else {}
+    fingerprint_platform = normalize_platform_name(fingerprint.get("platform"))
+    observed_type = normalize_platform_name(observed_platform.get("platform"))
+    suggested_type = normalize_platform_name(type_suggestion.get("suggested_type"))
+    fingerprint_confidence = (fingerprint.get("confidence") or "").strip().lower()
+    observed_confidence = (observed_platform.get("confidence") or "").strip().lower()
+
+    if not fingerprint_platform or fingerprint_confidence != "high":
+        return ""
+    if not observed_type or observed_confidence != "high":
+        return ""
+    if fingerprint_platform != observed_type:
+        return ""
+    if suggested_type != fingerprint_platform:
+        return ""
+
+    current_family = _candidate_family(current_type)
+    live_family = _candidate_family(fingerprint_platform)
+    if not current_family or not live_family or current_family == live_family:
+        return ""
+
+    return fingerprint_platform
+
+
+def resolve_effective_type(device, guessed_type="", type_suggestion=None, validation=None):
     device = device or {}
     guessed_type = normalize_platform_name(guessed_type)
     current_type = normalize_platform_name(device.get("type"))
@@ -709,6 +743,10 @@ def resolve_effective_type(device, guessed_type="", type_suggestion=None):
         if promoted_type and not weak_device_type(promoted_type):
             return promoted_type
 
+    runtime_override_type = resolve_runtime_type_conflict_override(device, type_suggestion, validation)
+    if runtime_override_type:
+        return runtime_override_type
+
     if current_type and not weak_device_type(current_type):
         return current_type
 
@@ -718,10 +756,14 @@ def resolve_effective_type(device, guessed_type="", type_suggestion=None):
     return current_type or ""
 
 
-def resolve_runtime_type(device, effective_type=""):
+def resolve_runtime_type(device, effective_type="", type_suggestion=None, validation=None):
     device = device or {}
     current_type = normalize_platform_name(device.get("type"))
     effective_type = normalize_platform_name(effective_type or device.get("effective_type"))
+
+    runtime_override_type = resolve_runtime_type_conflict_override(device, type_suggestion, validation)
+    if runtime_override_type:
+        return runtime_override_type
 
     if current_type and not weak_device_type(current_type):
         return current_type
@@ -738,15 +780,17 @@ def enrich_device_runtime(device):
     auto_type = decide_auto_promoted_type(item, validation)
     type_suggestion = build_type_suggestion(item, validation)
     guessed_type = auto_type.get("proposed_type") or ""
-    effective_type = resolve_effective_type(item, guessed_type, type_suggestion)
+    effective_type = resolve_effective_type(item, guessed_type, type_suggestion, validation)
     promotion = evaluate_safe_type_promotion(item, type_suggestion)
+    runtime_override_type = resolve_runtime_type_conflict_override(item, type_suggestion, validation)
 
     item["guessed_type"] = guessed_type
     item["type_suggestion"] = type_suggestion
     item["suggested_type"] = type_suggestion.get("suggested_type") or ""
     item["effective_type"] = effective_type
-    item["_resolved_type"] = resolve_runtime_type(item, effective_type)
+    item["_resolved_type"] = resolve_runtime_type(item, effective_type, type_suggestion, validation)
     item["_runtime_promotion"] = promotion
+    item["_runtime_override_reason"] = "live_high_conflict_override" if runtime_override_type else ""
 
     validation_context = dict(validation)
     validation_context["auto_type"] = auto_type
@@ -2636,7 +2680,7 @@ def api_validate_device():
         type_suggestion = build_type_suggestion(device, result)
         result["type_suggestion"] = type_suggestion
         result["suggested_type"] = type_suggestion.get("suggested_type") or ""
-        result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion)
+        result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion, result)
         result["confidence_score"] = type_suggestion.get("confidence_score", 0)
         result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
         result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
@@ -2688,7 +2732,7 @@ def api_validate_all():
             type_suggestion = build_type_suggestion(device, result)
             result["type_suggestion"] = type_suggestion
             result["suggested_type"] = type_suggestion.get("suggested_type") or ""
-            result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion)
+            result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion, result)
             result["confidence_score"] = type_suggestion.get("confidence_score", 0)
             result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
             result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
@@ -3063,7 +3107,7 @@ def fingerprint_host():
             matched_inventory_device["type"] = promotion.get("suggested_type") or matched_inventory_device.get("type") or ""
             updated_device = dict(matched_inventory_device)
             device_updated = True
-        effective_type = resolve_effective_type(updated_device or device, guessed, type_suggestion)
+        effective_type = resolve_effective_type(updated_device or device, guessed, type_suggestion, validation)
 
         if device_updated:
             save_devices_file(devices)
