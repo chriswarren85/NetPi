@@ -883,3 +883,12 @@ ame as the saved label
   - Hardened evidence identity selection so MAC and stable hostname are preferred over IP where available
   - Stale IP-only learning is less able to contaminate new device observations and advisory suggestions
   - This improves safety before Stage 5 controlled suggestion application
+### Last Update
+- Feature: Stage 5 controlled application of high-confidence device suggestions
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added controlled promotion for weak device types using existing suggestion scoring with a confidence threshold of 60
+  - Promotions are limited to safe weak-to-strong upgrades and do not overwrite strong existing types
+  - Added a backend apply_suggestions endpoint with traceable updated and skipped results without changing existing validation response shapes

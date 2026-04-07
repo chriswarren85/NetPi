@@ -613,6 +613,87 @@ def should_persist_fingerprinted_type(current_type, guessed_type):
     return current in weak_types and guessed not in weak_types
 
 
+def evaluate_safe_type_promotion(device, type_suggestion):
+    device = device or {}
+    type_suggestion = type_suggestion or {}
+
+    current_type = (device.get("type") or "").strip().lower()
+    suggested_type = (type_suggestion.get("suggested_type") or "").strip().lower()
+    confidence_score = int(type_suggestion.get("confidence_score", 0) or 0)
+    advisory_only = bool(type_suggestion.get("advisory_only"))
+    suggestion_reasons = list(type_suggestion.get("suggestion_reasons") or [])
+    allowed_current_types = {"generic", "web-device", "linux-web-device"}
+
+    if current_type not in allowed_current_types:
+        return {
+            "should_apply": False,
+            "reason": f"Current type {current_type or 'unknown'} is not eligible for weak-to-strong promotion",
+            "current_type": current_type,
+            "suggested_type": suggested_type,
+            "confidence_score": confidence_score,
+            "suggestion_reasons": suggestion_reasons,
+        }
+
+    if not suggested_type:
+        return {
+            "should_apply": False,
+            "reason": "No suggested_type available",
+            "current_type": current_type,
+            "suggested_type": "",
+            "confidence_score": confidence_score,
+            "suggestion_reasons": suggestion_reasons,
+        }
+
+    if weak_device_type(suggested_type):
+        return {
+            "should_apply": False,
+            "reason": f"Suggested type {suggested_type} is not a strong upgrade",
+            "current_type": current_type,
+            "suggested_type": suggested_type,
+            "confidence_score": confidence_score,
+            "suggestion_reasons": suggestion_reasons,
+        }
+
+    if advisory_only:
+        return {
+            "should_apply": False,
+            "reason": "Suggestion is advisory_only",
+            "current_type": current_type,
+            "suggested_type": suggested_type,
+            "confidence_score": confidence_score,
+            "suggestion_reasons": suggestion_reasons,
+        }
+
+    if confidence_score < 60:
+        return {
+            "should_apply": False,
+            "reason": f"Confidence score {confidence_score} is below promotion threshold",
+            "current_type": current_type,
+            "suggested_type": suggested_type,
+            "confidence_score": confidence_score,
+            "suggestion_reasons": suggestion_reasons,
+        }
+
+    if current_type and not weak_device_type(current_type):
+        return {
+            "should_apply": False,
+            "reason": f"Current type {current_type} is already strong",
+            "current_type": current_type,
+            "suggested_type": suggested_type,
+            "confidence_score": confidence_score,
+            "suggestion_reasons": suggestion_reasons,
+        }
+
+    return {
+        "should_apply": True,
+        "reason": "Weak type safely promoted from high-confidence suggestion",
+        "current_type": current_type,
+        "suggested_type": suggested_type,
+        "confidence_score": confidence_score,
+        "suggestion_reasons": suggestion_reasons,
+    }
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -2210,6 +2291,68 @@ def api_validate_all():
             "detected_systems": detected,
         })
 
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/apply_suggestions", methods=["POST"])
+def api_apply_suggestions():
+    try:
+        devices = load_devices()
+        if not devices:
+            return jsonify({
+                "ok": True,
+                "devices_updated": 0,
+                "updated_devices": [],
+                "skipped_devices": [],
+            })
+
+        validation_results = run_validation_for_all(devices)
+        updated_devices = []
+        skipped_devices = []
+        devices_changed = False
+
+        for device, result in zip(devices, validation_results):
+            type_suggestion = build_type_suggestion(device, result)
+            promotion = evaluate_safe_type_promotion(device, type_suggestion)
+
+            if promotion.get("should_apply"):
+                original_type = (device.get("type") or "").strip()
+                new_type = promotion.get("suggested_type") or ""
+                device["type"] = new_type
+                devices_changed = True
+                updated_devices.append({
+                    "name": (device.get("name") or "").strip(),
+                    "ip": (device.get("ip") or "").strip(),
+                    "original_type": original_type,
+                    "new_type": new_type,
+                    "confidence_score": promotion.get("confidence_score", 0),
+                    "reason": promotion.get("reason") or "",
+                    "suggestion_reasons": list(promotion.get("suggestion_reasons") or []),
+                })
+            else:
+                skipped_devices.append({
+                    "name": (device.get("name") or "").strip(),
+                    "ip": (device.get("ip") or "").strip(),
+                    "current_type": promotion.get("current_type") or "",
+                    "suggested_type": promotion.get("suggested_type") or "",
+                    "confidence_score": promotion.get("confidence_score", 0),
+                    "reason": promotion.get("reason") or "Promotion skipped",
+                    "suggestion_reasons": list(promotion.get("suggestion_reasons") or []),
+                })
+
+        if devices_changed:
+            save_devices_file(devices)
+
+        return jsonify({
+            "ok": True,
+            "devices_updated": len(updated_devices),
+            "updated_devices": updated_devices,
+            "skipped_devices": skipped_devices,
+        })
     except Exception as e:
         return jsonify({
             "ok": False,
