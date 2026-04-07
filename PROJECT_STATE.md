@@ -9,3 +9,13 @@
   - Grouped results include per-system device refs, types, confidence, and only the validation rows relevant to that runtime group, including conservative skipped-rule context where appropriate
   - Preserved runtime-only behavior with no devices.json writes, no fingerprint persistence changes, and no Stage 8 or 8.1 rollback
 
+
+### Last Update
+- Feature: Stage 10 topology-aware validation from stable system_group_results
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added additive topology_results output that classifies grouped validation rows by stable group membership as intra_group, cross_group, or unassigned
+  - Preserved existing validate_systems fields and flat results while adding relation_classification and per-system topology counts
+  - Kept runtime-only behavior with no devices.json writes and no persistence/fingerprint behavior changes

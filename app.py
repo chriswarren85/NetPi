@@ -1049,6 +1049,79 @@ def build_system_group_results(system_groups, system_results):
     return grouped_results
 
 
+def build_system_topology_results(system_groups, system_group_results):
+    if not isinstance(system_groups, list):
+        return []
+
+    if not isinstance(system_group_results, list):
+        system_group_results = []
+
+    ip_to_group = {}
+    for group in system_groups:
+        group_id = (group.get("system_id") or "").strip()
+        for device in (group.get("devices") or []):
+            device_ip = (device.get("ip") or "").strip()
+            if device_ip and group_id:
+                ip_to_group[device_ip] = group_id
+
+    def relation_classification(result):
+        relationship_type = (result.get("relationship_type") or "").strip().lower()
+        if relationship_type in {"control", "media_flow", "ui", "peer"}:
+            return relationship_type
+        if relationship_type:
+            return relationship_type
+        return "unknown"
+
+    topology_entries = []
+
+    for group_result in system_group_results:
+        system_id = (group_result.get("system_id") or "").strip()
+        relevant_results = []
+        cross_group_results = []
+        unassigned_results = []
+
+        for result in (group_result.get("results") or []):
+            if not isinstance(result, dict):
+                continue
+
+            from_ip = (result.get("from_ip") or "").strip()
+            to_ip = (result.get("to_ip") or "").strip()
+            from_group = ip_to_group.get(from_ip, "")
+            to_group = ip_to_group.get(to_ip, "")
+
+            if from_ip and to_ip and from_group and to_group:
+                scope = "intra_group" if from_group == to_group == system_id else "cross_group"
+            else:
+                scope = "unassigned"
+
+            annotated = dict(result)
+            annotated["topology_scope"] = scope
+            annotated["relation_classification"] = relation_classification(result)
+
+            if scope == "intra_group":
+                relevant_results.append(annotated)
+            elif scope == "cross_group":
+                cross_group_results.append(annotated)
+            else:
+                unassigned_results.append(annotated)
+
+        topology_entries.append({
+            "system_id": system_id,
+            "types": list(group_result.get("types") or []),
+            "confidence": group_result.get("confidence") or "low",
+            "relevant_results": relevant_results,
+            "cross_group_results": cross_group_results,
+            "unassigned_results": unassigned_results,
+            "counts": {
+                "intra_group": len(relevant_results),
+                "cross_group": len(cross_group_results),
+                "unassigned": len(unassigned_results),
+            },
+        })
+
+    return topology_entries
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -4088,6 +4161,7 @@ def api_validate_systems():
                 "results": [],
                 "system_groups": [],
                 "system_group_results": [],
+                "topology_results": [],
                 "connectivity": [],
                 "connectivity_summary": connectivity_summary,
                 "connectivity_note": connectivity_note,
@@ -4131,6 +4205,7 @@ def api_validate_systems():
         system_groups = build_runtime_system_groups(enriched_devices)
         results = run_system_validation(enriched_devices, validations_by_ip)
         system_group_results = build_system_group_results(system_groups, results)
+        topology_results = build_system_topology_results(system_groups, system_group_results)
         connectivity_results = []
         connectivity_summary = {
             "pass": 0,
@@ -4163,6 +4238,7 @@ def api_validate_systems():
             "results": results,
             "system_groups": system_groups,
             "system_group_results": system_group_results,
+            "topology_results": topology_results,
             "connectivity": connectivity_results,
             "connectivity_summary": connectivity_summary,
             "connectivity_note": connectivity_note,
