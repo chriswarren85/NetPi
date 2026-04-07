@@ -2837,23 +2837,30 @@ def fingerprint_host():
 
         updated_device = None
         device_updated = False
+        matched_inventory_device = None
 
-        for device in devices:
-            if (device.get("ip") or "").strip() != ip:
+        for inventory_device in devices:
+            if (inventory_device.get("ip") or "").strip() != ip:
                 continue
 
-            if should_persist_fingerprinted_type(device.get("type"), guessed):
-                device["type"] = guessed
-                updated_device = dict(device)
+            matched_inventory_device = inventory_device
+            if should_persist_fingerprinted_type(inventory_device.get("type"), guessed):
+                inventory_device["type"] = guessed
+                updated_device = dict(inventory_device)
                 device_updated = True
             else:
-                updated_device = dict(device)
+                updated_device = dict(inventory_device)
             break
+
+        type_suggestion = build_type_suggestion(updated_device or device, validation)
+        promotion = evaluate_safe_type_promotion(updated_device or device, type_suggestion)
+        if matched_inventory_device is not None and promotion.get("should_apply"):
+            matched_inventory_device["type"] = promotion.get("suggested_type") or matched_inventory_device.get("type") or ""
+            updated_device = dict(matched_inventory_device)
+            device_updated = True
 
         if device_updated:
             save_devices_file(devices)
-
-        type_suggestion = build_type_suggestion(updated_device or device, validation)
 
         try:
             record_device_observation(
