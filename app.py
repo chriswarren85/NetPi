@@ -732,6 +732,40 @@ def resolve_runtime_type(device, effective_type=""):
     return current_type or effective_type or ""
 
 
+def enrich_device_runtime(device):
+    item = dict(device or {})
+    validation = run_validation(item)
+    auto_type = decide_auto_promoted_type(item, validation)
+    type_suggestion = build_type_suggestion(item, validation)
+    guessed_type = auto_type.get("proposed_type") or ""
+    effective_type = resolve_effective_type(item, guessed_type, type_suggestion)
+    promotion = evaluate_safe_type_promotion(item, type_suggestion)
+
+    item["guessed_type"] = guessed_type
+    item["type_suggestion"] = type_suggestion
+    item["suggested_type"] = type_suggestion.get("suggested_type") or ""
+    item["effective_type"] = effective_type
+    item["_resolved_type"] = resolve_runtime_type(item, effective_type)
+    item["_runtime_promotion"] = promotion
+
+    validation_context = dict(validation)
+    validation_context["auto_type"] = auto_type
+    validation_context["type_suggestion"] = type_suggestion
+    validation_context["suggested_type"] = item["suggested_type"]
+    validation_context["effective_type"] = effective_type
+    validation_context["confidence_score"] = type_suggestion.get("confidence_score", 0)
+    validation_context["confidence_label"] = type_suggestion.get("confidence_label") or "none"
+    validation_context["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
+
+    role = infer_av_role(item, validation_context)
+    if role:
+        item["av_role"] = role
+        validation_context["av_role"] = role
+
+    item["_validation_result"] = validation_context
+    return item
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -3775,29 +3809,14 @@ def api_validate_systems():
                 "detected_systems": detected,
             })
 
-        validation_results = run_validation_for_all(devices)
-
-        enriched_devices = []
+        enriched_devices = [enrich_device_runtime(device) for device in devices]
         validations_by_ip = {}
         fingerprint_updates = []
 
-        for device, result in zip(devices, validation_results):
-            item = dict(device)
-            auto_type = decide_auto_promoted_type(device, result)
-            type_suggestion = build_type_suggestion(item, result)
-            result["type_suggestion"] = type_suggestion
-            result["suggested_type"] = type_suggestion.get("suggested_type") or ""
-            result["effective_type"] = resolve_effective_type(item, auto_type.get("proposed_type") or "", type_suggestion)
-            item["effective_type"] = result["effective_type"]
-            item["_resolved_type"] = resolve_runtime_type(item, result["effective_type"])
-            result["confidence_score"] = type_suggestion.get("confidence_score", 0)
-            result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
-            result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
-            role = infer_av_role(item, result)
-            if role:
-                item["av_role"] = role
-                result["av_role"] = role
-            enriched_devices.append(item)
+        for device, item in zip(devices, enriched_devices):
+            result = dict(item.get("_validation_result") or {})
+            auto_type = result.get("auto_type") or {}
+            role = item.get("av_role")
             validations_by_ip[result.get("ip", "")] = result
             key = _stable_fingerprint_key(device, result)
             if key:
