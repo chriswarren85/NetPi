@@ -1067,48 +1067,67 @@ def _build_self_learning_fingerprint_library(history, learned_candidates):
             "reasons": _merge_unique_strings([], *(reasons or [])),
         }
 
+    def signal_data(candidate_type):
+        data = _candidate_map_count(signal_candidates, (candidate_type,), min_strength="medium")
+        return data if int(data.get("count", 0) or 0) >= 3 else {"count": 0, "best_strength": "", "reasons": []}
+
     qsys_direct = _candidate_map_count(validation_platforms, ("qsys", "qsys-core", "qsys-touchpanel", "qsys-nv", "qsys-nv21", "qsys-nv32"), min_strength="medium")
     qsys_observed = _candidate_map_count(observed_platforms, ("qsys", "qsys-core", "qsys-touchpanel", "qsys-nv", "qsys-nv21", "qsys-nv32"), min_strength="medium")
-    qsys_signals = _candidate_map_count(signal_candidates, ("qsys",), min_strength="medium")
-    qsys_context = qsys_direct["count"] >= 2 and (1710 in ports or _contains_any_token(text, ("q-sys", "qsys", "qsc")))
+    qsys_signals = signal_data("qsys")
+    qsys_context = max(qsys_direct["count"], qsys_signals["count"]) >= 2 and (1710 in ports or _contains_any_token(text, ("q-sys", "qsys", "qsc")))
     if qsys_context:
-        add_library_candidate("qsys", confidence=qsys_direct["best_strength"] or qsys_observed["best_strength"], count=max(qsys_direct["count"], qsys_observed["count"]), reasons=qsys_direct["reasons"] + qsys_observed["reasons"] + qsys_signals["reasons"] + ["repeated strong Q-SYS family evidence"])
-        if 1710 in ports and qsys_direct["count"] >= 2:
-            add_library_candidate("qsys-core", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated strong evidence plus Q-SYS control port 1710"])
-        if _contains_any_token(text, ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")) and qsys_direct["count"] >= 2:
-            add_library_candidate("qsys-touchpanel", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS touchpanel naming evidence"])
-        if _contains_any_token(text, ("nv-21", "nv21", "nv-32", "nv32", "nv-32-h", "nv32-h")) and qsys_direct["count"] >= 2:
-            add_library_candidate("qsys-nv", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS NV endpoint naming evidence"])
+        qsys_confidence = qsys_direct["best_strength"] or qsys_observed["best_strength"] or qsys_signals["best_strength"]
+        qsys_count = max(qsys_direct["count"], qsys_observed["count"], qsys_signals["count"])
+        qsys_reasons = qsys_direct["reasons"] + qsys_observed["reasons"] + qsys_signals["reasons"] + ["repeated strong Q-SYS family evidence"]
+        add_library_candidate("qsys", confidence=qsys_confidence, count=qsys_count, reasons=qsys_reasons)
+        if 1710 in ports and qsys_count >= 2:
+            add_library_candidate("qsys-core", confidence=qsys_confidence, count=qsys_count, reasons=qsys_reasons + ["repeated strong evidence plus Q-SYS control port 1710"])
+        if _contains_any_token(text, ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")) and qsys_count >= 2:
+            add_library_candidate("qsys-touchpanel", confidence=qsys_confidence, count=qsys_count, reasons=qsys_reasons + ["repeated Q-SYS touchpanel naming evidence"])
+        if _contains_any_token(text, ("nv-21", "nv21", "nv-32", "nv32", "nv-32-h", "nv32-h")) and qsys_count >= 2:
+            add_library_candidate("qsys-nv", confidence=qsys_confidence, count=qsys_count, reasons=qsys_reasons + ["repeated Q-SYS NV endpoint naming evidence"])
             if _contains_any_token(text, ("nv-21", "nv21")):
-                add_library_candidate("qsys-nv21", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS NV-21 naming evidence"])
+                add_library_candidate("qsys-nv21", confidence=qsys_confidence, count=qsys_count, reasons=qsys_reasons + ["repeated Q-SYS NV-21 naming evidence"])
             if _contains_any_token(text, ("nv-32", "nv32", "nv-32-h", "nv32-h")):
-                add_library_candidate("qsys-nv32", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS NV-32 naming evidence"])
+                add_library_candidate("qsys-nv32", confidence=qsys_confidence, count=qsys_count, reasons=qsys_reasons + ["repeated Q-SYS NV-32 naming evidence"])
 
     biamp_direct = _candidate_map_count(validation_platforms, ("biamp", "biamp-tesira"), min_strength="medium")
     biamp_observed = _candidate_map_count(observed_platforms, ("biamp", "biamp-tesira"), min_strength="medium")
-    biamp_context = biamp_direct["count"] >= 2 and _contains_any_token(text, ("biamp", "tesira"))
+    biamp_signals = signal_data("biamp-tesira")
+    biamp_context = max(biamp_direct["count"], biamp_signals["count"]) >= 2 and _contains_any_token(text, ("biamp", "tesira"))
     if biamp_context:
-        add_library_candidate("biamp", confidence=biamp_direct["best_strength"] or biamp_observed["best_strength"], count=max(biamp_direct["count"], biamp_observed["count"]), reasons=biamp_direct["reasons"] + biamp_observed["reasons"] + ["repeated strong Biamp family evidence"])
+        biamp_confidence = biamp_direct["best_strength"] or biamp_observed["best_strength"] or biamp_signals["best_strength"]
+        biamp_count = max(biamp_direct["count"], biamp_observed["count"], biamp_signals["count"])
+        biamp_reasons = biamp_direct["reasons"] + biamp_observed["reasons"] + biamp_signals["reasons"] + ["repeated strong Biamp family evidence"]
+        add_library_candidate("biamp", confidence=biamp_confidence, count=biamp_count, reasons=biamp_reasons)
         if _contains_any_token(text, ("tesira", "biamp-")):
-            add_library_candidate("biamp-tesira", confidence=biamp_direct["best_strength"], count=biamp_direct["count"], reasons=biamp_direct["reasons"] + ["repeated Biamp/Tesira naming evidence"])
+            add_library_candidate("biamp-tesira", confidence=biamp_confidence, count=biamp_count, reasons=biamp_reasons + ["repeated Biamp/Tesira naming evidence"])
 
     crestron_direct = _candidate_map_count(validation_platforms, ("crestron", "crestron_control", "crestron_touchpanel", "crestron_uc"), min_strength="medium")
     crestron_observed = _candidate_map_count(observed_platforms, ("crestron", "crestron_control", "crestron_touchpanel", "crestron_uc"), min_strength="medium")
-    crestron_context = crestron_direct["count"] >= 2 and (any(port in ports for port in (41794, 41795, 41796)) or "crestron" in text)
+    crestron_signals = signal_data("crestron")
+    crestron_context = max(crestron_direct["count"], crestron_signals["count"]) >= 2 and (any(port in ports for port in (41794, 41795, 41796)) or "crestron" in text)
     if crestron_context:
-        add_library_candidate("crestron", confidence=crestron_direct["best_strength"] or crestron_observed["best_strength"], count=max(crestron_direct["count"], crestron_observed["count"]), reasons=crestron_direct["reasons"] + crestron_observed["reasons"] + ["repeated strong Crestron family evidence"])
+        crestron_confidence = crestron_direct["best_strength"] or crestron_observed["best_strength"] or crestron_signals["best_strength"]
+        crestron_count = max(crestron_direct["count"], crestron_observed["count"], crestron_signals["count"])
+        crestron_reasons = crestron_direct["reasons"] + crestron_observed["reasons"] + crestron_signals["reasons"] + ["repeated strong Crestron family evidence"]
+        add_library_candidate("crestron", confidence=crestron_confidence, count=crestron_count, reasons=crestron_reasons)
         if _contains_any_token(text, ("cp4", "mc4", "rmc4", "pro4")) or any(port in ports for port in (41794, 41795, 41796)):
-            add_library_candidate("crestron_control", confidence=crestron_direct["best_strength"], count=crestron_direct["count"], reasons=crestron_direct["reasons"] + ["repeated Crestron control processor evidence"])
+            add_library_candidate("crestron_control", confidence=crestron_confidence, count=crestron_count, reasons=crestron_reasons + ["repeated Crestron control processor evidence"])
         if _contains_any_token(text, ("tsw", "tss", "touchpanel", "touch panel")):
-            add_library_candidate("crestron_touchpanel", confidence=crestron_direct["best_strength"], count=crestron_direct["count"], reasons=crestron_direct["reasons"] + ["repeated Crestron touchpanel evidence"])
+            add_library_candidate("crestron_touchpanel", confidence=crestron_confidence, count=crestron_count, reasons=crestron_reasons + ["repeated Crestron touchpanel evidence"])
         if _contains_any_token(text, ("uc-", "flex", "teams")):
-            add_library_candidate("crestron_uc", confidence=crestron_direct["best_strength"], count=crestron_direct["count"], reasons=crestron_direct["reasons"] + ["repeated Crestron UC evidence"])
+            add_library_candidate("crestron_uc", confidence=crestron_confidence, count=crestron_count, reasons=crestron_reasons + ["repeated Crestron UC evidence"])
 
     video_direct = _candidate_map_count(validation_platforms, ("video-wall-processor",), min_strength="medium")
     video_observed = _candidate_map_count(observed_platforms, ("video-wall-processor",), min_strength="medium")
-    video_context = max(video_direct["count"], video_observed["count"]) >= 2 and _is_video_processing_match(text) and any(port in ports for port in (80, 443, 8080, 22))
+    video_signals = signal_data("video-wall-processor")
+    video_context = max(video_direct["count"], video_observed["count"], video_signals["count"]) >= 2 and _is_video_processing_match(text) and any(port in ports for port in (80, 443, 8080, 22))
     if video_context:
-        add_library_candidate("video-wall-processor", confidence=video_direct["best_strength"] or video_observed["best_strength"], count=max(video_direct["count"], video_observed["count"]), reasons=video_direct["reasons"] + video_observed["reasons"] + ["repeated strong video-wall processor evidence"])
+        video_confidence = video_direct["best_strength"] or video_observed["best_strength"] or video_signals["best_strength"]
+        video_count = max(video_direct["count"], video_observed["count"], video_signals["count"])
+        video_reasons = video_direct["reasons"] + video_observed["reasons"] + video_signals["reasons"] + ["repeated strong video-wall processor evidence"]
+        add_library_candidate("video-wall-processor", confidence=video_confidence, count=video_count, reasons=video_reasons)
 
     suggested_type, suggested_data = _strongest_candidate(library_candidates)
     return {

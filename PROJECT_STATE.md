@@ -921,3 +921,11 @@ ame as the saved label
   - Added a lightweight self-learning fingerprint library layer that derives reusable device-class patterns from repeated strong evidence already stored in device evidence history
   - Direct hardcoded detection rules remain in place, while repeated evidence can now safely reinforce reusable classes such as video-wall-processor, Q-SYS family roles, Biamp/Tesira, and Crestron roles
   - Preserved Stage 6.6 identity safety and conservative behavior so weak unrelated devices, including openresty-only web devices, do not inherit risky learned classes
+### Last Update
+- Feature: Stage 7.5 signal-candidate fingerprint library bridge
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Repeated safe signal_candidates can now reinforce reusable fingerprint_library classes for approved AV families such as Biamp, Q-SYS, Crestron, and video-wall processors
+  - Promotion remains limited to repeated medium/high-strength signals and does not weaken Stage 6.6 identity safety or permit generic weak web evidence to invent risky classes
