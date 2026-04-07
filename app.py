@@ -718,6 +718,20 @@ def resolve_effective_type(device, guessed_type="", type_suggestion=None):
     return current_type or ""
 
 
+def resolve_runtime_type(device, effective_type=""):
+    device = device or {}
+    current_type = normalize_platform_name(device.get("type"))
+    effective_type = normalize_platform_name(effective_type or device.get("effective_type"))
+
+    if current_type and not weak_device_type(current_type):
+        return current_type
+
+    if effective_type and not weak_device_type(effective_type):
+        return effective_type
+
+    return current_type or effective_type or ""
+
+
 def load_devices():
     if not os.path.exists(DEVICES_FILE):
         return []
@@ -2335,7 +2349,12 @@ def infer_av_role(device, validation):
     name = (device.get("name") or "").lower()
     vendor = (device.get("vendor") or "").lower()
     notes = (device.get("notes") or "").lower()
-    current_type = (device.get("type") or "").lower()
+    current_type = (
+        device.get("_resolved_type")
+        or device.get("effective_type")
+        or device.get("type")
+        or ""
+    ).lower()
     observed = ((validation.get("observed_platform") or {}).get("platform") or "").lower()
     observed_confidence = ((validation.get("observed_platform") or {}).get("confidence") or "").lower()
     fingerprint = ((validation.get("fingerprint") or {}).get("platform") or "").lower()
@@ -3482,7 +3501,12 @@ def build_basic_type_groups(devices):
 
         role = (d.get("av_role") or "").strip().lower()
         stored_type = (d.get("type") or "unknown").strip().lower()
-        t = role or stored_type
+        resolved_type = (d.get("_resolved_type") or d.get("effective_type") or "").strip().lower()
+        if stored_type and not weak_device_type(stored_type):
+            base_type = stored_type
+        else:
+            base_type = resolved_type or stored_type
+        t = role or base_type
 
         if t.startswith("qsys") and not role:
             continue
@@ -3764,10 +3788,12 @@ def api_validate_systems():
             result["type_suggestion"] = type_suggestion
             result["suggested_type"] = type_suggestion.get("suggested_type") or ""
             result["effective_type"] = resolve_effective_type(item, auto_type.get("proposed_type") or "", type_suggestion)
+            item["effective_type"] = result["effective_type"]
+            item["_resolved_type"] = resolve_runtime_type(item, result["effective_type"])
             result["confidence_score"] = type_suggestion.get("confidence_score", 0)
             result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
             result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
-            role = infer_av_role(device, result)
+            role = infer_av_role(item, result)
             if role:
                 item["av_role"] = role
                 result["av_role"] = role

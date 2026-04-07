@@ -77,6 +77,24 @@ def normalize_device_type(device_type):
     return TYPE_ALIASES.get(value, value or "generic")
 
 
+def _type_match_variants(device_type):
+    text = (device_type or "").strip().lower()
+    normalized = normalize_device_type(text)
+    variants = {value for value in (text, normalized) if value}
+
+    for value in list(variants):
+        if "-" in value:
+            variants.add(value.split("-", 1)[0])
+        if "_" in value:
+            variants.add(value.split("_", 1)[0])
+        if "tesira" in value:
+            variants.add("tesira")
+        if value.startswith("biamp"):
+            variants.add("biamp")
+
+    return {value for value in variants if value}
+
+
 def get_validation_profile(device_type):
     normalized = normalize_device_type(device_type)
     checks = VALIDATION_RULES.get(normalized)
@@ -1028,11 +1046,24 @@ def _missing_system_reasons(rule, sources, targets):
 def _system_devices_by_types(devices, allowed_types):
     allowed = set((allowed_types or []))
     matched = []
+    weak_types = {
+        "", "unknown", "generic", "device", "other",
+        "web-device", "network-device"
+    }
 
     for d in devices or []:
         raw_type = (d.get("type", "") or "").strip().lower()
         normalized = normalize_device_type(raw_type)
+        effective_type = normalize_device_type(d.get("effective_type", ""))
+        resolved_type = normalize_device_type(d.get("_resolved_type", ""))
         role = (d.get("av_role") or "").strip().lower()
+
+        if not resolved_type:
+            resolved_type = effective_type if raw_type in weak_types and effective_type not in weak_types else normalized
+
+        type_variants = set()
+        for value in (raw_type, normalized, effective_type, resolved_type):
+            type_variants.update(_type_match_variants(value))
 
         def role_matches():
             if not role:
@@ -1046,11 +1077,10 @@ def _system_devices_by_types(devices, allowed_types):
 
         if (
             role_matches()
-            or normalized in allowed
-            or raw_type in allowed
+            or bool(type_variants.intersection(allowed))
         ):
             item = dict(d)
-            item["_normalized_type"] = role or normalized
+            item["_normalized_type"] = role or resolved_type or normalized
             matched.append(item)
 
     return matched
@@ -1198,10 +1228,14 @@ VIRTUAL_DESTINATION_ROLES = {"internet", "dns", "ntp"}
 def _connectivity_device_roles(device):
     roles = set()
 
-    for value in (device.get("av_role"), device.get("type"), device.get("_normalized_type")):
-        text = (value or "").strip().lower()
-        if text:
-            roles.add(text)
+    for value in (
+        device.get("av_role"),
+        device.get("type"),
+        device.get("effective_type"),
+        device.get("_resolved_type"),
+        device.get("_normalized_type"),
+    ):
+        roles.update(_type_match_variants(value))
 
     vendor = (device.get("vendor") or "").strip().lower()
     name = (device.get("name") or "").strip().lower()
