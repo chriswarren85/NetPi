@@ -1057,12 +1057,34 @@ def build_system_topology_results(system_groups, system_group_results):
         system_group_results = []
 
     ip_to_group = {}
+    name_to_group = {}
+
+    def normalized_name(value):
+        return str(value or "").strip().lower()
+
     for group in system_groups:
         group_id = (group.get("system_id") or "").strip()
         for device in (group.get("devices") or []):
             device_ip = (device.get("ip") or "").strip()
+            device_name = normalized_name(device.get("name"))
             if device_ip and group_id:
                 ip_to_group[device_ip] = group_id
+            if device_name and group_id:
+                name_to_group[device_name] = group_id
+
+    def resolve_group_id(side_ip, side_name):
+        side_ip = (side_ip or "").strip()
+        if side_ip and side_ip in ip_to_group:
+            return ip_to_group[side_ip]
+
+        side_name_key = normalized_name(side_name)
+        if side_name_key and side_name_key in name_to_group:
+            return name_to_group[side_name_key]
+
+        if side_name_key and side_name_key in ip_to_group:
+            return ip_to_group[side_name_key]
+
+        return ""
 
     def relation_classification(result):
         relationship_type = (result.get("relationship_type") or "").strip().lower()
@@ -1086,10 +1108,12 @@ def build_system_topology_results(system_groups, system_group_results):
 
             from_ip = (result.get("from_ip") or "").strip()
             to_ip = (result.get("to_ip") or "").strip()
-            from_group = ip_to_group.get(from_ip, "")
-            to_group = ip_to_group.get(to_ip, "")
+            from_name = result.get("from_device")
+            to_name = result.get("to_device")
+            from_group = resolve_group_id(from_ip, from_name)
+            to_group = resolve_group_id(to_ip, to_name)
 
-            if from_ip and to_ip and from_group and to_group:
+            if from_group and to_group:
                 scope = "intra_group" if from_group == to_group == system_id else "cross_group"
             else:
                 scope = "unassigned"

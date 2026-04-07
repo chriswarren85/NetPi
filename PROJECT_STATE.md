@@ -19,3 +19,13 @@
   - Added additive topology_results output that classifies grouped validation rows by stable group membership as intra_group, cross_group, or unassigned
   - Preserved existing validate_systems fields and flat results while adding relation_classification and per-system topology counts
   - Kept runtime-only behavior with no devices.json writes and no persistence/fingerprint behavior changes
+
+### Last Update
+- Feature: Stage 10.1 fix topology classification membership lookup
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Topology classification now resolves group membership by IP first and device name fallback when classifying validation rows
+  - Added group lookup maps for ip->system_id and name->system_id and applied fallback to from_device/to_device when from_ip/to_ip are missing
+  - Preserved topology_results schema and all existing validate_systems response fields without persistence changes
