@@ -874,3 +874,12 @@ ame as the saved label
 - Summary of changes:
   - Tuned Biamp hostname scoring so clear BIAMP-* devices can surface advisory biamp-tesira suggestions
   - Preserved conservative behavior for generic web and linux-web-device fingerprints without vendor markers
+### Last Update
+- Feature: Stage 4.6 stable device identity hardening
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Hardened evidence identity selection so MAC and stable hostname are preferred over IP where available
+  - Stale IP-only learning is less able to contaminate new device observations and advisory suggestions
+  - This improves safety before Stage 5 controlled suggestion application

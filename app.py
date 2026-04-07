@@ -691,7 +691,7 @@ def _normalize_identity_mac(value):
 
 
 def _normalize_identity_hostname(value):
-    hostname = (value or "").strip()
+    hostname = re.sub(r"[\s\.,;:]+$", "", str(value or "").strip())
     lowered = hostname.lower()
     if not hostname or lowered in ("unknown", "n/a", "none", "-", "—"):
         return ""
@@ -702,30 +702,143 @@ def _normalize_identity_hostname(value):
     return hostname
 
 
+def _observation_hostname_candidates(observation):
+    observation = observation or {}
+    hostnames = []
+    seen = set()
+
+    for value in (
+        observation.get("stable_hostname"),
+        observation.get("hostname"),
+        observation.get("reverse_dns"),
+        observation.get("mdns_name"),
+        observation.get("name"),
+    ):
+        hostname = _normalize_identity_hostname(value)
+        if not hostname:
+            continue
+        lowered = hostname.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        hostnames.append(hostname)
+
+    return hostnames
+
+
 def _observation_identity_candidates(observation):
     observation = observation or {}
     mac = _normalize_identity_mac(observation.get("mac"))
-    hostname = _normalize_identity_hostname(observation.get("stable_hostname"))
     ip = (observation.get("ip") or "").strip()
 
     candidates = []
     if mac:
         candidates.append(("mac", f"mac:{mac}"))
-    if hostname:
+    for hostname in _observation_hostname_candidates(observation):
         candidates.append(("hostname", f"hostname:{hostname.lower()}"))
     if ip:
         candidates.append(("ip", f"ip:{ip}"))
     return candidates
 
 
+def _identity_kind_from_key(key):
+    key = str(key or "")
+    if key.startswith("mac:"):
+        return "mac"
+    if key.startswith("hostname:"):
+        return "hostname"
+    if key.startswith("ip:"):
+        return "ip"
+    return ""
+
+
 def _identity_priority(key):
-    if str(key).startswith("mac:"):
+    kind = _identity_kind_from_key(key)
+    if kind == "mac":
         return 3
-    if str(key).startswith("hostname:"):
+    if kind == "hostname":
         return 2
-    if str(key).startswith("ip:"):
+    if kind == "ip":
         return 1
     return 0
+
+
+def _identity_match_weight(match_kind):
+    return {
+        "mac": 1.0,
+        "hostname": 0.7,
+        "ip": 0.25,
+    }.get((match_kind or "").strip().lower(), 0.0)
+
+
+def _find_evidence_record_match(store, observation):
+    store = store or {}
+    observation = observation or {}
+    candidates = _observation_identity_candidates(observation)
+    if not candidates:
+        return None
+
+    strongest_identity = max((_identity_priority(key) for _, key in candidates), default=0)
+    candidate_keys_by_kind = {}
+    for kind, key in candidates:
+        candidate_keys_by_kind.setdefault(kind, [])
+        if key not in candidate_keys_by_kind[kind]:
+            candidate_keys_by_kind[kind].append(key)
+
+    matches = []
+    for record_key, record in store.items():
+        if not isinstance(record, dict):
+            continue
+
+        record_identity = record.get("identity") if isinstance(record.get("identity"), dict) else {}
+        aliases = set(record_identity.get("aliases") or [])
+        aliases.add(record_key)
+        record_key_type = (record_identity.get("key_type") or _identity_kind_from_key(record_key)).strip().lower()
+
+        matched_kind = ""
+        matched_key = ""
+        exact_match = False
+        for kind in ("mac", "hostname", "ip"):
+            keys = candidate_keys_by_kind.get(kind) or []
+            if not keys:
+                continue
+            if kind == "ip" and strongest_identity > 1:
+                continue
+            hit = next((key for key in keys if key == record_key or key in aliases), "")
+            if hit:
+                matched_kind = kind
+                matched_key = hit
+                exact_match = (hit == record_key)
+                break
+
+        if not matched_kind:
+            continue
+
+        matches.append({
+            "key": record_key,
+            "record": copy.deepcopy(record),
+            "match_kind": matched_kind,
+            "matched_key": matched_key,
+            "exact_match": exact_match,
+            "match_priority": _identity_priority(f"{matched_kind}:match"),
+            "record_priority": _identity_priority(record_identity.get("key") or record_key),
+            "record_key_type": record_key_type,
+            "seen_count": int(record.get("seen_count", 0) or 0),
+        })
+
+    if not matches:
+        return None
+
+    matches.sort(
+        key=lambda item: (
+            item["match_priority"],
+            1 if item["exact_match"] else 0,
+            item["record_priority"],
+            item["seen_count"],
+        ),
+        reverse=True,
+    )
+    return matches[0]
 
 
 def _merge_unique_strings(existing, *values):
@@ -813,6 +926,7 @@ def _build_device_observation(device, *, source="", result=None, extra=None):
         extra.get("reverse_dns"),
         extra.get("mdns_name"),
         device.get("hostname"),
+        device.get("name"),
     ):
         stable_hostname = _normalize_identity_hostname(candidate)
         if stable_hostname:
@@ -821,6 +935,7 @@ def _build_device_observation(device, *, source="", result=None, extra=None):
     open_ports = list(evidence.get("open_ports") or result.get("open_ports") or extra.get("open_ports") or [])
 
     return {
+        "name": (device.get("name") or "").strip(),
         "source": (source or extra.get("source") or "").strip(),
         "seen_at": utc_now_iso(),
         "ip": (device.get("ip") or result.get("ip") or evidence.get("ip") or extra.get("ip") or "").strip(),
@@ -1030,15 +1145,22 @@ def record_device_observation(device, *, source="", result=None, extra=None):
 
     with DEVICE_EVIDENCE_LOCK:
         store = load_device_evidence()
-        existing_key = next((key for _, key in candidates if key in store), None)
-        target_key = existing_key or primary_key
-        target_kind = primary_kind if target_key == primary_key else next(
-            (kind for kind, key in candidates if key == target_key),
-            primary_kind,
-        )
+        match = _find_evidence_record_match(store, observation)
+        if match:
+            matched_key = match.get("key") or ""
+            matched_kind = match.get("match_kind") or _identity_kind_from_key(matched_key)
+        else:
+            matched_key = ""
+            matched_kind = ""
 
-        if existing_key and primary_key != existing_key and _identity_priority(primary_key) > _identity_priority(existing_key):
-            base_record = copy.deepcopy(store.pop(existing_key, {}))
+        target_key = matched_key or primary_key
+        target_kind = matched_kind or primary_kind
+
+        if matched_key and primary_key != matched_key and _identity_priority(primary_key) > _identity_priority(matched_key):
+            if matched_kind == "ip":
+                base_record = {}
+            else:
+                base_record = copy.deepcopy(store.pop(matched_key, {}))
             target_key = primary_key
             target_kind = primary_kind
         else:
@@ -1051,6 +1173,11 @@ def record_device_observation(device, *, source="", result=None, extra=None):
 
 
 def _stable_fingerprint_key(device, result=None):
+    observation = _build_device_observation(device, source="fingerprint_store", result=result or {}, extra={})
+    candidates = _observation_identity_candidates(observation)
+    if candidates:
+        return candidates[0][1]
+
     result = result or {}
     mac = (device.get("mac") or "").strip()
     evidence_mac = ((result.get("evidence") or {}).get("mac") or "").strip()
@@ -1486,28 +1613,33 @@ def _suggestion_candidate_type(candidate_type):
     return candidate_type
 
 
+def _ranked_type_candidates(candidates):
+    return sorted(
+        (
+            {
+                "type": candidate_type,
+                "score": min(int(data.get("score", 0) or 0), 100),
+                "reasons": list(data.get("reasons") or []),
+            }
+            for candidate_type, data in (candidates or {}).items()
+        ),
+        key=lambda item: (item["score"], len(item["reasons"])),
+        reverse=True,
+    )
+
+
 def _resolve_evidence_record(device, validation=None):
     validation = validation or {}
     observation = _build_device_observation(device, source="suggestion_lookup", result=validation, extra={})
-    candidates = _observation_identity_candidates(observation)
-    if not candidates:
+    store = load_device_evidence()
+    match = _find_evidence_record_match(store, observation)
+    if not match:
         return None
 
-    store = load_device_evidence()
-    candidate_keys = {key for _, key in candidates}
-
-    for _, key in candidates:
-        if key in store:
-            return copy.deepcopy(store.get(key))
-
-    for record in store.values():
-        if not isinstance(record, dict):
-            continue
-        aliases = set((record.get("identity") or {}).get("aliases") or [])
-        if aliases.intersection(candidate_keys):
-            return copy.deepcopy(record)
-
-    return None
+    resolved = copy.deepcopy(match.get("record") or {})
+    resolved["_match_kind"] = match.get("match_kind") or ""
+    resolved["_match_key"] = match.get("key") or ""
+    return resolved
 
 
 def build_type_suggestion(device, validation=None):
@@ -1520,6 +1652,8 @@ def build_type_suggestion(device, validation=None):
     ports = _suggestion_port_set(validation)
     text = _suggestion_text_blob(device, validation, evidence_record=evidence_record)
     vendor_guess = guess_type_from_vendor(device.get("vendor", ""))
+    evidence_match_kind = ((evidence_record or {}).get("_match_kind") or "").strip().lower()
+    evidence_match_weight = _identity_match_weight(evidence_match_kind)
     stable_hostname = _normalize_identity_hostname(
         device.get("hostname") or
         ((evidence_record or {}).get("latest") or {}).get("stable_hostname") or
@@ -1619,20 +1753,33 @@ def build_type_suggestion(device, validation=None):
     if any(token in stable_hostname for token in ("barco", "ctrl")):
         _add_type_candidate(candidates, "barco-device", 16, "Hostname referenced Barco/CTRL")
 
+    direct_ranked = _ranked_type_candidates(candidates)
+    direct_best = direct_ranked[0] if direct_ranked else {}
+    direct_best_type = direct_best.get("type", "")
+    direct_best_score = int(direct_best.get("score", 0) or 0)
+
     learned = evidence_record.get("learned") if isinstance(evidence_record, dict) else {}
     learned_type = normalize_platform_name((learned or {}).get("suggested_type"))
     learned_confidence = ((learned or {}).get("confidence") or "").strip().lower()
     learned_count = int((learned or {}).get("observation_count", 0) or 0)
     if learned_type and learned_type not in ("unknown", "generic", "web-device", "linux-web-device"):
         learned_candidate = _suggestion_candidate_type(learned_type)
-        learned_points = {"high": 26, "medium": 18, "low": 10}.get(learned_confidence, 0)
-        learned_points += min(max(learned_count - 1, 0) * 4, 16)
-        _add_type_candidate(
-            candidates,
-            learned_candidate,
-            learned_points,
-            f"Repeated learned evidence previously suggested {learned_candidate} across {learned_count or 1} observation(s)",
+        conflicts_with_direct = (
+            direct_best_type and
+            direct_best_score >= 35 and
+            _candidate_family(learned_candidate) != _candidate_family(direct_best_type)
         )
+        if not conflicts_with_direct or evidence_match_kind == "mac":
+            learned_points = {"high": 26, "medium": 18, "low": 10}.get(learned_confidence, 0)
+            learned_points += min(max(learned_count - 1, 0) * 4, 16)
+            learned_points = int(round(learned_points * evidence_match_weight))
+            if learned_points > 0:
+                _add_type_candidate(
+                    candidates,
+                    learned_candidate,
+                    learned_points,
+                    f"Repeated learned evidence previously suggested {learned_candidate} across {learned_count or 1} observation(s)",
+                )
 
     guessed_types = ((evidence_record or {}).get("history") or {}).get("guessed_types") or {}
     for candidate_type, data in guessed_types.items():
@@ -1640,12 +1787,22 @@ def build_type_suggestion(device, validation=None):
             continue
         guess_count = int(data.get("count", 0) or 0)
         if guess_count >= 2:
-            _add_type_candidate(
-                candidates,
-                candidate_type,
-                min(guess_count * 4, 12),
-                f"Repeated guessed type {candidate_type} seen across {guess_count} observations",
+            guessed_candidate = _suggestion_candidate_type(candidate_type)
+            conflicts_with_direct = (
+                direct_best_type and
+                direct_best_score >= 35 and
+                _candidate_family(guessed_candidate) != _candidate_family(direct_best_type)
             )
+            if conflicts_with_direct and evidence_match_kind != "mac":
+                continue
+            guessed_points = int(round(min(guess_count * 4, 12) * evidence_match_weight))
+            if guessed_points > 0:
+                _add_type_candidate(
+                    candidates,
+                    guessed_candidate,
+                    guessed_points,
+                    f"Repeated guessed type {guessed_candidate} seen across {guess_count} observations",
+                )
 
     signal_candidates = ((evidence_record or {}).get("history") or {}).get("signal_candidates") or {}
     dominant_signal = None
@@ -1662,12 +1819,20 @@ def build_type_suggestion(device, validation=None):
         elif count > conflicting_count:
             conflicting_count = count
     if dominant_signal and dominant_count >= 2 and dominant_count > conflicting_count:
-        _add_type_candidate(
-            candidates,
-            dominant_signal,
-            min(12 + ((dominant_count - 2) * 4), 20),
-            f"Repeated stored evidence pointed to {dominant_signal} across {dominant_count} observations",
+        conflicts_with_direct = (
+            direct_best_type and
+            direct_best_score >= 35 and
+            _candidate_family(dominant_signal) != _candidate_family(direct_best_type)
         )
+        if not conflicts_with_direct or evidence_match_kind == "mac":
+            signal_points = int(round(min(12 + ((dominant_count - 2) * 4), 20) * evidence_match_weight))
+            if signal_points > 0:
+                _add_type_candidate(
+                    candidates,
+                    dominant_signal,
+                    signal_points,
+                    f"Repeated stored evidence pointed to {dominant_signal} across {dominant_count} observations",
+                )
 
     if 22 in ports and 80 in ports and 443 in ports:
         for candidate_type in list(candidates.keys()):
@@ -1684,18 +1849,7 @@ def build_type_suggestion(device, validation=None):
             "basis": "no_match",
         }
 
-    ranked = sorted(
-        (
-            {
-                "type": candidate_type,
-                "score": min(int(data.get("score", 0) or 0), 100),
-                "reasons": list(data.get("reasons") or []),
-            }
-            for candidate_type, data in candidates.items()
-        ),
-        key=lambda item: (item["score"], len(item["reasons"])),
-        reverse=True,
-    )
+    ranked = _ranked_type_candidates(candidates)
 
     best = ranked[0]
     for candidate in ranked[1:]:
