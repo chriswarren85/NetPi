@@ -2451,7 +2451,12 @@ def api_validate_device():
 @app.route("/tools/api/validate_all", methods=["POST"])
 def api_validate_all():
     try:
+        payload = request.get_json(silent=True) or {}
+        vlan = str(payload.get("vlan") or "").strip()
+
         devices = load_devices()
+        if vlan:
+            devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
         results = run_validation_for_all(devices)
         fingerprint_updates = []
 
@@ -3655,11 +3660,16 @@ def api_auto_type_devices():
 def api_validate_systems():
     try:
         payload = request.get_json(silent=True) or {}
+        vlan = str(payload.get("vlan") or "").strip()
 
         devices = payload.get("devices")
+        explicit_devices = isinstance(devices, list) and bool(devices)
 
-        if not isinstance(devices, list) or not devices:
+        if not explicit_devices:
             devices = load_devices()
+
+        if vlan:
+            devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
 
         validation_results = run_validation_for_all(devices)
 
@@ -3717,23 +3727,40 @@ def api_validate_systems():
             "skipped": 0,
         }
         connectivity_note = ""
+        large_inventory_threshold = 25
+        skip_expensive_stages = (not explicit_devices) and (not vlan) and len(devices) > large_inventory_threshold
 
-        try:
-            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
-            connectivity_summary = summarize_connectivity_results(connectivity_results)
-        except Exception as connectivity_error:
-            connectivity_results = []
+        if skip_expensive_stages:
             connectivity_summary = {
                 "pass": 0,
                 "fail": 0,
-                "warn": 1,
+                "warn": 0,
                 "info": 0,
-                "skipped": 0,
-                "error": str(connectivity_error),
+                "skipped": len(enriched_devices),
             }
-            connectivity_note = "Connectivity matrix evaluation failed; base system validation results remain available."
+            connectivity_note = f"Large inventory system validation was abbreviated for {len(enriched_devices)} devices; select a VLAN or smaller device scope to run connectivity matrix and detected systems."
+            detected = {
+                "systems": [],
+                "mode": "large_inventory_skipped",
+                "edge_count": 0,
+            }
+        else:
+            try:
+                connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+                connectivity_summary = summarize_connectivity_results(connectivity_results)
+            except Exception as connectivity_error:
+                connectivity_results = []
+                connectivity_summary = {
+                    "pass": 0,
+                    "fail": 0,
+                    "warn": 1,
+                    "info": 0,
+                    "skipped": 0,
+                    "error": str(connectivity_error),
+                }
+                connectivity_note = "Connectivity matrix evaluation failed; base system validation results remain available."
 
-        detected = build_detected_systems(enriched_devices, results)
+            detected = build_detected_systems(enriched_devices, results)
 
         return jsonify({
             "ok": True,

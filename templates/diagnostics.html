@@ -37,6 +37,8 @@
     </select>
 
     <button class="btn btn-primary" id="run-btn" onclick="runChecks()">Run all checks</button>
+    <button class="btn" id="validate-all-btn" onclick="validateAll()">Validate All</button>
+    <button class="btn" id="system-validate-btn" onclick="runSystemValidation()">Run System Validation</button>
     <button class="btn" id="discover-btn" onclick="discoverHosts()">Discover Hosts</button>
     <button class="btn btn-primary" id="add-all-discovered-btn" onclick="addAllDiscovered()" disabled>Add All Discovered</button>
     <button class="btn" id="fingerprint-added-btn" onclick="fingerprintAddedDevices()" style="display:none">Fingerprint Added Devices</button>
@@ -398,6 +400,83 @@ function runChecks(){
       document.getElementById('run-btn').textContent = 'Run all checks';
       document.getElementById('running-msg').style.display = 'none';
       alert('Error running checks: ' + e);
+    });
+}
+
+function validateAll(){
+  const button = document.getElementById('validate-all-btn');
+  const runningMsg = document.getElementById('running-msg');
+  const vlan = document.getElementById('vlan-select').value;
+
+  button.disabled = true;
+  button.textContent = 'Validating...';
+  runningMsg.textContent = 'Running Validate All...';
+  runningMsg.style.display = 'block';
+
+  fetch('/tools/api/validate_all', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ vlan: vlan })
+  })
+    .then(r => r.json())
+    .then(data => {
+      button.disabled = false;
+      button.textContent = 'Validate All';
+      runningMsg.style.display = 'none';
+      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+
+      if(!data.ok){
+        alert(data.error || 'Validate All failed');
+        return;
+      }
+
+      alert(`Validate All completed for ${data.count || 0} device(s).`);
+    })
+    .catch(e => {
+      button.disabled = false;
+      button.textContent = 'Validate All';
+      runningMsg.style.display = 'none';
+      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+      alert('Error running Validate All: ' + e);
+    });
+}
+
+function runSystemValidation(){
+  const button = document.getElementById('system-validate-btn');
+  const runningMsg = document.getElementById('running-msg');
+  const vlan = document.getElementById('vlan-select').value;
+
+  button.disabled = true;
+  button.textContent = 'Running...';
+  runningMsg.textContent = 'Running system validation...';
+  runningMsg.style.display = 'block';
+
+  fetch('/tools/api/validate_systems', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ vlan: vlan })
+  })
+    .then(r => r.json())
+    .then(data => {
+      button.disabled = false;
+      button.textContent = 'Run System Validation';
+      runningMsg.style.display = 'none';
+      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+
+      if(!data.ok){
+        alert(data.error || 'System validation failed');
+        return;
+      }
+
+      const note = data.connectivity_note ? `\n\n${data.connectivity_note}` : '';
+      alert(`System validation completed for ${data.count || 0} result(s).${note}`);
+    })
+    .catch(e => {
+      button.disabled = false;
+      button.textContent = 'Run System Validation';
+      runningMsg.style.display = 'none';
+      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+      alert('Error running system validation: ' + e);
     });
 }
 
