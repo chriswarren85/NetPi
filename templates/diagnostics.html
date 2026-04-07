@@ -57,6 +57,8 @@
   Running checks - this may take up to 60 seconds...
 </div>
 
+<div id="validation-status-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
+
 <div id="discovering-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem">
   Discovering live hosts on selected subnet...
 </div>
@@ -403,15 +405,76 @@ function runChecks(){
     });
 }
 
+let validationProgressTimer = null;
+let validationProgressStartedAt = 0;
+
+function stopValidationProgress(){
+  if(validationProgressTimer){
+    clearInterval(validationProgressTimer);
+    validationProgressTimer = null;
+  }
+  validationProgressStartedAt = 0;
+}
+
+function showValidationResult(message, tone){
+  const box = document.getElementById('validation-status-msg');
+  box.textContent = message || '';
+  box.style.display = message ? 'block' : 'none';
+
+  if(tone === 'error'){
+    box.style.background = '#3b0d0d';
+    box.style.color = '#fecaca';
+    box.style.borderColor = '#7f1d1d';
+    return;
+  }
+
+  if(tone === 'success'){
+    box.style.background = '#0f2f1f';
+    box.style.color = '#bbf7d0';
+    box.style.borderColor = '#166534';
+    return;
+  }
+
+  box.style.background = '#111827';
+  box.style.color = '#d1d5db';
+  box.style.borderColor = '#374151';
+}
+
+function startValidationProgress(baseMessage){
+  const runningMsg = document.getElementById('running-msg');
+  stopValidationProgress();
+  validationProgressStartedAt = Date.now();
+  runningMsg.style.display = 'block';
+
+  const updateMessage = () => {
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - validationProgressStartedAt) / 1000));
+    const dots = '.'.repeat((elapsedSeconds % 3) + 1);
+    let text = `${baseMessage}${dots} ${elapsedSeconds}s elapsed`;
+    if(elapsedSeconds >= 10){
+      text += ' - still running, please wait';
+    }
+    runningMsg.textContent = text;
+  };
+
+  updateMessage();
+  validationProgressTimer = setInterval(updateMessage, 1000);
+}
+
+function finishValidationProgress(){
+  const runningMsg = document.getElementById('running-msg');
+  stopValidationProgress();
+  runningMsg.style.display = 'none';
+  runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+}
+
 function validateAll(){
   const button = document.getElementById('validate-all-btn');
-  const runningMsg = document.getElementById('running-msg');
   const vlan = document.getElementById('vlan-select').value;
 
   button.disabled = true;
   button.textContent = 'Validating...';
-  runningMsg.textContent = 'Running Validate All...';
-  runningMsg.style.display = 'block';
+  showValidationResult('', 'neutral');
+  startValidationProgress('Running Validate All');
 
   fetch('/tools/api/validate_all', {
     method: 'POST',
@@ -422,34 +485,34 @@ function validateAll(){
     .then(data => {
       button.disabled = false;
       button.textContent = 'Validate All';
-      runningMsg.style.display = 'none';
-      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+      finishValidationProgress();
 
       if(!data.ok){
+        showValidationResult(data.error || 'Validate All failed.', 'error');
         alert(data.error || 'Validate All failed');
         return;
       }
 
+      showValidationResult(`Validate All completed for ${data.count || 0} device(s).`, 'success');
       alert(`Validate All completed for ${data.count || 0} device(s).`);
     })
     .catch(e => {
       button.disabled = false;
       button.textContent = 'Validate All';
-      runningMsg.style.display = 'none';
-      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+      finishValidationProgress();
+      showValidationResult('Validate All failed: ' + e, 'error');
       alert('Error running Validate All: ' + e);
     });
 }
 
 function runSystemValidation(){
   const button = document.getElementById('system-validate-btn');
-  const runningMsg = document.getElementById('running-msg');
   const vlan = document.getElementById('vlan-select').value;
 
   button.disabled = true;
   button.textContent = 'Running...';
-  runningMsg.textContent = 'Running system validation...';
-  runningMsg.style.display = 'block';
+  showValidationResult('', 'neutral');
+  startValidationProgress('Running system validation');
 
   fetch('/tools/api/validate_systems', {
     method: 'POST',
@@ -460,22 +523,26 @@ function runSystemValidation(){
     .then(data => {
       button.disabled = false;
       button.textContent = 'Run System Validation';
-      runningMsg.style.display = 'none';
-      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+      finishValidationProgress();
 
       if(!data.ok){
+        showValidationResult(data.error || 'System validation failed.', 'error');
         alert(data.error || 'System validation failed');
         return;
       }
 
       const note = data.connectivity_note ? `\n\n${data.connectivity_note}` : '';
+      const successMessage = data.connectivity_note
+        ? `System validation completed for ${data.count || 0} result(s). ${data.connectivity_note}`
+        : `System validation completed for ${data.count || 0} result(s).`;
+      showValidationResult(successMessage, 'success');
       alert(`System validation completed for ${data.count || 0} result(s).${note}`);
     })
     .catch(e => {
       button.disabled = false;
       button.textContent = 'Run System Validation';
-      runningMsg.style.display = 'none';
-      runningMsg.textContent = 'Running checks - this may take up to 60 seconds...';
+      finishValidationProgress();
+      showValidationResult('System validation failed: ' + e, 'error');
       alert('Error running system validation: ' + e);
     });
 }
