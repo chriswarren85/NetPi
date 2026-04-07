@@ -1823,6 +1823,7 @@ def _resolve_evidence_record(device, validation=None):
 def build_type_suggestion(device, validation=None):
     device = device or {}
     validation = validation or {}
+    current_observation = _build_device_observation(device, source="suggestion_lookup", result=validation, extra={})
     current_type = (device.get("type") or validation.get("type") or "").strip().lower()
     fingerprint = validation.get("fingerprint") if isinstance(validation.get("fingerprint"), dict) else {}
     observed = validation.get("observed_platform") if isinstance(validation.get("observed_platform"), dict) else {}
@@ -1832,6 +1833,18 @@ def build_type_suggestion(device, validation=None):
     vendor_guess = guess_type_from_vendor(device.get("vendor", ""))
     evidence_match_kind = ((evidence_record or {}).get("_match_kind") or "").strip().lower()
     evidence_match_weight = _identity_match_weight(evidence_match_kind)
+    current_mac = _normalize_identity_mac(current_observation.get("mac"))
+    current_stable_hostname = _normalize_identity_hostname(current_observation.get("stable_hostname"))
+    current_ip = (current_observation.get("ip") or "").strip()
+    record_identity = (evidence_record or {}).get("identity") if isinstance((evidence_record or {}).get("identity"), dict) else {}
+    record_ip = (record_identity.get("ip") or ((evidence_record or {}).get("latest") or {}).get("ip") or "").strip()
+    allow_learned = False
+    if evidence_match_kind == "mac" and current_mac:
+        allow_learned = True
+    elif evidence_match_kind == "hostname" and current_stable_hostname:
+        allow_learned = True
+    elif evidence_match_kind == "ip" and current_ip and not current_mac and not current_stable_hostname and current_ip == record_ip:
+        allow_learned = True
     stable_hostname = _normalize_identity_hostname(
         device.get("hostname") or
         ((evidence_record or {}).get("latest") or {}).get("stable_hostname") or
@@ -1881,81 +1894,82 @@ def build_type_suggestion(device, validation=None):
     direct_best_type = direct_best.get("type", "")
     direct_best_score = int(direct_best.get("score", 0) or 0)
 
-    learned = evidence_record.get("learned") if isinstance(evidence_record, dict) else {}
-    learned_type = normalize_platform_name((learned or {}).get("suggested_type"))
-    learned_confidence = ((learned or {}).get("confidence") or "").strip().lower()
-    learned_count = int((learned or {}).get("observation_count", 0) or 0)
-    if learned_type and learned_type not in ("unknown", "generic", "web-device", "linux-web-device"):
-        learned_candidate = _suggestion_candidate_type(learned_type)
-        conflicts_with_direct = (
-            direct_best_type and
-            direct_best_score >= 35 and
-            _candidate_family(learned_candidate) != _candidate_family(direct_best_type)
-        )
-        if not conflicts_with_direct or evidence_match_kind == "mac":
-            learned_points = {"high": 26, "medium": 18, "low": 10}.get(learned_confidence, 0)
-            learned_points += min(max(learned_count - 1, 0) * 4, 16)
-            learned_points = int(round(learned_points * evidence_match_weight))
-            if learned_points > 0:
-                _add_type_candidate(
-                    candidates,
-                    learned_candidate,
-                    learned_points,
-                    f"Repeated learned evidence previously suggested {learned_candidate} across {learned_count or 1} observation(s)",
-                )
-
-    guessed_types = ((evidence_record or {}).get("history") or {}).get("guessed_types") or {}
-    for candidate_type, data in guessed_types.items():
-        if not isinstance(data, dict):
-            continue
-        guess_count = int(data.get("count", 0) or 0)
-        if guess_count >= 2:
-            guessed_candidate = _suggestion_candidate_type(candidate_type)
+    if allow_learned:
+        learned = evidence_record.get("learned") if isinstance(evidence_record, dict) else {}
+        learned_type = normalize_platform_name((learned or {}).get("suggested_type"))
+        learned_confidence = ((learned or {}).get("confidence") or "").strip().lower()
+        learned_count = int((learned or {}).get("observation_count", 0) or 0)
+        if learned_type and learned_type not in ("unknown", "generic", "web-device", "linux-web-device"):
+            learned_candidate = _suggestion_candidate_type(learned_type)
             conflicts_with_direct = (
                 direct_best_type and
                 direct_best_score >= 35 and
-                _candidate_family(guessed_candidate) != _candidate_family(direct_best_type)
+                _candidate_family(learned_candidate) != _candidate_family(direct_best_type)
             )
-            if conflicts_with_direct and evidence_match_kind != "mac":
-                continue
-            guessed_points = int(round(min(guess_count * 4, 12) * evidence_match_weight))
-            if guessed_points > 0:
-                _add_type_candidate(
-                    candidates,
-                    guessed_candidate,
-                    guessed_points,
-                    f"Repeated guessed type {guessed_candidate} seen across {guess_count} observations",
-                )
+            if not conflicts_with_direct or evidence_match_kind == "mac":
+                learned_points = {"high": 26, "medium": 18, "low": 10}.get(learned_confidence, 0)
+                learned_points += min(max(learned_count - 1, 0) * 4, 16)
+                learned_points = int(round(learned_points * evidence_match_weight))
+                if learned_points > 0:
+                    _add_type_candidate(
+                        candidates,
+                        learned_candidate,
+                        learned_points,
+                        f"Repeated learned evidence previously suggested {learned_candidate} across {learned_count or 1} observation(s)",
+                    )
 
-    signal_candidates = ((evidence_record or {}).get("history") or {}).get("signal_candidates") or {}
-    dominant_signal = None
-    dominant_count = 0
-    conflicting_count = 0
-    for candidate_type, data in signal_candidates.items():
-        if not isinstance(data, dict):
-            continue
-        count = int(data.get("count", 0) or 0)
-        if count > dominant_count:
-            conflicting_count = dominant_count
-            dominant_signal = candidate_type
-            dominant_count = count
-        elif count > conflicting_count:
-            conflicting_count = count
-    if dominant_signal and dominant_count >= 2 and dominant_count > conflicting_count:
-        conflicts_with_direct = (
-            direct_best_type and
-            direct_best_score >= 35 and
-            _candidate_family(dominant_signal) != _candidate_family(direct_best_type)
-        )
-        if not conflicts_with_direct or evidence_match_kind == "mac":
-            signal_points = int(round(min(12 + ((dominant_count - 2) * 4), 20) * evidence_match_weight))
-            if signal_points > 0:
-                _add_type_candidate(
-                    candidates,
-                    dominant_signal,
-                    signal_points,
-                    f"Repeated stored evidence pointed to {dominant_signal} across {dominant_count} observations",
+        guessed_types = ((evidence_record or {}).get("history") or {}).get("guessed_types") or {}
+        for candidate_type, data in guessed_types.items():
+            if not isinstance(data, dict):
+                continue
+            guess_count = int(data.get("count", 0) or 0)
+            if guess_count >= 2:
+                guessed_candidate = _suggestion_candidate_type(candidate_type)
+                conflicts_with_direct = (
+                    direct_best_type and
+                    direct_best_score >= 35 and
+                    _candidate_family(guessed_candidate) != _candidate_family(direct_best_type)
                 )
+                if conflicts_with_direct and evidence_match_kind != "mac":
+                    continue
+                guessed_points = int(round(min(guess_count * 4, 12) * evidence_match_weight))
+                if guessed_points > 0:
+                    _add_type_candidate(
+                        candidates,
+                        guessed_candidate,
+                        guessed_points,
+                        f"Repeated guessed type {guessed_candidate} seen across {guess_count} observations",
+                    )
+
+        signal_candidates = ((evidence_record or {}).get("history") or {}).get("signal_candidates") or {}
+        dominant_signal = None
+        dominant_count = 0
+        conflicting_count = 0
+        for candidate_type, data in signal_candidates.items():
+            if not isinstance(data, dict):
+                continue
+            count = int(data.get("count", 0) or 0)
+            if count > dominant_count:
+                conflicting_count = dominant_count
+                dominant_signal = candidate_type
+                dominant_count = count
+            elif count > conflicting_count:
+                conflicting_count = count
+        if dominant_signal and dominant_count >= 2 and dominant_count > conflicting_count:
+            conflicts_with_direct = (
+                direct_best_type and
+                direct_best_score >= 35 and
+                _candidate_family(dominant_signal) != _candidate_family(direct_best_type)
+            )
+            if not conflicts_with_direct or evidence_match_kind == "mac":
+                signal_points = int(round(min(12 + ((dominant_count - 2) * 4), 20) * evidence_match_weight))
+                if signal_points > 0:
+                    _add_type_candidate(
+                        candidates,
+                        dominant_signal,
+                        signal_points,
+                        f"Repeated stored evidence pointed to {dominant_signal} across {dominant_count} observations",
+                    )
 
     if 22 in ports and 80 in ports and 443 in ports:
         for candidate_type in list(candidates.keys()):
