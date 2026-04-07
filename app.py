@@ -843,7 +843,11 @@ def build_runtime_system_groups(devices):
     def normalized_effective_type(device):
         if not isinstance(device, dict):
             return ""
-        return normalize_platform_name(device.get("effective_type") or device.get("_resolved_type"))
+        return normalize_platform_name(
+            device.get("_resolved_type")
+            or device.get("effective_type")
+            or device.get("type")
+        )
 
     def normalized_vlan(device):
         if not isinstance(device, dict):
