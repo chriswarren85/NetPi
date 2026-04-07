@@ -29,3 +29,13 @@
   - Topology classification now resolves group membership by IP first and device name fallback when classifying validation rows
   - Added group lookup maps for ip->system_id and name->system_id and applied fallback to from_device/to_device when from_ip/to_ip are missing
   - Preserved topology_results schema and all existing validate_systems response fields without persistence changes
+
+### Last Update
+- Feature: Stage 10.2 classify group-scoped skipped topology rows as intra_group
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a narrow topology fallback so unresolved skipped rows with group_relevance source/target/both are classified as intra_group inside their current system_group_results scope
+  - Endpoint/device-name membership lookup remains first priority; fallback only runs when endpoint membership is unresolved
+  - Preserved topology_results schema and all existing validate_systems fields without persistence changes

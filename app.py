@@ -1112,9 +1112,13 @@ def build_system_topology_results(system_groups, system_group_results):
             to_name = result.get("to_device")
             from_group = resolve_group_id(from_ip, from_name)
             to_group = resolve_group_id(to_ip, to_name)
+            row_status = (result.get("status") or "").strip().lower()
+            group_relevance = (result.get("group_relevance") or "").strip().lower()
 
             if from_group and to_group:
                 scope = "intra_group" if from_group == to_group == system_id else "cross_group"
+            elif row_status == "skipped" and group_relevance in {"source", "target", "both", "source_and_target"}:
+                scope = "intra_group"
             else:
                 scope = "unassigned"
 
