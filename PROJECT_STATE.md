@@ -892,3 +892,23 @@ ame as the saved label
   - Added controlled promotion for weak device types using existing suggestion scoring with a confidence threshold of 60
   - Promotions are limited to safe weak-to-strong upgrades and do not overwrite strong existing types
   - Added a backend apply_suggestions endpoint with traceable updated and skipped results without changing existing validation response shapes
+### Last Update
+- Feature: Stage 6 expanded AV detection for unknown web devices
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added safe appliance-style detection for HTTP titles that explicitly identify a Video Wall Splicer
+  - Reused existing title/server evidence without inventing weak vendor matches for generic embedded web appliances
+  - Preserved existing Biamp and Crestron suggestion behavior while keeping openresty-only cases conservative
+### Last Update
+- Feature: Stage 6.5 AV detection library expansion
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added grouped AV detection helpers for Q-SYS, Biamp, Crestron, Barco, and generic video-processing devices using existing title, keyword, hostname, and port evidence
+  - Strengthened subtype classification for qsys-core, qsys-touchpanel, qsys-nv21, qsys-nv32, biamp-tesira, crestron_control, crestron_touchpanel, and video-wall-processor
+  - Preserved low false-positive constraints so weak embedded web evidence like openresty-only paths does not create reckless vendor-specific matches

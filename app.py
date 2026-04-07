@@ -1572,6 +1572,7 @@ def normalize_platform_name(value):
         "q sys": "qsys",
         "qsc": "qsys",
         "tesira": "biamp",
+        "video-wall-splicer": "video-wall-processor",
     }
     return aliases.get(s, s)
 
@@ -1660,6 +1661,8 @@ def _candidate_family(type_name):
         return "biamp"
     if normalized.startswith("barco"):
         return "barco"
+    if normalized.startswith("video-wall"):
+        return "video-wall"
     return normalized
 
 
@@ -1667,7 +1670,7 @@ def _type_specificity(type_name):
     normalized = (type_name or "").strip().lower()
     if normalized in ("", "generic", "unknown", "web-device", "linux-web-device"):
         return 0
-    if normalized in ("qsys", "crestron", "biamp", "barco-device"):
+    if normalized in ("qsys", "crestron", "biamp", "barco-device", "video-wall-processor"):
         return 1
     if normalized in ("qsys-core", "qsys-touchpanel", "qsys-nv", "crestron_control", "crestron_touchpanel", "crestron_uc", "biamp-tesira"):
         return 2
@@ -1707,6 +1710,100 @@ def _ranked_type_candidates(candidates):
         key=lambda item: (item["score"], len(item["reasons"])),
         reverse=True,
     )
+
+
+def _contains_any_token(text, tokens):
+    return any(token in (text or "") for token in (tokens or []))
+
+
+def _is_video_processing_match(text):
+    text = (text or "").lower()
+    return (
+        "video wall splicer" in text or
+        "video processor" in text or
+        "wall processor" in text or
+        "led controller" in text or
+        "wall controller" in text or
+        ("video wall" in text and _contains_any_token(text, ("splicer", "processor", "controller", "led")))
+    )
+
+
+def _add_grouped_av_candidates(candidates, text, stable_hostname, hostname_text, ports, fingerprint_platform):
+    qsys_tokens = ("q-sys", "qsys", "qsc")
+    qsys_touch_tokens = ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")
+    qsys_nv21_tokens = ("nv-21", "nv21")
+    qsys_nv32_tokens = ("nv-32", "nv32", "nv-32-h", "nv32-h")
+    crestron_control_tokens = ("cp4", "mc4", "rmc4", "pro4")
+    crestron_touch_tokens = ("tsw", "tss", "touchpanel", "touch panel")
+    crestron_uc_tokens = ("uc-", "flex", "teams")
+
+    qsys_context = 1710 in ports or _contains_any_token(text, qsys_tokens)
+    if qsys_context:
+        if 1710 in ports:
+            _add_type_candidate(candidates, "qsys-core", 34, "Observed Q-SYS control port 1710")
+            _add_type_candidate(candidates, "qsys", 20, "Observed Q-SYS control port 1710")
+        if _contains_any_token(text, qsys_tokens):
+            _add_type_candidate(candidates, "qsys", 16, "Hostname or HTTP evidence referenced Q-SYS")
+        if "core" in text:
+            _add_type_candidate(candidates, "qsys-core", 20, "Hostname or HTTP evidence matched Q-SYS Core naming")
+            if fingerprint_platform == "qsys" or 1710 in ports:
+                _add_type_candidate(candidates, "qsys-core", 30, "Q-SYS Core naming was reinforced by control-port or fingerprint evidence")
+        if _contains_any_token(text, qsys_touch_tokens):
+            _add_type_candidate(candidates, "qsys-touchpanel", 28, "Hostname or HTTP evidence matched Q-SYS touchpanel naming")
+        if _contains_any_token(text, qsys_nv21_tokens):
+            _add_type_candidate(candidates, "qsys-nv21", 42, "Hostname or HTTP evidence matched Q-SYS NV-21 naming")
+            _add_type_candidate(candidates, "qsys-nv", 28, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+            _add_type_candidate(candidates, "qsys", 10, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+            if fingerprint_platform == "qsys":
+                _add_type_candidate(candidates, "qsys-nv21", 20, "Q-SYS NV-21 naming was reinforced by fingerprint evidence")
+        if _contains_any_token(text, qsys_nv32_tokens):
+            _add_type_candidate(candidates, "qsys-nv32", 42, "Hostname or HTTP evidence matched Q-SYS NV-32 naming")
+            _add_type_candidate(candidates, "qsys-nv", 28, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+            _add_type_candidate(candidates, "qsys", 10, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
+            if fingerprint_platform == "qsys":
+                _add_type_candidate(candidates, "qsys-nv32", 20, "Q-SYS NV-32 naming was reinforced by fingerprint evidence")
+
+    crestron_context = any(port in ports for port in (41794, 41795, 41796)) or "crestron" in text
+    if crestron_context:
+        if any(port in ports for port in (41794, 41795, 41796)):
+            _add_type_candidate(candidates, "crestron", 24, "Observed Crestron-like control ports 41794/41795/41796")
+        if "crestron" in text:
+            _add_type_candidate(candidates, "crestron", 16, "Hostname or HTTP evidence referenced Crestron")
+        if _contains_any_token(text, crestron_control_tokens):
+            _add_type_candidate(candidates, "crestron_control", 34, "Hostname pattern matched Crestron control processor naming")
+            if fingerprint_platform == "crestron" or any(port in ports for port in (41794, 41795, 41796)):
+                _add_type_candidate(candidates, "crestron_control", 32, "Crestron control naming was reinforced by live protocol evidence")
+        if _contains_any_token(text, crestron_touch_tokens):
+            _add_type_candidate(candidates, "crestron_touchpanel", 30, "Hostname or HTTP evidence matched Crestron touchpanel naming")
+        if _contains_any_token(text, crestron_uc_tokens):
+            _add_type_candidate(candidates, "crestron_uc", 26, "Hostname or HTTP evidence matched Crestron UC naming")
+
+    if _contains_any_token(text, ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp", 26, "Hostname or HTTP evidence referenced Biamp/Tesira")
+    if stable_hostname.startswith("biamp-"):
+        _add_type_candidate(candidates, "biamp-tesira", 44, "Hostname starts with BIAMP-")
+    elif _contains_any_token(stable_hostname, ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp-tesira", 36, "Hostname contains Biamp/Tesira marker")
+    elif "biamp-" in hostname_text:
+        _add_type_candidate(candidates, "biamp-tesira", 40, "Hostname starts with BIAMP-")
+    elif _contains_any_token(hostname_text, ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp-tesira", 34, "Hostname contains Biamp/Tesira marker")
+    if _contains_any_token(text, ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp-tesira", 24, "HTTP title/body evidence referenced Biamp/Tesira")
+    if (stable_hostname.startswith("biamp-") or "biamp-" in hostname_text) and _contains_any_token(text, ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp-tesira", 18, "BIAMP hostname was reinforced by Biamp/Tesira HTTP evidence")
+
+    if _contains_any_token(text, ("barco", "clickshare", "barco ctrl")):
+        _add_type_candidate(candidates, "barco-device", 24, "HTTP title/body evidence referenced Barco/ClickShare")
+    if _contains_any_token(stable_hostname, ("barco", "ctrl")):
+        _add_type_candidate(candidates, "barco-device", 16, "Hostname referenced Barco/CTRL")
+
+    if _is_video_processing_match(text) and (8080 in ports or 22 in ports or 80 in ports or 443 in ports):
+        _add_type_candidate(candidates, "video-wall-processor", 34, "HTTP title/body evidence matched video/wall/LED processing patterns")
+        if 8080 in ports:
+            _add_type_candidate(candidates, "video-wall-processor", 12, "Port 8080 reinforced video processing appliance pattern")
+        if 22 in ports:
+            _add_type_candidate(candidates, "video-wall-processor", 8, "SSH access reinforced video processing appliance pattern")
 
 
 def _resolve_evidence_record(device, validation=None):
@@ -1777,62 +1874,7 @@ def build_type_suggestion(device, validation=None):
     if vendor_guess and not weak_device_type(vendor_guess):
         _add_type_candidate(candidates, vendor_guess, 14, f"Vendor/OUI matched {vendor_guess}")
 
-    if 1710 in ports:
-        _add_type_candidate(candidates, "qsys-core", 34, "Observed Q-SYS control port 1710")
-        _add_type_candidate(candidates, "qsys", 20, "Observed Q-SYS control port 1710")
-
-    if any(port in ports for port in (41794, 41795, 41796)):
-        _add_type_candidate(candidates, "crestron", 24, "Observed Crestron-like control ports 41794/41795/41796")
-
-    if "crestron" in text:
-        _add_type_candidate(candidates, "crestron", 16, "Hostname or HTTP evidence referenced Crestron")
-    if any(token in text for token in ("cp4", "mc4", "rmc4", "pro4")):
-        _add_type_candidate(candidates, "crestron_control", 34, "Hostname pattern matched Crestron control processor naming")
-        if fingerprint_platform == "crestron" or any(port in ports for port in (41794, 41795, 41796)):
-            _add_type_candidate(candidates, "crestron_control", 32, "Crestron control naming was reinforced by live protocol evidence")
-    if any(token in text for token in ("tsw", "tss", "touchpanel", "touch panel")):
-        _add_type_candidate(candidates, "crestron_touchpanel", 30, "Hostname or HTTP evidence matched Crestron touchpanel naming")
-    if any(token in text for token in ("uc-", "flex", "teams")):
-        _add_type_candidate(candidates, "crestron_uc", 26, "Hostname or HTTP evidence matched Crestron UC naming")
-
-    if any(token in text for token in ("q-sys", "qsys", "qsc")):
-        _add_type_candidate(candidates, "qsys", 16, "Hostname or HTTP evidence referenced Q-SYS")
-    if "core" in text and any(token in text for token in ("q-sys", "qsys", "qsc")):
-        _add_type_candidate(candidates, "qsys-core", 20, "Hostname or HTTP evidence matched Q-SYS Core naming")
-        if fingerprint_platform == "qsys" or 1710 in ports:
-            _add_type_candidate(candidates, "qsys-core", 30, "Q-SYS Core naming was reinforced by control-port or fingerprint evidence")
-    if any(token in text for token in ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")):
-        _add_type_candidate(candidates, "qsys-touchpanel", 28, "Hostname or HTTP evidence matched Q-SYS touchpanel naming")
-    if any(token in text for token in ("nv-21", "nv21")):
-        _add_type_candidate(candidates, "qsys-nv21", 42, "Hostname or HTTP evidence matched Q-SYS NV-21 naming")
-        _add_type_candidate(candidates, "qsys-nv", 28, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
-        _add_type_candidate(candidates, "qsys", 10, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
-        if fingerprint_platform == "qsys":
-            _add_type_candidate(candidates, "qsys-nv21", 20, "Q-SYS NV-21 naming was reinforced by fingerprint evidence")
-    if any(token in text for token in ("nv-32", "nv32")):
-        _add_type_candidate(candidates, "qsys-nv32", 42, "Hostname or HTTP evidence matched Q-SYS NV-32 naming")
-        _add_type_candidate(candidates, "qsys-nv", 28, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
-        _add_type_candidate(candidates, "qsys", 10, "Hostname or HTTP evidence matched Q-SYS NV endpoint naming")
-        if fingerprint_platform == "qsys":
-            _add_type_candidate(candidates, "qsys-nv32", 20, "Q-SYS NV-32 naming was reinforced by fingerprint evidence")
-
-    if any(token in text for token in ("biamp", "tesira")):
-        _add_type_candidate(candidates, "biamp", 26, "Hostname or HTTP evidence referenced Biamp/Tesira")
-    if stable_hostname.startswith("biamp-"):
-        _add_type_candidate(candidates, "biamp-tesira", 44, "Hostname starts with BIAMP-")
-    elif "biamp" in stable_hostname or "tesira" in stable_hostname:
-        _add_type_candidate(candidates, "biamp-tesira", 36, "Hostname contains Biamp/Tesira marker")
-    elif "biamp-" in hostname_text:
-        _add_type_candidate(candidates, "biamp-tesira", 40, "Hostname starts with BIAMP-")
-    elif "biamp" in hostname_text or "tesira" in hostname_text:
-        _add_type_candidate(candidates, "biamp-tesira", 34, "Hostname contains Biamp/Tesira marker")
-    if any(token in text for token in ("biamp", "tesira")):
-        _add_type_candidate(candidates, "biamp-tesira", 24, "HTTP title/body evidence referenced Biamp/Tesira")
-
-    if any(token in text for token in ("barco", "clickshare", "barco ctrl")):
-        _add_type_candidate(candidates, "barco-device", 24, "HTTP title/body evidence referenced Barco/ClickShare")
-    if any(token in stable_hostname for token in ("barco", "ctrl")):
-        _add_type_candidate(candidates, "barco-device", 16, "Hostname referenced Barco/CTRL")
+    _add_grouped_av_candidates(candidates, text, stable_hostname, hostname_text, ports, fingerprint_platform)
 
     direct_ranked = _ranked_type_candidates(candidates)
     direct_best = direct_ranked[0] if direct_ranked else {}

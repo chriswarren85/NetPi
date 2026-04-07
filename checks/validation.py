@@ -557,20 +557,134 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
     }
 
 
+def _http_signal_blob(http_details):
+    http_details = http_details or {}
+    title_text = " ".join(str(v.get("title", "")) for v in http_details.values()).lower()
+    server_text = " ".join(str(v.get("server", "")) for v in http_details.values()).lower()
+    keyword_text = " ".join(
+        " ".join(str(keyword) for keyword in (value.get("keywords") or []))
+        for value in http_details.values()
+    ).lower()
+    combined_text = " ".join((title_text, server_text, keyword_text)).strip()
+    return title_text, server_text, keyword_text, combined_text
+
+
+def _contains_any_token(text, tokens):
+    return any(token in text for token in (tokens or []))
+
+
+def _is_video_processing_match(text):
+    text = (text or "").lower()
+    return (
+        "video wall splicer" in text or
+        "video processor" in text or
+        "wall processor" in text or
+        "led controller" in text or
+        "wall controller" in text or
+        ("video wall" in text and _contains_any_token(text, ("splicer", "processor", "controller", "led")))
+    )
+
+
+def _detect_av_http_platform(open_ports, http_details):
+    ports = set(open_ports or [])
+    title_text, server_text, keyword_text, combined_text = _http_signal_blob(http_details)
+
+    qsys_tokens = ("q-sys", "qsys", "qsc")
+    qsys_touch_tokens = ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")
+    qsys_nv21_tokens = ("nv-21", "nv21")
+    qsys_nv32_tokens = ("nv-32", "nv32", "nv-32-h", "nv32-h")
+    crestron_control_tokens = ("cp4", "mc4", "rmc4", "pro4")
+    crestron_touch_tokens = ("tsw", "tss", "touchpanel", "touch panel")
+    crestron_uc_tokens = ("uc-", "flex", "teams")
+    biamp_tokens = ("biamp", "tesira")
+    barco_tokens = ("barco", "clickshare", "barco ctrl")
+
+    qsys_context = 1710 in ports or _contains_any_token(combined_text, qsys_tokens)
+    if qsys_context:
+        reasons = []
+        if 1710 in ports:
+            reasons.append("port 1710 open")
+        if _contains_any_token(combined_text, qsys_tokens):
+            reasons.append("http evidence suggests q-sys")
+        if _contains_any_token(combined_text, qsys_nv32_tokens):
+            reasons.append("model token suggests qsys nv32")
+            return {"platform": "qsys-nv32", "confidence": "high" if 1710 in ports else "medium", "reasons": reasons}
+        if _contains_any_token(combined_text, qsys_nv21_tokens):
+            reasons.append("model token suggests qsys nv21")
+            return {"platform": "qsys-nv21", "confidence": "high" if 1710 in ports else "medium", "reasons": reasons}
+        if _contains_any_token(combined_text, qsys_touch_tokens):
+            reasons.append("model token suggests qsys touchpanel")
+            return {"platform": "qsys-touchpanel", "confidence": "medium", "reasons": reasons}
+        if "core" in combined_text:
+            reasons.append("http evidence suggests qsys core")
+            return {"platform": "qsys-core", "confidence": "high" if 1710 in ports else "medium", "reasons": reasons}
+        return {"platform": "qsys", "confidence": "high" if 1710 in ports else "medium", "reasons": reasons}
+
+    crestron_context = any(port in ports for port in (41794, 41795, 41796)) or "crestron" in combined_text
+    if crestron_context:
+        reasons = []
+        if any(port in ports for port in (41794, 41795, 41796)):
+            reasons.append("crestron control ports open")
+        if "crestron" in combined_text:
+            reasons.append("http evidence suggests crestron")
+        if _contains_any_token(combined_text, crestron_control_tokens):
+            reasons.append("model token suggests crestron control processor")
+            return {"platform": "crestron_control", "confidence": "medium", "reasons": reasons}
+        if _contains_any_token(combined_text, crestron_touch_tokens):
+            reasons.append("model token suggests crestron touchpanel")
+            return {"platform": "crestron_touchpanel", "confidence": "medium", "reasons": reasons}
+        if _contains_any_token(combined_text, crestron_uc_tokens):
+            reasons.append("model token suggests crestron uc")
+            return {"platform": "crestron_uc", "confidence": "medium", "reasons": reasons}
+        return {"platform": "crestron", "confidence": "medium", "reasons": reasons}
+
+    if _contains_any_token(combined_text, biamp_tokens):
+        return {
+            "platform": "biamp",
+            "confidence": "medium",
+            "reasons": ["http evidence suggests biamp/tesira"],
+        }
+
+    if _contains_any_token(combined_text, barco_tokens):
+        return {
+            "platform": "barco",
+            "confidence": "medium",
+            "reasons": ["http evidence suggests barco/clickshare"],
+        }
+
+    if _is_video_processing_match(title_text) and (8080 in ports or 22 in ports or 80 in ports or 443 in ports):
+        reasons = ["http title suggests video processing device"]
+        if 8080 in ports:
+            reasons.append("port 8080 open")
+        if 22 in ports:
+            reasons.append("ssh open")
+        return {
+            "platform": "video-wall-processor",
+            "confidence": "high" if 8080 in ports else "medium",
+            "reasons": reasons,
+        }
+
+    return None
+
+
 
 
 def infer_observed_platform(open_ports, http_details):
     ports = set(open_ports or [])
-    title_text = " ".join(str(v.get("title", "")) for v in (http_details or {}).values()).lower()
-    server_text = " ".join(str(v.get("server", "")) for v in (http_details or {}).values()).lower()
-    keyword_text = " ".join(
-        " ".join(str(keyword) for keyword in (value.get("keywords") or []))
-        for value in (http_details or {}).values()
-    ).lower()
+    title_text, server_text, keyword_text, _ = _http_signal_blob(http_details)
     reasons = []
 
     if 22 in ports:
         reasons.append("ssh open")
+
+    av_platform = _detect_av_http_platform(open_ports, http_details)
+    if av_platform:
+        merged_reasons = list(dict.fromkeys(reasons + list(av_platform.get("reasons") or [])))
+        return {
+            "platform": av_platform.get("platform", "unknown"),
+            "confidence": av_platform.get("confidence", "low"),
+            "reasons": merged_reasons,
+        }
 
     if "pi-hole" in title_text or "pi-hole" in keyword_text:
         reasons.append("pi-hole title observed")
@@ -612,28 +726,14 @@ def infer_observed_platform(open_ports, http_details):
 
 def infer_fingerprint(normalized_type, open_ports, http_details):
     ports = set(open_ports or [])
-    title_text = " ".join(str(v.get("title", "")) for v in (http_details or {}).values()).lower()
-    server_text = " ".join(str(v.get("server", "")) for v in (http_details or {}).values()).lower()
-    keyword_text = " ".join(
-        " ".join(str(keyword) for keyword in (value.get("keywords") or []))
-        for value in (http_details or {}).values()
-    ).lower()
-    reasons = []
-
-    # Q-SYS
-    if 1710 in ports or "q-sys" in title_text or "qsys" in title_text or "q-sys" in keyword_text or "qsys" in keyword_text:
-        if 1710 in ports:
-            reasons.append("port 1710 open")
-        if "q-sys" in title_text or "qsys" in title_text or "q-sys" in keyword_text or "qsys" in keyword_text:
-            reasons.append("http title suggests q-sys")
-        return {
-            "platform": "qsys",
-            "confidence": "high" if 1710 in ports else "medium",
-            "reasons": reasons
-        }
+    title_text, server_text, _, _ = _http_signal_blob(http_details)
+    av_platform = _detect_av_http_platform(open_ports, http_details)
+    if av_platform:
+        return av_platform
 
     # Dante
     if 8700 in ports or 8800 in ports or "dante" in title_text:
+        reasons = []
         if 8700 in ports:
             reasons.append("port 8700 open")
         if 8800 in ports:
@@ -648,64 +748,16 @@ def infer_fingerprint(normalized_type, open_ports, http_details):
 
     # NVX
     if "dm nvx" in title_text or " nvx" in f" {title_text}" or title_text.startswith("nvx"):
-        reasons.append("http title suggests dm nvx")
+        reasons = ["http title suggests dm nvx"]
         return {
             "platform": "nvx",
             "confidence": "medium",
             "reasons": reasons
         }
 
-    # Crestron
-    if "crestron" in title_text or "crestron" in server_text or "crestron" in keyword_text:
-        if "crestron" in title_text:
-            reasons.append("http title suggests crestron")
-        if "crestron" in server_text:
-            reasons.append("server header suggests crestron")
-        if "crestron" in keyword_text and "http body keywords suggest crestron" not in reasons:
-            reasons.append("http body keywords suggest crestron")
-        return {
-            "platform": "crestron",
-            "confidence": "medium",
-            "reasons": reasons
-        }
-
-    # Biamp / Tesira
-    if (
-        "tesira" in title_text or "biamp" in title_text or
-        "tesira" in server_text or "biamp" in server_text or
-        "tesira" in keyword_text or "biamp" in keyword_text
-    ):
-        if "tesira" in title_text or "biamp" in title_text:
-            reasons.append("http title suggests biamp/tesira")
-        if "tesira" in server_text or "biamp" in server_text:
-            reasons.append("server header suggests biamp/tesira")
-        if ("tesira" in keyword_text or "biamp" in keyword_text) and "http body keywords suggest biamp/tesira" not in reasons:
-            reasons.append("http body keywords suggest biamp/tesira")
-        return {
-            "platform": "biamp",
-            "confidence": "medium",
-            "reasons": reasons
-        }
-
-    # Barco / ClickShare / Barco CTRL
-    if (
-        "barco" in title_text or "clickshare" in title_text or "barco ctrl" in title_text or
-        "barco" in server_text or "clickshare" in keyword_text or "barco" in keyword_text or "barco ctrl" in keyword_text
-    ):
-        if "barco" in title_text or "clickshare" in title_text or "barco ctrl" in title_text:
-            reasons.append("http title suggests barco")
-        if "barco" in server_text:
-            reasons.append("server header suggests barco")
-        if any(token in keyword_text for token in ("barco", "clickshare", "barco ctrl")):
-            reasons.append("http body keywords suggest barco")
-        return {
-            "platform": "barco",
-            "confidence": "medium",
-            "reasons": reasons
-        }
-
     # Extron
     if "extron" in title_text or "extron" in server_text:
+        reasons = []
         if "extron" in title_text:
             reasons.append("http title suggests extron")
         if "extron" in server_text:
@@ -718,6 +770,7 @@ def infer_fingerprint(normalized_type, open_ports, http_details):
 
     # BrightSign
     if "brightsign" in title_text or "brightsign" in server_text:
+        reasons = []
         if "brightsign" in title_text:
             reasons.append("http title suggests brightsign")
         if "brightsign" in server_text:
@@ -770,7 +823,7 @@ def run_validation(device):
                 pass
 
     profile = AV_PORT_PROFILES.get(normalized_type, AV_PORT_PROFILES.get("av_general"))
-    ports_to_scan = sorted(set((profile or {}).get("ports", COMMON_PORTS) + AV_FINGERPRINT_PORTS))
+    ports_to_scan = sorted(set((profile or {}).get("ports", COMMON_PORTS) + AV_FINGERPRINT_PORTS + [8080]))
 
     if ip:
         for port in ports_to_scan:
