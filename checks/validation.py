@@ -2,6 +2,7 @@ import subprocess
 import socket
 import time
 import ssl
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from checks.connectivity_matrix import get_connectivity_rules, format_ports_for_display
 
@@ -428,7 +429,6 @@ def _has_validation_evidence(validation):
 def http_probe(ip, port):
     try:
         import http.client
-        import re
 
         is_https = port in (443, 8443)
         conn_class = http.client.HTTPSConnection if is_https else http.client.HTTPConnection
@@ -444,7 +444,7 @@ def http_probe(ip, port):
         conn.request("GET", "/", headers={"Host": ip, "User-Agent": "NetPi/3.0"})
         resp = conn.getresponse()
         status = resp.status
-        body = resp.read(1024).decode(errors="ignore")
+        body = resp.read(4096).decode(errors="ignore")
         conn.close()
 
         title = ""
@@ -455,7 +455,7 @@ def http_probe(ip, port):
         payload = {"status_code": status}
         server = resp.getheader("Server", "")
         if server:
-            payload["server"] = server
+            payload["server"] = " ".join(str(server).split())[:160]
         headers = {}
         for key, value in resp.getheaders():
             if not key:
@@ -468,12 +468,42 @@ def http_probe(ip, port):
             payload["headers"] = headers
         if title:
             payload["title"] = title
+        keyword_blob = " ".join([
+            title,
+            payload.get("server", ""),
+            body.lower(),
+        ]).lower()
+        keyword_matches = []
+        for keyword in ("biamp", "tesira", "barco", "clickshare", "barco ctrl", "crestron", "q-sys", "qsys", "qsc"):
+            if keyword in keyword_blob and keyword not in keyword_matches:
+                keyword_matches.append(keyword)
+        if keyword_matches:
+            payload["keywords"] = keyword_matches
         return payload
     except Exception:
         return None
 
 
-def build_validation_evidence(device, normalized_type, open_ports, service_map, http_details, fingerprint):
+def ssh_probe_banner(ip, port=22):
+    sock = None
+    try:
+        sock = socket.create_connection((ip, int(port)), timeout=0.75)
+        sock.settimeout(0.75)
+        banner = sock.recv(256).decode(errors="ignore").strip()
+        if banner:
+            return " ".join(banner.split())[:160]
+    except Exception:
+        return ""
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+    return ""
+
+
+def build_validation_evidence(device, normalized_type, open_ports, service_map, http_details, fingerprint, ssh_banner=""):
     vendor = (device.get("vendor") or "").strip()
     mac = (device.get("mac") or "").strip()
     observed_ports = sorted(int(port) for port in (open_ports or []))
@@ -482,6 +512,7 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
         "title": "",
         "server": "",
         "headers": {},
+        "keywords": [],
     }
 
     preferred_http = None
@@ -498,6 +529,7 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
         http_summary["title"] = preferred_http.get("title", "") or ""
         http_summary["server"] = preferred_http.get("server", "") or ""
         http_summary["headers"] = preferred_http.get("headers", {}) or {}
+        http_summary["keywords"] = list(preferred_http.get("keywords", []) or [])
 
     services = []
     for port in observed_ports:
@@ -513,6 +545,9 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
         "vendor": vendor,
         "mac": mac,
         "services": services,
+        "ssh": {
+            "banner": ssh_banner or "",
+        },
         "fingerprint": {
             "platform": fingerprint.get("platform", ""),
             "confidence": fingerprint.get("confidence", ""),
@@ -528,12 +563,16 @@ def infer_observed_platform(open_ports, http_details):
     ports = set(open_ports or [])
     title_text = " ".join(str(v.get("title", "")) for v in (http_details or {}).values()).lower()
     server_text = " ".join(str(v.get("server", "")) for v in (http_details or {}).values()).lower()
+    keyword_text = " ".join(
+        " ".join(str(keyword) for keyword in (value.get("keywords") or []))
+        for value in (http_details or {}).values()
+    ).lower()
     reasons = []
 
     if 22 in ports:
         reasons.append("ssh open")
 
-    if "pi-hole" in title_text:
+    if "pi-hole" in title_text or "pi-hole" in keyword_text:
         reasons.append("pi-hole title observed")
         return {
             "platform": "pi-hole",
@@ -575,13 +614,17 @@ def infer_fingerprint(normalized_type, open_ports, http_details):
     ports = set(open_ports or [])
     title_text = " ".join(str(v.get("title", "")) for v in (http_details or {}).values()).lower()
     server_text = " ".join(str(v.get("server", "")) for v in (http_details or {}).values()).lower()
+    keyword_text = " ".join(
+        " ".join(str(keyword) for keyword in (value.get("keywords") or []))
+        for value in (http_details or {}).values()
+    ).lower()
     reasons = []
 
     # Q-SYS
-    if 1710 in ports or "q-sys" in title_text or "qsys" in title_text:
+    if 1710 in ports or "q-sys" in title_text or "qsys" in title_text or "q-sys" in keyword_text or "qsys" in keyword_text:
         if 1710 in ports:
             reasons.append("port 1710 open")
-        if "q-sys" in title_text or "qsys" in title_text:
+        if "q-sys" in title_text or "qsys" in title_text or "q-sys" in keyword_text or "qsys" in keyword_text:
             reasons.append("http title suggests q-sys")
         return {
             "platform": "qsys",
@@ -613,11 +656,13 @@ def infer_fingerprint(normalized_type, open_ports, http_details):
         }
 
     # Crestron
-    if "crestron" in title_text or "crestron" in server_text:
+    if "crestron" in title_text or "crestron" in server_text or "crestron" in keyword_text:
         if "crestron" in title_text:
             reasons.append("http title suggests crestron")
         if "crestron" in server_text:
             reasons.append("server header suggests crestron")
+        if "crestron" in keyword_text and "http body keywords suggest crestron" not in reasons:
+            reasons.append("http body keywords suggest crestron")
         return {
             "platform": "crestron",
             "confidence": "medium",
@@ -625,13 +670,36 @@ def infer_fingerprint(normalized_type, open_ports, http_details):
         }
 
     # Biamp / Tesira
-    if "tesira" in title_text or "biamp" in title_text or "tesira" in server_text or "biamp" in server_text:
+    if (
+        "tesira" in title_text or "biamp" in title_text or
+        "tesira" in server_text or "biamp" in server_text or
+        "tesira" in keyword_text or "biamp" in keyword_text
+    ):
         if "tesira" in title_text or "biamp" in title_text:
             reasons.append("http title suggests biamp/tesira")
         if "tesira" in server_text or "biamp" in server_text:
             reasons.append("server header suggests biamp/tesira")
+        if ("tesira" in keyword_text or "biamp" in keyword_text) and "http body keywords suggest biamp/tesira" not in reasons:
+            reasons.append("http body keywords suggest biamp/tesira")
         return {
             "platform": "biamp",
+            "confidence": "medium",
+            "reasons": reasons
+        }
+
+    # Barco / ClickShare / Barco CTRL
+    if (
+        "barco" in title_text or "clickshare" in title_text or "barco ctrl" in title_text or
+        "barco" in server_text or "clickshare" in keyword_text or "barco" in keyword_text or "barco ctrl" in keyword_text
+    ):
+        if "barco" in title_text or "clickshare" in title_text or "barco ctrl" in title_text:
+            reasons.append("http title suggests barco")
+        if "barco" in server_text:
+            reasons.append("server header suggests barco")
+        if any(token in keyword_text for token in ("barco", "clickshare", "barco ctrl")):
+            reasons.append("http body keywords suggest barco")
+        return {
+            "platform": "barco",
             "confidence": "medium",
             "reasons": reasons
         }
@@ -724,6 +792,7 @@ def run_validation(device):
 
     service_map = {}
     http_details = {}
+    ssh_banner = ""
 
     for port in sorted(open_ports):
         service_map[str(port)] = SERVICE_MAP_LOOKUP.get(port, "unknown")
@@ -732,6 +801,8 @@ def run_validation(device):
             http_data = http_probe(ip, port)
             if http_data:
                 http_details[str(port)] = http_data
+        elif port == 22 and ip:
+            ssh_banner = ssh_probe_banner(ip, port)
 
     fingerprint = infer_fingerprint(normalized_type, open_ports, http_details)
     observed_platform = infer_observed_platform(open_ports, http_details)
@@ -759,6 +830,7 @@ def run_validation(device):
             service_map,
             http_details,
             fingerprint,
+            ssh_banner=ssh_banner,
         ),
         "results": results,
         "overall": summarize_results(results),

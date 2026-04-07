@@ -856,3 +856,21 @@ ame as the saved label
   - Added conservative confidence-scored type suggestions backed by current validation plus stored learned evidence
   - Surfaced suggested_type, confidence_score, confidence_label, and suggestion_reasons in safe backend responses without changing existing fields
   - Explicit saved device truth still outranks learned suggestions, while weak buckets like generic/web-device/linux-web-device can now surface stronger advisory suggestions
+### Last Update
+- Feature: Stage 4.5 AV vendor fingerprint enrichment
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added lightweight HTTP keyword and SSH banner evidence capture, reusing existing evidence objects without changing the conservative application model
+  - Added Biamp/Tesira and Barco fingerprint signals plus repeated-evidence reinforcement to improve AV suggestion coverage
+  - Preserved advisory-only suggestion behavior so explicit device truth still wins and weak devices do not get unsafe type upgrades
+### Last Update
+- Feature: Stage 4.5a Biamp hostname scoring tune
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Tuned Biamp hostname scoring so clear BIAMP-* devices can surface advisory biamp-tesira suggestions
+  - Preserved conservative behavior for generic web and linux-web-device fingerprints without vendor markers

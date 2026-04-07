@@ -804,6 +804,7 @@ def _build_device_observation(device, *, source="", result=None, extra=None):
     fingerprint = result.get("fingerprint") if isinstance(result.get("fingerprint"), dict) else {}
     observed_platform = result.get("observed_platform") if isinstance(result.get("observed_platform"), dict) else {}
     http_summary = evidence.get("http") if isinstance(evidence.get("http"), dict) else {}
+    ssh_summary = evidence.get("ssh") if isinstance(evidence.get("ssh"), dict) else {}
 
     stable_hostname = ""
     for candidate in (
@@ -832,6 +833,8 @@ def _build_device_observation(device, *, source="", result=None, extra=None):
         "open_ports": [int(port) for port in open_ports if str(port).isdigit()],
         "http_title": (http_summary.get("title") or extra.get("http_title") or "").strip(),
         "http_server": (http_summary.get("server") or extra.get("http_server") or "").strip(),
+        "http_keywords": [str(item).strip().lower() for item in (http_summary.get("keywords") or extra.get("http_keywords") or []) if str(item).strip()],
+        "ssh_banner": (ssh_summary.get("banner") or extra.get("ssh_banner") or "").strip(),
         "validation_fingerprint_platform": normalize_platform_name(fingerprint.get("platform")),
         "validation_fingerprint_confidence": (fingerprint.get("confidence") or "").strip().lower(),
         "observed_platform": normalize_platform_name(observed_platform.get("platform")),
@@ -880,6 +883,10 @@ def _merge_device_evidence_record(existing, observation, identity_key, identity_
     )
     history["vendors"] = _merge_unique_strings(history.get("vendors") or [], observation.get("vendor"))
     history["open_ports"] = _merge_unique_ports(history.get("open_ports") or [], observation.get("open_ports"))
+    history["http_titles"] = _merge_unique_strings(history.get("http_titles") or [], observation.get("http_title"))
+    history["http_servers"] = _merge_unique_strings(history.get("http_servers") or [], observation.get("http_server"))
+    history["http_keywords"] = _merge_unique_strings(history.get("http_keywords") or [], *(observation.get("http_keywords") or []))
+    history["ssh_banners"] = _merge_unique_strings(history.get("ssh_banners") or [], observation.get("ssh_banner"))
 
     guessed_types = copy.deepcopy(history.get("guessed_types") or {})
     if observation.get("guessed_type"):
@@ -948,6 +955,46 @@ def _merge_device_evidence_record(existing, observation, identity_key, identity_
             source=source,
             reasons=["observed guessed_type"],
         )
+
+    signal_candidates = copy.deepcopy(history.get("signal_candidates") or {})
+    observation_text = " ".join([
+        str(observation.get("stable_hostname") or ""),
+        str(observation.get("hostname") or ""),
+        str(observation.get("reverse_dns") or ""),
+        str(observation.get("mdns_name") or ""),
+        str(observation.get("http_title") or ""),
+        str(observation.get("http_server") or ""),
+        " ".join(str(item) for item in (observation.get("http_keywords") or [])),
+        str(observation.get("ssh_banner") or ""),
+    ]).lower()
+    signal_defs = (
+        ("biamp-tesira", ("biamp-", " biamp", "tesira"), "medium", "vendor fingerprint signal"),
+        ("barco-device", ("barco", "clickshare", "barco ctrl"), "medium", "vendor fingerprint signal"),
+        ("qsys", ("q-sys", "qsys", "qsc"), "medium", "vendor fingerprint signal"),
+        ("crestron", ("crestron", "cp4", "mc4", "rmc4", "pro4", "tsw", "tss"), "medium", "vendor fingerprint signal"),
+    )
+    for candidate_type, tokens, strength, reason in signal_defs:
+        matched = False
+        for token in tokens:
+            token = str(token or "").lower()
+            if not token:
+                continue
+            if token.endswith("-") and (observation.get("stable_hostname") or "").lower().startswith(token):
+                matched = True
+                break
+            if token in observation_text:
+                matched = True
+                break
+        if matched:
+            _bump_count_map(
+                signal_candidates,
+                candidate_type,
+                strength=strength,
+                seen_at=seen_at,
+                source=source,
+                reasons=[reason],
+            )
+    history["signal_candidates"] = signal_candidates
 
     suggested_type, suggested_data = _strongest_candidate(learned_candidates)
     learned = copy.deepcopy(existing.get("learned") or {})
@@ -1353,12 +1400,19 @@ def _suggestion_port_set(validation):
     return ports
 
 
-def _suggestion_text_blob(device, validation):
+def _suggestion_text_blob(device, validation, evidence_record=None):
     http = validation.get("http") if isinstance(validation.get("http"), dict) else {}
     title_text = " ".join(str(v.get("title", "")) for v in http.values()).lower()
     server_text = " ".join(str(v.get("server", "")) for v in http.values()).lower()
+    keyword_text = " ".join(
+        " ".join(str(keyword or "") for keyword in (value.get("keywords") or []))
+        for value in http.values()
+    ).lower()
     evidence = validation.get("evidence") if isinstance(validation.get("evidence"), dict) else {}
     http_summary = evidence.get("http") if isinstance(evidence.get("http"), dict) else {}
+    ssh_summary = evidence.get("ssh") if isinstance(evidence.get("ssh"), dict) else {}
+    latest = (evidence_record or {}).get("latest") if isinstance((evidence_record or {}).get("latest"), dict) else {}
+    history = (evidence_record or {}).get("history") if isinstance((evidence_record or {}).get("history"), dict) else {}
     raw_parts = [
         device.get("name"),
         device.get("hostname"),
@@ -1367,8 +1421,21 @@ def _suggestion_text_blob(device, validation):
         device.get("type"),
         title_text,
         server_text,
+        keyword_text,
         http_summary.get("title"),
         http_summary.get("server"),
+        " ".join(str(item or "") for item in (http_summary.get("keywords") or [])),
+        ssh_summary.get("banner"),
+        latest.get("stable_hostname"),
+        latest.get("http_title"),
+        latest.get("http_server"),
+        " ".join(str(item or "") for item in (latest.get("http_keywords") or [])),
+        latest.get("ssh_banner"),
+        " ".join(str(item or "") for item in (history.get("hostnames") or [])),
+        " ".join(str(item or "") for item in (history.get("http_titles") or [])),
+        " ".join(str(item or "") for item in (history.get("http_servers") or [])),
+        " ".join(str(item or "") for item in (history.get("http_keywords") or [])),
+        " ".join(str(item or "") for item in (history.get("ssh_banners") or [])),
     ]
     return " ".join(str(part or "") for part in raw_parts).lower()
 
@@ -1381,8 +1448,10 @@ def _candidate_family(type_name):
         return "qsys"
     if normalized.startswith("crestron"):
         return "crestron"
-    if normalized in ("biamp", "tesira"):
+    if normalized in ("biamp", "tesira", "biamp-tesira"):
         return "biamp"
+    if normalized.startswith("barco"):
+        return "barco"
     return normalized
 
 
@@ -1390,9 +1459,9 @@ def _type_specificity(type_name):
     normalized = (type_name or "").strip().lower()
     if normalized in ("", "generic", "unknown", "web-device", "linux-web-device"):
         return 0
-    if normalized in ("qsys", "crestron", "biamp"):
+    if normalized in ("qsys", "crestron", "biamp", "barco-device"):
         return 1
-    if normalized in ("qsys-core", "qsys-touchpanel", "qsys-nv", "crestron_control", "crestron_touchpanel", "crestron_uc"):
+    if normalized in ("qsys-core", "qsys-touchpanel", "qsys-nv", "crestron_control", "crestron_touchpanel", "crestron_uc", "biamp-tesira"):
         return 2
     if normalized in ("qsys-nv21", "qsys-nv32"):
         return 3
@@ -1408,6 +1477,13 @@ def _add_type_candidate(candidates, candidate_type, points, reason):
     entry["score"] += int(points)
     if reason and reason not in entry["reasons"]:
         entry["reasons"].append(reason)
+
+
+def _suggestion_candidate_type(candidate_type):
+    candidate_type = normalize_platform_name(candidate_type)
+    if candidate_type == "barco":
+        return "barco-device"
+    return candidate_type
 
 
 def _resolve_evidence_record(device, validation=None):
@@ -1442,29 +1518,45 @@ def build_type_suggestion(device, validation=None):
     observed = validation.get("observed_platform") if isinstance(validation.get("observed_platform"), dict) else {}
     evidence_record = _resolve_evidence_record(device, validation)
     ports = _suggestion_port_set(validation)
-    text = _suggestion_text_blob(device, validation)
+    text = _suggestion_text_blob(device, validation, evidence_record=evidence_record)
     vendor_guess = guess_type_from_vendor(device.get("vendor", ""))
+    stable_hostname = _normalize_identity_hostname(
+        device.get("hostname") or
+        ((evidence_record or {}).get("latest") or {}).get("stable_hostname") or
+        ""
+    ).lower()
+    hostname_text = " ".join(
+        str(part or "")
+        for part in (
+            device.get("hostname"),
+            device.get("name"),
+            ((evidence_record or {}).get("latest") or {}).get("hostname"),
+            ((evidence_record or {}).get("latest") or {}).get("stable_hostname"),
+        )
+    ).lower()
 
     candidates = {}
 
     fingerprint_platform = normalize_platform_name(fingerprint.get("platform"))
     fingerprint_confidence = (fingerprint.get("confidence") or "").strip().lower()
     if fingerprint_platform and fingerprint_platform != "unknown":
+        fingerprint_candidate = _suggestion_candidate_type(fingerprint_platform)
         _add_type_candidate(
             candidates,
-            fingerprint_platform,
+            fingerprint_candidate,
             {"high": 58, "medium": 42, "low": 18}.get(fingerprint_confidence, 0),
-            f"Validation fingerprint suggested {fingerprint_platform} ({fingerprint_confidence or 'unknown'} confidence)",
+            f"Validation fingerprint suggested {fingerprint_candidate} ({fingerprint_confidence or 'unknown'} confidence)",
         )
 
     observed_platform = normalize_platform_name(observed.get("platform"))
     observed_confidence = (observed.get("confidence") or "").strip().lower()
     if observed_platform and observed_platform != "unknown":
+        observed_candidate = _suggestion_candidate_type(observed_platform)
         _add_type_candidate(
             candidates,
-            observed_platform,
+            observed_candidate,
             {"high": 34, "medium": 24, "low": 10}.get(observed_confidence, 0),
-            f"Observed platform suggested {observed_platform} ({observed_confidence or 'unknown'} confidence)",
+            f"Observed platform suggested {observed_candidate} ({observed_confidence or 'unknown'} confidence)",
         )
 
     if vendor_guess and not weak_device_type(vendor_guess):
@@ -1511,19 +1603,35 @@ def build_type_suggestion(device, validation=None):
 
     if any(token in text for token in ("biamp", "tesira")):
         _add_type_candidate(candidates, "biamp", 26, "Hostname or HTTP evidence referenced Biamp/Tesira")
+    if stable_hostname.startswith("biamp-"):
+        _add_type_candidate(candidates, "biamp-tesira", 44, "Hostname starts with BIAMP-")
+    elif "biamp" in stable_hostname or "tesira" in stable_hostname:
+        _add_type_candidate(candidates, "biamp-tesira", 36, "Hostname contains Biamp/Tesira marker")
+    elif "biamp-" in hostname_text:
+        _add_type_candidate(candidates, "biamp-tesira", 40, "Hostname starts with BIAMP-")
+    elif "biamp" in hostname_text or "tesira" in hostname_text:
+        _add_type_candidate(candidates, "biamp-tesira", 34, "Hostname contains Biamp/Tesira marker")
+    if any(token in text for token in ("biamp", "tesira")):
+        _add_type_candidate(candidates, "biamp-tesira", 24, "HTTP title/body evidence referenced Biamp/Tesira")
+
+    if any(token in text for token in ("barco", "clickshare", "barco ctrl")):
+        _add_type_candidate(candidates, "barco-device", 24, "HTTP title/body evidence referenced Barco/ClickShare")
+    if any(token in stable_hostname for token in ("barco", "ctrl")):
+        _add_type_candidate(candidates, "barco-device", 16, "Hostname referenced Barco/CTRL")
 
     learned = evidence_record.get("learned") if isinstance(evidence_record, dict) else {}
     learned_type = normalize_platform_name((learned or {}).get("suggested_type"))
     learned_confidence = ((learned or {}).get("confidence") or "").strip().lower()
     learned_count = int((learned or {}).get("observation_count", 0) or 0)
     if learned_type and learned_type not in ("unknown", "generic", "web-device", "linux-web-device"):
+        learned_candidate = _suggestion_candidate_type(learned_type)
         learned_points = {"high": 26, "medium": 18, "low": 10}.get(learned_confidence, 0)
         learned_points += min(max(learned_count - 1, 0) * 4, 16)
         _add_type_candidate(
             candidates,
-            learned_type,
+            learned_candidate,
             learned_points,
-            f"Repeated learned evidence previously suggested {learned_type} across {learned_count or 1} observation(s)",
+            f"Repeated learned evidence previously suggested {learned_candidate} across {learned_count or 1} observation(s)",
         )
 
     guessed_types = ((evidence_record or {}).get("history") or {}).get("guessed_types") or {}
@@ -1538,6 +1646,33 @@ def build_type_suggestion(device, validation=None):
                 min(guess_count * 4, 12),
                 f"Repeated guessed type {candidate_type} seen across {guess_count} observations",
             )
+
+    signal_candidates = ((evidence_record or {}).get("history") or {}).get("signal_candidates") or {}
+    dominant_signal = None
+    dominant_count = 0
+    conflicting_count = 0
+    for candidate_type, data in signal_candidates.items():
+        if not isinstance(data, dict):
+            continue
+        count = int(data.get("count", 0) or 0)
+        if count > dominant_count:
+            conflicting_count = dominant_count
+            dominant_signal = candidate_type
+            dominant_count = count
+        elif count > conflicting_count:
+            conflicting_count = count
+    if dominant_signal and dominant_count >= 2 and dominant_count > conflicting_count:
+        _add_type_candidate(
+            candidates,
+            dominant_signal,
+            min(12 + ((dominant_count - 2) * 4), 20),
+            f"Repeated stored evidence pointed to {dominant_signal} across {dominant_count} observations",
+        )
+
+    if 22 in ports and 80 in ports and 443 in ports:
+        for candidate_type in list(candidates.keys()):
+            if _candidate_family(candidate_type) in ("qsys", "crestron", "biamp", "barco"):
+                _add_type_candidate(candidates, candidate_type, 6, "Port pattern 22/80/443 reinforced existing AV control evidence")
 
     if not candidates:
         return {
