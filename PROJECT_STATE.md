@@ -912,3 +912,12 @@ ame as the saved label
   - Added grouped AV detection helpers for Q-SYS, Biamp, Crestron, Barco, and generic video-processing devices using existing title, keyword, hostname, and port evidence
   - Strengthened subtype classification for qsys-core, qsys-touchpanel, qsys-nv21, qsys-nv32, biamp-tesira, crestron_control, crestron_touchpanel, and video-wall-processor
   - Preserved low false-positive constraints so weak embedded web evidence like openresty-only paths does not create reckless vendor-specific matches
+### Last Update
+- Feature: Stage 7 self-learning fingerprint library
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a lightweight self-learning fingerprint library layer that derives reusable device-class patterns from repeated strong evidence already stored in device evidence history
+  - Direct hardcoded detection rules remain in place, while repeated evidence can now safely reinforce reusable classes such as video-wall-processor, Q-SYS family roles, Biamp/Tesira, and Crestron roles
+  - Preserved Stage 6.6 identity safety and conservative behavior so weak unrelated devices, including openresty-only web devices, do not inherit risky learned classes

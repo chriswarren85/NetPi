@@ -990,6 +990,137 @@ def _strongest_candidate(candidates):
     return best_type, best_data
 
 
+def _candidate_map_count(counter_map, candidate_types, *, min_strength="low"):
+    minimum_rank = _fingerprint_confidence_rank(min_strength)
+    total = 0
+    best_rank = -1
+    reasons = []
+
+    for candidate_type in (candidate_types or []):
+        bucket = (counter_map or {}).get(candidate_type) if isinstance(counter_map, dict) else None
+        if not isinstance(bucket, dict):
+            continue
+        strength = (bucket.get("best_strength") or "").strip().lower()
+        strength_rank = _fingerprint_confidence_rank(strength)
+        if strength_rank < minimum_rank:
+            continue
+        total += int(bucket.get("count", 0) or 0)
+        best_rank = max(best_rank, strength_rank)
+        reasons = _merge_unique_strings(reasons, *(bucket.get("reasons") or []))
+
+    return {
+        "count": total,
+        "best_strength": {3: "high", 2: "medium", 1: "low"}.get(best_rank, ""),
+        "reasons": reasons,
+    }
+
+
+def _history_text_blob(history):
+    history = history if isinstance(history, dict) else {}
+    return " ".join([
+        " ".join(str(item or "") for item in (history.get("hostnames") or [])),
+        " ".join(str(item or "") for item in (history.get("http_titles") or [])),
+        " ".join(str(item or "") for item in (history.get("http_servers") or [])),
+        " ".join(str(item or "") for item in (history.get("http_keywords") or [])),
+        " ".join(str(item or "") for item in (history.get("ssh_banners") or [])),
+        " ".join(str(item or "") for item in (history.get("vendors") or [])),
+    ]).lower()
+
+
+def _fingerprint_library_conflicts(candidate_type, candidate_count, learned_candidates):
+    candidate_family = _candidate_family(candidate_type)
+    for other_type, data in (learned_candidates or {}).items():
+        if _candidate_family(other_type) == candidate_family:
+            continue
+        if not isinstance(data, dict):
+            continue
+        if _fingerprint_confidence_rank((data.get("best_strength") or "").strip().lower()) < 2:
+            continue
+        if int(data.get("count", 0) or 0) >= int(candidate_count or 0):
+            return True
+    return False
+
+
+def _build_self_learning_fingerprint_library(history, learned_candidates):
+    history = history if isinstance(history, dict) else {}
+    learned_candidates = learned_candidates if isinstance(learned_candidates, dict) else {}
+    validation_platforms = history.get("validation_fingerprint_platforms") if isinstance(history.get("validation_fingerprint_platforms"), dict) else {}
+    observed_platforms = history.get("observed_platforms") if isinstance(history.get("observed_platforms"), dict) else {}
+    signal_candidates = history.get("signal_candidates") if isinstance(history.get("signal_candidates"), dict) else {}
+    ports = set(int(port) for port in (history.get("open_ports") or []) if str(port).isdigit())
+    text = _history_text_blob(history)
+    library_candidates = {}
+
+    def add_library_candidate(candidate_type, *, confidence="", count=0, reasons=None):
+        candidate_type = normalize_platform_name(candidate_type)
+        if not candidate_type or int(count or 0) < 2:
+            return
+        if candidate_type in ("unknown", "generic", "web-device", "linux-web-device"):
+            return
+        if _fingerprint_confidence_rank(confidence) < 2:
+            return
+        if _fingerprint_library_conflicts(candidate_type, count, learned_candidates):
+            return
+        library_candidates[candidate_type] = {
+            "count": int(count or 0),
+            "best_strength": confidence,
+            "reasons": _merge_unique_strings([], *(reasons or [])),
+        }
+
+    qsys_direct = _candidate_map_count(validation_platforms, ("qsys", "qsys-core", "qsys-touchpanel", "qsys-nv", "qsys-nv21", "qsys-nv32"), min_strength="medium")
+    qsys_observed = _candidate_map_count(observed_platforms, ("qsys", "qsys-core", "qsys-touchpanel", "qsys-nv", "qsys-nv21", "qsys-nv32"), min_strength="medium")
+    qsys_signals = _candidate_map_count(signal_candidates, ("qsys",), min_strength="medium")
+    qsys_context = qsys_direct["count"] >= 2 and (1710 in ports or _contains_any_token(text, ("q-sys", "qsys", "qsc")))
+    if qsys_context:
+        add_library_candidate("qsys", confidence=qsys_direct["best_strength"] or qsys_observed["best_strength"], count=max(qsys_direct["count"], qsys_observed["count"]), reasons=qsys_direct["reasons"] + qsys_observed["reasons"] + qsys_signals["reasons"] + ["repeated strong Q-SYS family evidence"])
+        if 1710 in ports and qsys_direct["count"] >= 2:
+            add_library_candidate("qsys-core", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated strong evidence plus Q-SYS control port 1710"])
+        if _contains_any_token(text, ("tsc-", "touchscreen controller", "qsys touch", "q-sys touch")) and qsys_direct["count"] >= 2:
+            add_library_candidate("qsys-touchpanel", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS touchpanel naming evidence"])
+        if _contains_any_token(text, ("nv-21", "nv21", "nv-32", "nv32", "nv-32-h", "nv32-h")) and qsys_direct["count"] >= 2:
+            add_library_candidate("qsys-nv", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS NV endpoint naming evidence"])
+            if _contains_any_token(text, ("nv-21", "nv21")):
+                add_library_candidate("qsys-nv21", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS NV-21 naming evidence"])
+            if _contains_any_token(text, ("nv-32", "nv32", "nv-32-h", "nv32-h")):
+                add_library_candidate("qsys-nv32", confidence=qsys_direct["best_strength"], count=qsys_direct["count"], reasons=qsys_direct["reasons"] + ["repeated Q-SYS NV-32 naming evidence"])
+
+    biamp_direct = _candidate_map_count(validation_platforms, ("biamp", "biamp-tesira"), min_strength="medium")
+    biamp_observed = _candidate_map_count(observed_platforms, ("biamp", "biamp-tesira"), min_strength="medium")
+    biamp_context = biamp_direct["count"] >= 2 and _contains_any_token(text, ("biamp", "tesira"))
+    if biamp_context:
+        add_library_candidate("biamp", confidence=biamp_direct["best_strength"] or biamp_observed["best_strength"], count=max(biamp_direct["count"], biamp_observed["count"]), reasons=biamp_direct["reasons"] + biamp_observed["reasons"] + ["repeated strong Biamp family evidence"])
+        if _contains_any_token(text, ("tesira", "biamp-")):
+            add_library_candidate("biamp-tesira", confidence=biamp_direct["best_strength"], count=biamp_direct["count"], reasons=biamp_direct["reasons"] + ["repeated Biamp/Tesira naming evidence"])
+
+    crestron_direct = _candidate_map_count(validation_platforms, ("crestron", "crestron_control", "crestron_touchpanel", "crestron_uc"), min_strength="medium")
+    crestron_observed = _candidate_map_count(observed_platforms, ("crestron", "crestron_control", "crestron_touchpanel", "crestron_uc"), min_strength="medium")
+    crestron_context = crestron_direct["count"] >= 2 and (any(port in ports for port in (41794, 41795, 41796)) or "crestron" in text)
+    if crestron_context:
+        add_library_candidate("crestron", confidence=crestron_direct["best_strength"] or crestron_observed["best_strength"], count=max(crestron_direct["count"], crestron_observed["count"]), reasons=crestron_direct["reasons"] + crestron_observed["reasons"] + ["repeated strong Crestron family evidence"])
+        if _contains_any_token(text, ("cp4", "mc4", "rmc4", "pro4")) or any(port in ports for port in (41794, 41795, 41796)):
+            add_library_candidate("crestron_control", confidence=crestron_direct["best_strength"], count=crestron_direct["count"], reasons=crestron_direct["reasons"] + ["repeated Crestron control processor evidence"])
+        if _contains_any_token(text, ("tsw", "tss", "touchpanel", "touch panel")):
+            add_library_candidate("crestron_touchpanel", confidence=crestron_direct["best_strength"], count=crestron_direct["count"], reasons=crestron_direct["reasons"] + ["repeated Crestron touchpanel evidence"])
+        if _contains_any_token(text, ("uc-", "flex", "teams")):
+            add_library_candidate("crestron_uc", confidence=crestron_direct["best_strength"], count=crestron_direct["count"], reasons=crestron_direct["reasons"] + ["repeated Crestron UC evidence"])
+
+    video_direct = _candidate_map_count(validation_platforms, ("video-wall-processor",), min_strength="medium")
+    video_observed = _candidate_map_count(observed_platforms, ("video-wall-processor",), min_strength="medium")
+    video_context = max(video_direct["count"], video_observed["count"]) >= 2 and _is_video_processing_match(text) and any(port in ports for port in (80, 443, 8080, 22))
+    if video_context:
+        add_library_candidate("video-wall-processor", confidence=video_direct["best_strength"] or video_observed["best_strength"], count=max(video_direct["count"], video_observed["count"]), reasons=video_direct["reasons"] + video_observed["reasons"] + ["repeated strong video-wall processor evidence"])
+
+    suggested_type, suggested_data = _strongest_candidate(library_candidates)
+    return {
+        "type_candidates": library_candidates,
+        "suggested_type": suggested_type,
+        "confidence": (suggested_data.get("best_strength") or "") if suggested_type else "",
+        "observation_count": int(suggested_data.get("count", 0) or 0) if suggested_type else 0,
+        "basis": copy.deepcopy(suggested_data.get("reasons") or []) if suggested_type else [],
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+    }
+
+
 def _build_device_observation(device, *, source="", result=None, extra=None):
     device = device or {}
     result = result or {}
@@ -1199,6 +1330,7 @@ def _merge_device_evidence_record(existing, observation, identity_key, identity_
     learned["confidence"] = (suggested_data.get("best_strength") or "low") if suggested_type else ""
     learned["observation_count"] = int(suggested_data.get("count", 0) or 0) if suggested_type else 0
     learned["basis"] = copy.deepcopy(suggested_data.get("reasons") or []) if suggested_type else []
+    learned["fingerprint_library"] = _build_self_learning_fingerprint_library(history, learned_candidates)
     learned["inventory_type"] = observation.get("inventory_type") or learned.get("inventory_type") or ""
     learned["will_override_inventory_type"] = False
     learned["note"] = "Conservative evidence only. Weak learned signals do not rewrite saved device truth."
@@ -1896,6 +2028,7 @@ def build_type_suggestion(device, validation=None):
 
     if allow_learned:
         learned = evidence_record.get("learned") if isinstance(evidence_record, dict) else {}
+        fingerprint_library = learned.get("fingerprint_library") if isinstance(learned.get("fingerprint_library"), dict) else {}
         learned_type = normalize_platform_name((learned or {}).get("suggested_type"))
         learned_confidence = ((learned or {}).get("confidence") or "").strip().lower()
         learned_count = int((learned or {}).get("observation_count", 0) or 0)
@@ -1916,6 +2049,28 @@ def build_type_suggestion(device, validation=None):
                         learned_candidate,
                         learned_points,
                         f"Repeated learned evidence previously suggested {learned_candidate} across {learned_count or 1} observation(s)",
+                    )
+
+        library_type = normalize_platform_name((fingerprint_library or {}).get("suggested_type"))
+        library_confidence = ((fingerprint_library or {}).get("confidence") or "").strip().lower()
+        library_count = int((fingerprint_library or {}).get("observation_count", 0) or 0)
+        if library_type and library_type not in ("unknown", "generic", "web-device", "linux-web-device"):
+            library_candidate = _suggestion_candidate_type(library_type)
+            conflicts_with_direct = (
+                direct_best_type and
+                direct_best_score >= 35 and
+                _candidate_family(library_candidate) != _candidate_family(direct_best_type)
+            )
+            if not conflicts_with_direct or evidence_match_kind == "mac":
+                library_points = {"high": 30, "medium": 22, "low": 0}.get(library_confidence, 0)
+                library_points += min(max(library_count - 2, 0) * 5, 15)
+                library_points = int(round(library_points * evidence_match_weight))
+                if library_points > 0:
+                    _add_type_candidate(
+                        candidates,
+                        library_candidate,
+                        library_points,
+                        f"Self-learning fingerprint library reinforced {library_candidate} from {library_count or 1} repeated strong observation(s)",
                     )
 
         guessed_types = ((evidence_record or {}).get("history") or {}).get("guessed_types") or {}
