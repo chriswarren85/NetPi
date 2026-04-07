@@ -4,6 +4,7 @@
 <div class="page-title">Devices</div>
 <div class="page-sub">Define devices to check during diagnostics</div>
 <div id="success" class="success-msg">Device list saved.</div>
+<div id="device-action-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
 <div class="panel">
   <div class="panel-header">Add device</div>
   <div class="panel-body">
@@ -87,7 +88,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
   <div class="panel-header">
     <span>Device list</span>
     <div style="display:flex;gap:8px">
-      <button class="btn" onclick="validateAllDevices()">✅ Validate All</button>
+      <button class="btn" id="validate-all-devices-btn" onclick="validateAllDevices()">✅ Validate All</button>
       <button class="btn" onclick="saveDevices()">Save changes</button>
     </div>
   </div>
@@ -126,7 +127,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
   <div class="panel-header">
     <span>System Checks</span>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="runSystemValidation()">🔗 Run System Validation</button>
+      <button class="btn btn-primary" id="run-system-validation-btn" onclick="runSystemValidation()">🔗 Run System Validation</button>
     </div>
   </div>
   <div class="panel-body">
@@ -156,9 +157,76 @@ let systemResults = [];
 let connectivityResults = [];
 let connectivitySummary = {};
 let connectivityNote = "";
+let deviceActionProgressTimer = null;
+let deviceActionProgressStartedAt = 0;
+let activeDeviceActions = {};
+
+function stopDeviceActionProgress(){
+  if(deviceActionProgressTimer){
+    clearInterval(deviceActionProgressTimer);
+    deviceActionProgressTimer = null;
+  }
+  deviceActionProgressStartedAt = 0;
+}
+
+function showDeviceActionStatus(message, tone){
+  const box = document.getElementById('device-action-status');
+  if(!box) return;
+  box.textContent = message || '';
+  box.style.display = message ? 'block' : 'none';
+
+  if(tone === 'error'){
+    box.style.background = '#3b0d0d';
+    box.style.color = '#fecaca';
+    box.style.borderColor = '#7f1d1d';
+    return;
+  }
+
+  if(tone === 'success'){
+    box.style.background = '#0f2f1f';
+    box.style.color = '#bbf7d0';
+    box.style.borderColor = '#166534';
+    return;
+  }
+
+  box.style.background = '#111827';
+  box.style.color = '#d1d5db';
+  box.style.borderColor = '#374151';
+}
+
+function startDeviceActionProgress(baseMessage){
+  stopDeviceActionProgress();
+  deviceActionProgressStartedAt = Date.now();
+
+  const updateMessage = () => {
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - deviceActionProgressStartedAt) / 1000));
+    const dots = '.'.repeat((elapsedSeconds % 3) + 1);
+    let text = `${baseMessage}${dots} ${elapsedSeconds}s elapsed`;
+    if(elapsedSeconds >= 10){
+      text += ' - still running, please wait';
+    }
+    showDeviceActionStatus(text, 'neutral');
+  };
+
+  updateMessage();
+  deviceActionProgressTimer = setInterval(updateMessage, 1000);
+}
+
+function finishDeviceActionProgress(message, tone){
+  stopDeviceActionProgress();
+  if(message){
+    showDeviceActionStatus(message, tone || 'neutral');
+  }
+}
 
 async function runSystemValidation(){
+  const button = document.getElementById('run-system-validation-btn');
   try {
+    if(button){
+      button.disabled = true;
+      button.textContent = 'Running...';
+    }
+    startDeviceActionProgress('Running system validation');
     const res = await fetch("/tools/api/validate_systems", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -175,11 +243,24 @@ async function runSystemValidation(){
       renderSystemResults();
       renderConnectivityResults();
       renderDetectedSystems(data);
+      finishDeviceActionProgress(
+        data.connectivity_note
+          ? `System validation completed for ${data.count || 0} result(s). ${data.connectivity_note}`
+          : `System validation completed for ${data.count || 0} result(s).`,
+        'success'
+      );
     } else {
+      finishDeviceActionProgress(data.error || "System validation failed", 'error');
       alert(data.error || "System validation failed");
     }
   } catch(e){
+    finishDeviceActionProgress("System validation failed: " + e, 'error');
     alert("runSystemValidation error: " + e);
+  } finally {
+    if(button){
+      button.disabled = false;
+      button.textContent = '🔗 Run System Validation';
+    }
   }
 }
 
@@ -334,6 +415,12 @@ function renderConnectivityResults(){
 
 
 async function validateDevice(ip){
+  activeDeviceActions[ip] = {
+    startedAt: Date.now(),
+    status: 'running',
+    label: 'Validating'
+  };
+  renderTable();
   try {
     const res = await fetch('/tools/api/validate_device', {
       method: 'POST',
@@ -345,18 +432,44 @@ async function validateDevice(ip){
 
     if(data.ok){
       validationResults[ip] = data.result;
+      activeDeviceActions[ip] = {
+        startedAt: Date.now(),
+        status: 'success',
+        label: 'Validation completed',
+        detail: (data.result && data.result.overall) ? String(data.result.overall) : 'done'
+      };
       alert('Validation complete for ' + ip + ': ' + (data.result.overall || 'done'));
       renderTable();
     } else {
+      activeDeviceActions[ip] = {
+        startedAt: Date.now(),
+        status: 'error',
+        label: 'Validation failed',
+        detail: data.error || 'Validation failed'
+      };
+      renderTable();
       alert(data.error || 'Validation failed');
     }
   } catch (e) {
+    activeDeviceActions[ip] = {
+      startedAt: Date.now(),
+      status: 'error',
+      label: 'Validation failed',
+      detail: String(e)
+    };
+    renderTable();
     alert('validateDevice error: ' + e);
   }
 }
 
 async function validateAllDevices(){
+  const button = document.getElementById('validate-all-devices-btn');
   try {
+    if(button){
+      button.disabled = true;
+      button.textContent = 'Validating...';
+    }
+    startDeviceActionProgress('Running Validate All');
     const res = await fetch('/tools/api/validate_all', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -369,13 +482,21 @@ async function validateAllDevices(){
       data.results.forEach(r => {
         validationResults[r.ip] = r;
       });
+      finishDeviceActionProgress('Validate All completed for ' + (data.count || 0) + ' device(s).', 'success');
       alert('Validated ' + (data.count || 0) + ' devices');
       renderTable();
     } else {
+      finishDeviceActionProgress(data.error || 'Validation failed', 'error');
       alert(data.error || 'Validation failed');
     }
   } catch (e) {
+    finishDeviceActionProgress('Validate All failed: ' + e, 'error');
     alert('validateAllDevices error: ' + e);
+  } finally {
+    if(button){
+      button.disabled = false;
+      button.textContent = '✅ Validate All';
+    }
   }
 }
 
@@ -545,8 +666,33 @@ function renderTable(){
       const tr = document.createElement('tr');
       const safeIp = String(d.ip || '').replace(/'/g, "\\'");
       const r = validationResults[d.ip];
+      const actionState = activeDeviceActions[d.ip];
 
-      let validationHtml = '<button class="btn" onclick="validateDevice(\'' + safeIp + '\')">Validate</button>';
+      let validationButtonText = 'Validate';
+      let validationButtonDisabled = '';
+      if(actionState && actionState.status === 'running'){
+        validationButtonText = 'Validating...';
+        validationButtonDisabled = ' disabled';
+      }
+      let validationHtml = '<button class="btn" onclick="validateDevice(\'' + safeIp + '\')"' + validationButtonDisabled + '>' + escapeHtml(validationButtonText) + '</button>';
+
+      if(actionState){
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(actionState.startedAt || Date.now())) / 1000));
+        let actionText = actionState.label || '';
+        if(actionState.status === 'running'){
+          const dots = '.'.repeat((elapsedSeconds % 3) + 1);
+          actionText = actionText + dots + ' ' + elapsedSeconds + 's elapsed';
+          if(elapsedSeconds >= 10){
+            actionText += ' - still running, please wait';
+          }
+        } else if(actionState.detail){
+          actionText += ': ' + actionState.detail;
+        }
+        const actionColor = actionState.status === 'error'
+          ? '#fecaca'
+          : (actionState.status === 'success' ? '#bbf7d0' : '#9ca3af');
+        validationHtml += '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:' + actionColor + '">' + escapeHtml(actionText) + '</div>';
+      }
 
       if(r){
         validationHtml += '<div style="margin-top:6px;font-size:11px;line-height:1.4">';
@@ -712,6 +858,7 @@ function saveDevices(){
 
 window.validateDevice = validateDevice;
 window.validateAllDevices = validateAllDevices;
+window.runSystemValidation = runSystemValidation;
 
 renderTable();
 </script>
