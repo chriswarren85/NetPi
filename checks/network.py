@@ -1,7 +1,11 @@
 import subprocess
 import socket
 import struct
-import fcntl
+try:
+    import fcntl
+    HAS_FCNTL = True
+except ImportError:
+    HAS_FCNTL = False
 import os
 
 def ping_test(ip, name, count=3):
