@@ -3566,8 +3566,21 @@ def api_portscan():
         return jsonify({'error': 'No host'}), 400
 
     try:
-        out = subprocess.check_output(['sudo', 'nmap', '-F', host], timeout=60).decode()
+        if platform.system().lower() == 'windows':
+            scan_cmd = ['nmap', '-F', host]
+        else:
+            scan_cmd = ['sudo', 'nmap', '-F', host]
+
+        out = subprocess.check_output(
+            scan_cmd,
+            timeout=60,
+            stderr=subprocess.STDOUT
+        ).decode(errors='replace')
         return jsonify({'output': out})
+    except FileNotFoundError:
+        return jsonify({'error': 'nmap not installed or not available in PATH on this platform'}), 500
+    except subprocess.CalledProcessError as e:
+        return jsonify({'output': e.output.decode(errors='replace'), 'error': 'Port scan failed'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
