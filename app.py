@@ -6,6 +6,7 @@ import socket
 import platform
 import threading
 import uuid
+from command_helpers import build_nmap_command, build_ping_command, build_traceroute_command
 from checks.network import run_base_checks
 from checks.devices import run_device_checks
 import io
@@ -3542,13 +3543,8 @@ def api_ping():
         return jsonify({'error': 'No host'}), 400
 
     try:
-        if platform.system().lower() == 'windows':
-            ping_cmd = ['ping', '-n', '4', host]
-        else:
-            ping_cmd = ['ping', '-c', '4', host]
-
         out = subprocess.check_output(
-            ping_cmd,
+            build_ping_command(host),
             timeout=15,
             stderr=subprocess.STDOUT
         ).decode(errors='replace')
@@ -3566,13 +3562,8 @@ def api_portscan():
         return jsonify({'error': 'No host'}), 400
 
     try:
-        if platform.system().lower() == 'windows':
-            scan_cmd = ['nmap', '-F', host]
-        else:
-            scan_cmd = ['sudo', 'nmap', '-F', host]
-
         out = subprocess.check_output(
-            scan_cmd,
+            build_nmap_command(host),
             timeout=60,
             stderr=subprocess.STDOUT
         ).decode(errors='replace')
@@ -3592,16 +3583,11 @@ def api_traceroute():
         return jsonify({'error': 'No host'}), 400
 
     try:
-        if platform.system().lower() == 'windows':
-            trace_cmd = ['tracert', '-h', '15', '-d', host]
-            trace_timeout = 60
-        else:
-            trace_cmd = ['traceroute', '-m', '15', host]
-            trace_timeout = 30
+        trace_spec = build_traceroute_command(host)
 
         out = subprocess.check_output(
-            trace_cmd,
-            timeout=trace_timeout,
+            trace_spec['command'],
+            timeout=trace_spec['timeout'],
             stderr=subprocess.STDOUT
         ).decode(errors='replace')
         return jsonify({'output': out})

@@ -39,3 +39,13 @@
   - Added a narrow topology fallback so unresolved skipped rows with group_relevance source/target/both are classified as intra_group inside their current system_group_results scope
   - Endpoint/device-name membership lookup remains first priority; fallback only runs when endpoint membership is unresolved
   - Preserved topology_results schema and all existing validate_systems fields without persistence changes
+### Last Update
+- Feature: Stage W0.3 command abstraction foundation
+- Files modified:
+  - app.py
+  - command_helpers.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a tiny platform-aware command helper layer for ping, traceroute/tracert, and nmap command construction
+  - Replaced duplicated inline command selection in diagnostics endpoints with helper calls while preserving subprocess behavior and response shapes
+  - Kept Linux Pi behavior unchanged and retained Windows-compatible command selection for ping, tracert, and PATH-based nmap
