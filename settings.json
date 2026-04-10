@@ -10,10 +10,10 @@
       "id": 1,
       "name": "AV_Control",
       "vlan_id": "50",
-      "subnet": "10.110.50.0/24",
+      "subnet": "192.168.10.0/24",
       "dhcp_range_start": "",
       "dhcp_range_end": "",
-      "gateway": "10.110.50.1",
+      "gateway": "192.168.10.1",
       "device_types": [
         "AV Devices"
       ],

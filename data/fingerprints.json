@@ -1,1 +1,3156 @@
-{}
+{
+  "hostname:biamp-3f3089.local": {
+    "av_role": "biamp",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.54",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "biamp-tesira",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.54",
+    "last_seen": "2026-04-07T07:39:47Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "biamp-tesira",
+    "vendor": null
+  },
+  "hostname:biamp-4217e3.local": {
+    "av_role": "biamp",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.57",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "biamp-tesira",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.57",
+    "last_seen": "2026-04-07T07:39:49Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "biamp-tesira",
+    "vendor": null
+  },
+  "hostname:cp-01": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron",
+        "reasons": [
+          "http evidence suggests crestron"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache, no-store, must-revalidate, private",
+          "content-length": "5935",
+          "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'; img-src * data:; frame-src 'self'  blob:",
+          "content-type": "text/html",
+          "date": "Tue, 07 Apr 2026 07:39:15 GMT",
+          "etag": "\"1107243041\"",
+          "last-modified": "Fri, 14 Aug 2020 01:06:19 GMT",
+          "pragma": "no-cache",
+          "server": "Crestron Webserver",
+          "set-cookie": "TRACKID=3f57f5902794a9def0db684d0fe22b35; Path=/; Version=1; Secure; HttpOnly",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Crestron Webserver",
+        "title": ""
+      },
+      "ip": "192.168.10.24",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-CrestronSSH"
+      },
+      "type": "crestron",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron",
+      "reasons": [
+        "http evidence suggests crestron"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache, no-store, must-revalidate, private",
+        "content-length": "5935",
+        "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'; img-src * data:; frame-src 'self'  blob:",
+        "content-type": "text/html",
+        "date": "Tue, 07 Apr 2026 07:39:15 GMT",
+        "etag": "\"1107243041\"",
+        "last-modified": "Fri, 14 Aug 2020 01:06:19 GMT",
+        "pragma": "no-cache",
+        "server": "Crestron Webserver",
+        "set-cookie": "TRACKID=3f57f5902794a9def0db684d0fe22b35; Path=/; Version=1; Secure; HttpOnly",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Crestron Webserver",
+      "title": ""
+    },
+    "ip": "192.168.10.24",
+    "last_seen": "2026-04-07T07:39:39Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron",
+    "vendor": null
+  },
+  "hostname:cp-02": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron",
+        "reasons": [
+          "http evidence suggests crestron"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache, no-store, must-revalidate, private",
+          "content-length": "5935",
+          "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+          "content-type": "text/html",
+          "date": "Tue, 06 Jan 1970 01:16:55 GMT",
+          "etag": "\"2178592908\"",
+          "last-modified": "Thu, 01 Jan 2009 00:00:00 GMT",
+          "pragma": "no-cache",
+          "server": "Crestron Webserver",
+          "set-cookie": "TRACKID=3f7b6779cbe4482df5ad716fbbfd41aee4eedd33dda4bc951a23d25d0b06cecd; Path=/; Version=1; Secure; HttpOnly",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Crestron Webserver",
+        "title": ""
+      },
+      "ip": "192.168.10.35",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "crestron",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron",
+      "reasons": [
+        "http evidence suggests crestron"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache, no-store, must-revalidate, private",
+        "content-length": "5935",
+        "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+        "content-type": "text/html",
+        "date": "Tue, 06 Jan 1970 01:16:55 GMT",
+        "etag": "\"2178592908\"",
+        "last-modified": "Thu, 01 Jan 2009 00:00:00 GMT",
+        "pragma": "no-cache",
+        "server": "Crestron Webserver",
+        "set-cookie": "TRACKID=3f7b6779cbe4482df5ad716fbbfd41aee4eedd33dda4bc951a23d25d0b06cecd; Path=/; Version=1; Secure; HttpOnly",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Crestron Webserver",
+      "title": ""
+    },
+    "ip": "192.168.10.35",
+    "last_seen": "2026-04-07T07:39:40Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron",
+    "vendor": null
+  },
+  "hostname:cp-03": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron",
+        "reasons": [
+          "http evidence suggests crestron"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache, no-store, must-revalidate, private",
+          "content-length": "196",
+          "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+          "content-type": "text/html",
+          "date": "Wed, 07 Jan 1970 06:45:10 GMT",
+          "etag": "\"3774629509\"",
+          "last-modified": "Thu, 01 Jan 2009 05:00:00 GMT",
+          "pragma": "no-cache",
+          "server": "Crestron Webserver",
+          "set-cookie": "TRACKID=773f79a06ce7433bafa93adf9a5c0716b9191c2ef62a42f911b2e6625e56f886; Path=/; Version=1; Secure; HttpOnly",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Crestron Webserver",
+        "title": ""
+      },
+      "ip": "192.168.10.38",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-CrestronSSH"
+      },
+      "type": "crestron",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron",
+      "reasons": [
+        "http evidence suggests crestron"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache, no-store, must-revalidate, private",
+        "content-length": "196",
+        "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+        "content-type": "text/html",
+        "date": "Wed, 07 Jan 1970 06:45:10 GMT",
+        "etag": "\"3774629509\"",
+        "last-modified": "Thu, 01 Jan 2009 05:00:00 GMT",
+        "pragma": "no-cache",
+        "server": "Crestron Webserver",
+        "set-cookie": "TRACKID=773f79a06ce7433bafa93adf9a5c0716b9191c2ef62a42f911b2e6625e56f886; Path=/; Version=1; Secure; HttpOnly",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Crestron Webserver",
+      "title": ""
+    },
+    "ip": "192.168.10.38",
+    "last_seen": "2026-04-07T07:39:42Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron",
+    "vendor": null
+  },
+  "hostname:cp-04": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron",
+        "reasons": [
+          "http evidence suggests crestron"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache, no-store, must-revalidate, private",
+          "content-length": "5935",
+          "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+          "content-type": "text/html",
+          "date": "Tue, 06 Jan 1970 12:52:40 GMT",
+          "etag": "\"2178592908\"",
+          "last-modified": "Thu, 01 Jan 2009 00:00:00 GMT",
+          "pragma": "no-cache",
+          "server": "Crestron Webserver",
+          "set-cookie": "TRACKID=d0e5bb91cb4ed5bf316d50e1a8859bb2daddf6ab8840c1f6a2f69a40e9ba0767; Path=/; Version=1; Secure; HttpOnly",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Crestron Webserver",
+        "title": ""
+      },
+      "ip": "192.168.10.41",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "crestron",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron",
+      "reasons": [
+        "http evidence suggests crestron"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache, no-store, must-revalidate, private",
+        "content-length": "5935",
+        "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+        "content-type": "text/html",
+        "date": "Tue, 06 Jan 1970 12:52:40 GMT",
+        "etag": "\"2178592908\"",
+        "last-modified": "Thu, 01 Jan 2009 00:00:00 GMT",
+        "pragma": "no-cache",
+        "server": "Crestron Webserver",
+        "set-cookie": "TRACKID=d0e5bb91cb4ed5bf316d50e1a8859bb2daddf6ab8840c1f6a2f69a40e9ba0767; Path=/; Version=1; Secure; HttpOnly",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Crestron Webserver",
+      "title": ""
+    },
+    "ip": "192.168.10.41",
+    "last_seen": "2026-04-07T07:39:43Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron",
+    "vendor": null
+  },
+  "hostname:ctrl": {
+    "av_role": "crestron_control",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.20",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "crestron_control",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.20",
+    "last_seen": "2026-04-07T05:18:57Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "crestron_control",
+    "vendor": null
+  },
+  "hostname:dev-01": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.1",
+      "mac": "",
+      "open_ports": [
+        445
+      ],
+      "services": [
+        {
+          "name": "smb",
+          "port": 445
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "windows-host",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.1",
+    "last_seen": "2026-04-07T07:39:31Z",
+    "mac": null,
+    "open_ports": [
+      445
+    ],
+    "services": [
+      {
+        "name": "smb",
+        "port": 445
+      }
+    ],
+    "type": "windows-host",
+    "vendor": null
+  },
+  "hostname:dev-02": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "high",
+        "platform": "video-wall-processor",
+        "reasons": [
+          "http title suggests video processing device",
+          "port 8080 open",
+          "ssh open"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache",
+          "connection": "keep-alive",
+          "content-length": "702",
+          "content-type": "text/html",
+          "date": "Tue, 07 Apr 2026 07:39:09 GMT",
+          "etag": "\"6972a770-2be\"",
+          "last-modified": "Thu, 22 Jan 2026 22:40:48 GMT",
+          "server": "nginx/1.26.2"
+        },
+        "keywords": [],
+        "server": "nginx/1.26.2",
+        "title": "Video Wall Splicer"
+      },
+      "ip": "192.168.10.10",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        8080
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "http-alt",
+          "port": 8080
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-OpenSSH_9.7"
+      },
+      "type": "video-wall-processor",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "high",
+      "platform": "video-wall-processor",
+      "reasons": [
+        "http title suggests video processing device",
+        "port 8080 open",
+        "ssh open"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-length": "702",
+        "content-type": "text/html",
+        "date": "Tue, 07 Apr 2026 07:39:09 GMT",
+        "etag": "\"6972a770-2be\"",
+        "last-modified": "Thu, 22 Jan 2026 22:40:48 GMT",
+        "server": "nginx/1.26.2"
+      },
+      "server": "nginx/1.26.2",
+      "title": "Video Wall Splicer"
+    },
+    "ip": "192.168.10.10",
+    "last_seen": "2026-04-07T07:39:32Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      8080
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "http-alt",
+        "port": 8080
+      }
+    ],
+    "type": "video-wall-processor",
+    "vendor": null
+  },
+  "hostname:dev-03": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "cache-control": "private, no-cache",
+          "connection": "keep-alive",
+          "content-length": "150",
+          "content-security-policy": "frame-ancestors 'none'",
+          "content-type": "text/html; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 07:39:11 GMT",
+          "location": "https://192.168.10.11/system/",
+          "server": "openresty",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-security-policy": "frame-ancestors 'none'",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "x-webkit-csp": "frame-ancestors 'none'"
+        },
+        "keywords": [],
+        "server": "openresty",
+        "title": "303 See Other"
+      },
+      "ip": "192.168.10.11",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "web-device",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "cache-control": "private, no-cache",
+        "connection": "keep-alive",
+        "content-length": "150",
+        "content-security-policy": "frame-ancestors 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Tue, 07 Apr 2026 07:39:11 GMT",
+        "location": "https://192.168.10.11/system/",
+        "server": "openresty",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-security-policy": "frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-webkit-csp": "frame-ancestors 'none'"
+      },
+      "server": "openresty",
+      "title": "303 See Other"
+    },
+    "ip": "192.168.10.11",
+    "last_seen": "2026-04-07T07:39:32Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "web-device",
+    "vendor": null
+  },
+  "hostname:dev-04": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "cache-control": "private, no-cache",
+          "connection": "keep-alive",
+          "content-length": "150",
+          "content-security-policy": "frame-ancestors 'none'",
+          "content-type": "text/html; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 07:39:13 GMT",
+          "location": "https://192.168.10.12/system/",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-security-policy": "frame-ancestors 'none'",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "x-webkit-csp": "frame-ancestors 'none'"
+        },
+        "keywords": [],
+        "server": "",
+        "title": "303 See Other"
+      },
+      "ip": "192.168.10.12",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "web-device",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "cache-control": "private, no-cache",
+        "connection": "keep-alive",
+        "content-length": "150",
+        "content-security-policy": "frame-ancestors 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Tue, 07 Apr 2026 07:39:13 GMT",
+        "location": "https://192.168.10.12/system/",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-security-policy": "frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-webkit-csp": "frame-ancestors 'none'"
+      },
+      "server": "",
+      "title": "303 See Other"
+    },
+    "ip": "192.168.10.12",
+    "last_seen": "2026-04-07T07:39:33Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "web-device",
+    "vendor": null
+  },
+  "hostname:dev-05": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.13",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.13",
+    "last_seen": "2026-04-07T07:39:33Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-06": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.14",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.14",
+    "last_seen": "2026-04-07T07:39:34Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-07": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.15",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.15",
+    "last_seen": "2026-04-07T07:39:35Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-08": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.16",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.16",
+    "last_seen": "2026-04-07T07:39:35Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-09": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.17",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.17",
+    "last_seen": "2026-04-07T07:39:36Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-10": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.18",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.18",
+    "last_seen": "2026-04-07T07:39:36Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-11": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.19",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.19",
+    "last_seen": "2026-04-07T07:39:37Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-12": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.20",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.20",
+    "last_seen": "2026-04-07T07:39:37Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-13": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.21",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.21",
+    "last_seen": "2026-04-07T07:39:38Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-14": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.22",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.22",
+    "last_seen": "2026-04-07T07:39:38Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-15": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.26",
+      "mac": "",
+      "open_ports": [
+        445
+      ],
+      "services": [
+        {
+          "name": "smb",
+          "port": 445
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "windows-host",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.26",
+    "last_seen": "2026-04-07T07:39:39Z",
+    "mac": null,
+    "open_ports": [
+      445
+    ],
+    "services": [
+      {
+        "name": "smb",
+        "port": 445
+      }
+    ],
+    "type": "windows-host",
+    "vendor": null
+  },
+  "hostname:dev-16": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "cache-control": "private, no-cache",
+          "connection": "keep-alive",
+          "content-length": "150",
+          "content-security-policy": "frame-ancestors 'none'",
+          "content-type": "text/html; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 07:39:17 GMT",
+          "location": "https://192.168.10.33/system/",
+          "server": "openresty",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-security-policy": "frame-ancestors 'none'",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "x-webkit-csp": "frame-ancestors 'none'"
+        },
+        "keywords": [],
+        "server": "openresty",
+        "title": "303 See Other"
+      },
+      "ip": "192.168.10.33",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "web-device",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "cache-control": "private, no-cache",
+        "connection": "keep-alive",
+        "content-length": "150",
+        "content-security-policy": "frame-ancestors 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Tue, 07 Apr 2026 07:39:17 GMT",
+        "location": "https://192.168.10.33/system/",
+        "server": "openresty",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-security-policy": "frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-webkit-csp": "frame-ancestors 'none'"
+      },
+      "server": "openresty",
+      "title": "303 See Other"
+    },
+    "ip": "192.168.10.33",
+    "last_seen": "2026-04-07T07:39:40Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "web-device",
+    "vendor": null
+  },
+  "hostname:dev-17": {
+    "av_role": "crestron_uc",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron_uc",
+        "reasons": [
+          "http evidence suggests crestron",
+          "model token suggests crestron uc"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "content-length": "84",
+          "content-security-policy": "default-src \"self\"",
+          "content-type": "text/html",
+          "date": "Tue, 07 Apr 2026 07:39:25 GMT",
+          "etag": "\"059bb94bdd0d51:0\"",
+          "last-modified": "Wed, 22 Jan 2020 00:47:54 GMT",
+          "server": "Microsoft-IIS/10.0",
+          "strict-transport-security": "max-age=31536000; includeSubdomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Microsoft-IIS/10.0",
+        "title": "Crestron UC-ENGINE"
+      },
+      "ip": "192.168.10.42",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "crestron_uc",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron_uc",
+      "reasons": [
+        "http evidence suggests crestron",
+        "model token suggests crestron uc"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-length": "84",
+        "content-security-policy": "default-src \"self\"",
+        "content-type": "text/html",
+        "date": "Tue, 07 Apr 2026 07:39:25 GMT",
+        "etag": "\"059bb94bdd0d51:0\"",
+        "last-modified": "Wed, 22 Jan 2020 00:47:54 GMT",
+        "server": "Microsoft-IIS/10.0",
+        "strict-transport-security": "max-age=31536000; includeSubdomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Microsoft-IIS/10.0",
+      "title": "Crestron UC-ENGINE"
+    },
+    "ip": "192.168.10.42",
+    "last_seen": "2026-04-07T07:39:44Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron_uc",
+    "vendor": null
+  },
+  "hostname:dev-18": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.47",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.47",
+    "last_seen": "2026-04-07T07:39:44Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-19": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.48",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.48",
+    "last_seen": "2026-04-07T07:39:45Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-20": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.49",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.49",
+    "last_seen": "2026-04-07T07:39:45Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-21": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.50",
+      "mac": "",
+      "open_ports": [
+        445
+      ],
+      "services": [
+        {
+          "name": "smb",
+          "port": 445
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "windows-host",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.50",
+    "last_seen": "2026-04-07T07:39:46Z",
+    "mac": null,
+    "open_ports": [
+      445
+    ],
+    "services": [
+      {
+        "name": "smb",
+        "port": 445
+      }
+    ],
+    "type": "windows-host",
+    "vendor": null
+  },
+  "hostname:dev-22": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-store, no-cache, must-revalidate, post-check=0, pre-check=0",
+          "content-length": "31870",
+          "content-type": "text/html",
+          "date": "Sat, 17 Jan 1970 05:11:20 GMT",
+          "etag": "\"3403504455\"",
+          "last-modified": "Thu, 01 Jan 1970 00:00:00 GMT",
+          "server": "lighttpd/1.4.48"
+        },
+        "keywords": [],
+        "server": "lighttpd/1.4.48",
+        "title": ""
+      },
+      "ip": "192.168.10.53",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014jHa U\u0019k\u0017z\\\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2"
+      },
+      "type": "linux-web-device",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-store, no-cache, must-revalidate, post-check=0, pre-check=0",
+        "content-length": "31870",
+        "content-type": "text/html",
+        "date": "Sat, 17 Jan 1970 05:11:20 GMT",
+        "etag": "\"3403504455\"",
+        "last-modified": "Thu, 01 Jan 1970 00:00:00 GMT",
+        "server": "lighttpd/1.4.48"
+      },
+      "server": "lighttpd/1.4.48",
+      "title": ""
+    },
+    "ip": "192.168.10.53",
+    "last_seen": "2026-04-07T07:39:47Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "linux-web-device",
+    "vendor": null
+  },
+  "hostname:dev-23": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.55",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.55",
+    "last_seen": "2026-04-07T07:39:48Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-24": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.56",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.56",
+    "last_seen": "2026-04-07T07:39:48Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-25": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "connection": "Keep-Alive",
+          "content-length": "1181",
+          "content-security-policy": "default-src 'self' *.google.com *.googleapis.com *.gstatic.com;script-src 'self' 'unsafe-inline' 'unsafe-eval' translate.google.com translate.googleapis.com;style-src 'self' 'unsafe-inline' translate.google.com translate.googleapis.com;",
+          "content-type": "text/html",
+          "date": "Sun, 28 Nov 2021 18:16:25 GMT",
+          "keep-alive": "timeout=10, max=100",
+          "last-modified": "Mon, 01 Jan 2019 00:00:00 GMT"
+        },
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.58",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "web-device",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "connection": "Keep-Alive",
+        "content-length": "1181",
+        "content-security-policy": "default-src 'self' *.google.com *.googleapis.com *.gstatic.com;script-src 'self' 'unsafe-inline' 'unsafe-eval' translate.google.com translate.googleapis.com;style-src 'self' 'unsafe-inline' translate.google.com translate.googleapis.com;",
+        "content-type": "text/html",
+        "date": "Sun, 28 Nov 2021 18:16:25 GMT",
+        "keep-alive": "timeout=10, max=100",
+        "last-modified": "Mon, 01 Jan 2019 00:00:00 GMT",
+        "server": "Hydra/0.1.8"
+      },
+      "server": "Hydra/0.1.8",
+      "title": ""
+    },
+    "ip": "192.168.10.58",
+    "last_seen": "2026-04-07T07:39:49Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "web-device",
+    "vendor": null
+  },
+  "hostname:dev-26": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.59",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.59",
+    "last_seen": "2026-04-07T07:39:50Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "hostname:dev-27": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "connection": "keep-alive",
+          "content-length": "62305",
+          "content-type": "text/html; charset=utf-8",
+          "set-cookie": "JSESSIONID=deleted; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Path=/; HttpOnly"
+        },
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.253",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "web-device",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "connection": "keep-alive",
+        "content-length": "62305",
+        "content-type": "text/html; charset=utf-8",
+        "set-cookie": "JSESSIONID=deleted; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Path=/; HttpOnly"
+      },
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.253",
+    "last_seen": "2026-04-07T07:39:50Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "web-device",
+    "vendor": null
+  },
+  "hostname:dinap3-2.local": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron",
+        "reasons": [
+          "http evidence suggests crestron"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache, no-store, must-revalidate, private",
+          "content-length": "6677",
+          "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+          "content-type": "text/html",
+          "date": "Wed, 07 Jan 1970 06:45:07 GMT",
+          "etag": "\"1546032460\"",
+          "last-modified": "Fri, 09 Mar 2018 12:34:56 GMT",
+          "pragma": "no-cache",
+          "server": "Crestron Webserver",
+          "set-cookie": "TRACKID=3e91d184719709ae26267a6a5452a99f4eefe2f1de31463acbc689672b499e50; Path=/; Version=1; Secure; HttpOnly",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Crestron Webserver",
+        "title": ""
+      },
+      "ip": "192.168.10.37",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-CrestronSSH"
+      },
+      "type": "crestron",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron",
+      "reasons": [
+        "http evidence suggests crestron"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache, no-store, must-revalidate, private",
+        "content-length": "6677",
+        "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+        "content-type": "text/html",
+        "date": "Wed, 07 Jan 1970 06:45:07 GMT",
+        "etag": "\"1546032460\"",
+        "last-modified": "Fri, 09 Mar 2018 12:34:56 GMT",
+        "location": "https://192.168.10.37/index_banner.html",
+        "pragma": "no-cache",
+        "server": "Crestron Webserver",
+        "set-cookie": "TRACKID=3e91d184719709ae26267a6a5452a99f4eefe2f1de31463acbc689672b499e50; Path=/; Version=1; Secure; HttpOnly",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Crestron Webserver",
+      "title": ""
+    },
+    "ip": "192.168.10.37",
+    "last_seen": "2026-04-07T07:39:42Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron",
+    "vendor": null
+  },
+  "hostname:dinap3.local": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "crestron",
+        "reasons": [
+          "http evidence suggests crestron"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache, no-store, must-revalidate, private",
+          "content-length": "6677",
+          "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+          "content-type": "text/html",
+          "date": "Wed, 07 Jan 1970 06:45:05 GMT",
+          "etag": "\"1546032460\"",
+          "last-modified": "Fri, 09 Mar 2018 12:34:56 GMT",
+          "pragma": "no-cache",
+          "server": "Crestron Webserver",
+          "set-cookie": "TRACKID=4bf153e491575440a78f8ab5d7697703012ce6b1b30656b3b5924274f06e79be; Path=/; Version=1; Secure; HttpOnly",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "1; mode=block"
+        },
+        "keywords": [
+          "crestron"
+        ],
+        "server": "Crestron Webserver",
+        "title": ""
+      },
+      "ip": "192.168.10.36",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-CrestronSSH"
+      },
+      "type": "crestron",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "crestron",
+      "reasons": [
+        "http evidence suggests crestron"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache, no-store, must-revalidate, private",
+        "content-length": "6677",
+        "content-security-policy": "default-src https: wss: data: 'unsafe-inline' 'unsafe-eval' blob:; img-src * data:; frame-src 'self'  blob:; frame-ancestors 'self' ",
+        "content-type": "text/html",
+        "date": "Wed, 07 Jan 1970 06:45:05 GMT",
+        "etag": "\"1546032460\"",
+        "last-modified": "Fri, 09 Mar 2018 12:34:56 GMT",
+        "pragma": "no-cache",
+        "server": "Crestron Webserver",
+        "set-cookie": "TRACKID=4bf153e491575440a78f8ab5d7697703012ce6b1b30656b3b5924274f06e79be; Path=/; Version=1; Secure; HttpOnly",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "SAMEORIGIN",
+        "x-xss-protection": "1; mode=block"
+      },
+      "server": "Crestron Webserver",
+      "title": ""
+    },
+    "ip": "192.168.10.36",
+    "last_seen": "2026-04-07T07:39:41Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron",
+    "vendor": null
+  },
+  "hostname:dsp-01": {
+    "av_role": "biamp",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "medium",
+        "platform": "biamp",
+        "reasons": [
+          "http evidence suggests biamp/tesira"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "content-length": "4222",
+          "content-type": "text/html",
+          "date": "Tue, 07 Apr 2026 07:39:21 GMT",
+          "etag": "\"2008123713\"",
+          "last-modified": "Thu, 22 Jan 2026 20:21:09 GMT",
+          "server": "lighttpd",
+          "strict-transport-security": "max-age=15768000; includeSubdomains"
+        },
+        "keywords": [
+          "biamp"
+        ],
+        "server": "lighttpd",
+        "title": ""
+      },
+      "ip": "192.168.10.40",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "biamp",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "medium",
+      "platform": "biamp",
+      "reasons": [
+        "http evidence suggests biamp/tesira"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-length": "4222",
+        "content-type": "text/html",
+        "date": "Tue, 07 Apr 2026 07:39:21 GMT",
+        "etag": "\"2008123713\"",
+        "last-modified": "Thu, 22 Jan 2026 20:21:09 GMT",
+        "server": "lighttpd",
+        "strict-transport-security": "max-age=15768000; includeSubdomains"
+      },
+      "server": "lighttpd",
+      "title": ""
+    },
+    "ip": "192.168.10.40",
+    "last_seen": "2026-04-07T07:39:43Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "biamp",
+    "vendor": null
+  },
+  "hostname:pi.hole": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "cache-control": "no-cache, no-store, must-revalidate, private, max-age=0",
+          "connection": "close",
+          "content-security-policy": "default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'",
+          "content-type": "text/html; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 07:39:31 GMT",
+          "expires": "0",
+          "pragma": "no-cache",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-content-type-options": "nosniff",
+          "x-dns-prefetch-control": "off",
+          "x-frame-options": "DENY",
+          "x-xss-protection": "0"
+        },
+        "keywords": [],
+        "server": "",
+        "title": "Pi-hole pi-hole"
+      },
+      "ip": "192.168.10.25",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443,
+        8080
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        },
+        {
+          "name": "http-alt",
+          "port": 8080
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-OpenSSH_8.4p1 Raspbian-5+b1"
+      },
+      "type": "pi-hole",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "cache-control": "no-cache, no-store, must-revalidate, private, max-age=0",
+        "connection": "close",
+        "content-security-policy": "default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Tue, 07 Apr 2026 07:39:31 GMT",
+        "expires": "0",
+        "pragma": "no-cache",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-dns-prefetch-control": "off",
+        "x-frame-options": "DENY",
+        "x-xss-protection": "0"
+      },
+      "server": "",
+      "title": "Pi-hole pi-hole"
+    },
+    "ip": "192.168.10.25",
+    "last_seen": "2026-04-07T07:39:51Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443,
+      8080
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      },
+      {
+        "name": "http-alt",
+        "port": 8080
+      }
+    ],
+    "type": "pi-hole",
+    "vendor": null
+  },
+  "hostname:test": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.54",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.54",
+    "last_seen": "2026-04-07T05:20:10Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "ip:127.0.0.1": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "cache-control": "no-cache, no-store, must-revalidate, private, max-age=0",
+          "connection": "close",
+          "content-security-policy": "default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'",
+          "content-type": "text/html; charset=utf-8",
+          "date": "Fri, 10 Apr 2026 04:03:20 GMT",
+          "expires": "0",
+          "pragma": "no-cache",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "x-content-type-options": "nosniff",
+          "x-dns-prefetch-control": "off",
+          "x-frame-options": "DENY",
+          "x-xss-protection": "0"
+        },
+        "keywords": [],
+        "server": "",
+        "title": "Pi-hole pi-hole"
+      },
+      "ip": "127.0.0.1",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        443,
+        8080
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        },
+        {
+          "name": "http-alt",
+          "port": 8080
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-OpenSSH_8.4p1 Raspbian-5+b1"
+      },
+      "type": "unknown",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "cache-control": "no-cache, no-store, must-revalidate, private, max-age=0",
+        "connection": "close",
+        "content-security-policy": "default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Fri, 10 Apr 2026 04:03:20 GMT",
+        "expires": "0",
+        "pragma": "no-cache",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-content-type-options": "nosniff",
+        "x-dns-prefetch-control": "off",
+        "x-frame-options": "DENY",
+        "x-xss-protection": "0"
+      },
+      "server": "",
+      "title": "Pi-hole pi-hole"
+    },
+    "ip": "127.0.0.1",
+    "last_seen": "2026-04-10T04:03:20Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      443,
+      8080
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      },
+      {
+        "name": "http-alt",
+        "port": 8080
+      }
+    ],
+    "type": "unknown",
+    "vendor": null
+  },
+  "ip:192.168.10.10": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "high",
+        "platform": "video-wall-processor",
+        "reasons": [
+          "http title suggests video processing device",
+          "port 8080 open",
+          "ssh open"
+        ]
+      },
+      "http": {
+        "headers": {
+          "accept-ranges": "bytes",
+          "cache-control": "no-cache",
+          "connection": "keep-alive",
+          "content-length": "702",
+          "content-type": "text/html",
+          "date": "Tue, 07 Apr 2026 07:17:59 GMT",
+          "etag": "\"6972a770-2be\"",
+          "last-modified": "Thu, 22 Jan 2026 22:40:48 GMT",
+          "server": "nginx/1.26.2"
+        },
+        "keywords": [],
+        "server": "nginx/1.26.2",
+        "title": "Video Wall Splicer"
+      },
+      "ip": "192.168.10.10",
+      "mac": "",
+      "open_ports": [
+        22,
+        80,
+        8080
+      ],
+      "services": [
+        {
+          "name": "ssh",
+          "port": 22
+        },
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "http-alt",
+          "port": 8080
+        }
+      ],
+      "ssh": {
+        "banner": "SSH-2.0-OpenSSH_9.7"
+      },
+      "type": "crestron-processor",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "high",
+      "platform": "video-wall-processor",
+      "reasons": [
+        "http title suggests video processing device",
+        "port 8080 open",
+        "ssh open"
+      ]
+    },
+    "http": {
+      "headers": {
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache",
+        "connection": "keep-alive",
+        "content-length": "702",
+        "content-type": "text/html",
+        "date": "Tue, 07 Apr 2026 07:17:59 GMT",
+        "etag": "\"6972a770-2be\"",
+        "last-modified": "Thu, 22 Jan 2026 22:40:48 GMT",
+        "server": "nginx/1.26.2"
+      },
+      "server": "nginx/1.26.2",
+      "title": "Video Wall Splicer"
+    },
+    "ip": "192.168.10.10",
+    "last_seen": "2026-04-07T07:18:01Z",
+    "mac": null,
+    "open_ports": [
+      22,
+      80,
+      8080
+    ],
+    "services": [
+      {
+        "name": "ssh",
+        "port": 22
+      },
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "http-alt",
+        "port": 8080
+      }
+    ],
+    "type": "crestron-processor",
+    "vendor": null
+  },
+  "ip:192.168.10.101": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.101",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.101",
+    "last_seen": "2026-04-07T06:08:18Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "ip:192.168.10.102": {
+    "av_role": null,
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.102",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.102",
+    "last_seen": "2026-04-07T06:08:18Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  },
+  "ip:192.168.10.11": {
+    "av_role": "crestron_touchpanel",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {
+          "cache-control": "private, no-cache",
+          "connection": "keep-alive",
+          "content-length": "150",
+          "content-security-policy": "frame-ancestors 'none'",
+          "content-type": "text/html; charset=utf-8",
+          "date": "Tue, 07 Apr 2026 07:18:09 GMT",
+          "location": "https://192.168.10.11/system/",
+          "server": "openresty",
+          "strict-transport-security": "max-age=31536000; includeSubDomains",
+          "x-content-security-policy": "frame-ancestors 'none'",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "x-webkit-csp": "frame-ancestors 'none'"
+        },
+        "keywords": [],
+        "server": "openresty",
+        "title": "303 See Other"
+      },
+      "ip": "192.168.10.11",
+      "mac": "",
+      "open_ports": [
+        80,
+        443
+      ],
+      "services": [
+        {
+          "name": "http",
+          "port": 80
+        },
+        {
+          "name": "https",
+          "port": 443
+        }
+      ],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "crestron-touchpanel",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {
+        "cache-control": "private, no-cache",
+        "connection": "keep-alive",
+        "content-length": "150",
+        "content-security-policy": "frame-ancestors 'none'",
+        "content-type": "text/html; charset=utf-8",
+        "date": "Tue, 07 Apr 2026 07:18:09 GMT",
+        "location": "https://192.168.10.11/system/",
+        "server": "openresty",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-security-policy": "frame-ancestors 'none'",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "x-webkit-csp": "frame-ancestors 'none'"
+      },
+      "server": "openresty",
+      "title": "303 See Other"
+    },
+    "ip": "192.168.10.11",
+    "last_seen": "2026-04-07T07:18:09Z",
+    "mac": null,
+    "open_ports": [
+      80,
+      443
+    ],
+    "services": [
+      {
+        "name": "http",
+        "port": 80
+      },
+      {
+        "name": "https",
+        "port": 443
+      }
+    ],
+    "type": "crestron-touchpanel",
+    "vendor": null
+  },
+  "ip:192.168.10.20": {
+    "av_role": "crestron",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.20",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "crestron-processor",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.20",
+    "last_seen": "2026-04-07T07:18:09Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "crestron-processor",
+    "vendor": null
+  },
+  "ip:192.168.10.21": {
+    "av_role": "biamp",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.21",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "biamp-tesira",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.21",
+    "last_seen": "2026-04-07T06:47:02Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "biamp-tesira",
+    "vendor": null
+  },
+  "ip:192.168.10.54": {
+    "av_role": "biamp",
+    "evidence": {
+      "fingerprint": {
+        "confidence": "low",
+        "platform": "unknown",
+        "reasons": []
+      },
+      "http": {
+        "headers": {},
+        "keywords": [],
+        "server": "",
+        "title": ""
+      },
+      "ip": "192.168.10.54",
+      "mac": "",
+      "open_ports": [],
+      "services": [],
+      "ssh": {
+        "banner": ""
+      },
+      "type": "generic",
+      "vendor": ""
+    },
+    "fingerprint": {
+      "confidence": "low",
+      "platform": "unknown",
+      "reasons": []
+    },
+    "http": {
+      "headers": {},
+      "server": "",
+      "title": ""
+    },
+    "ip": "192.168.10.54",
+    "last_seen": "2026-04-07T06:43:08Z",
+    "mac": null,
+    "open_ports": [],
+    "services": [],
+    "type": "generic",
+    "vendor": null
+  }
+}

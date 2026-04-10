@@ -1,1 +1,5824 @@
-{}
+{
+  "hostname:biamp-3f3089.local": {
+    "first_seen": "2026-04-07T04:04:39Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 8,
+          "last_seen": "2026-04-07T06:34:27Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host",
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "BIAMP-3f3089.local"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.54"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {
+        "biamp-tesira": {
+          "best_strength": "medium",
+          "count": 28,
+          "last_seen": "2026-04-07T07:39:47Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host",
+            "validate_device",
+            "discovery"
+          ]
+        }
+      },
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:biamp-3f3089.local",
+        "ip:192.168.10.54"
+      ],
+      "ip": "192.168.10.54",
+      "key": "hostname:biamp-3f3089.local",
+      "key_type": "hostname",
+      "stable_hostname": "BIAMP-3f3089.local"
+    },
+    "last_seen": "2026-04-07T07:39:47Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "biamp-tesira",
+      "ip": "192.168.10.54",
+      "mac": "",
+      "mdns_name": "",
+      "name": "BIAMP-3f3089.local",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "BIAMP-3f3089.local",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [
+          "vendor fingerprint signal",
+          "repeated strong Biamp family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 28,
+        "suggested_type": "biamp",
+        "type_candidates": {
+          "biamp": {
+            "best_strength": "medium",
+            "count": 28,
+            "reasons": [
+              "vendor fingerprint signal",
+              "repeated strong Biamp family evidence"
+            ]
+          },
+          "biamp-tesira": {
+            "best_strength": "medium",
+            "count": 28,
+            "reasons": [
+              "vendor fingerprint signal",
+              "repeated strong Biamp family evidence",
+              "repeated Biamp/Tesira naming evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "biamp-tesira",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 8,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 8,
+          "last_seen": "2026-04-07T06:34:27Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host",
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 37,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 7,
+      "validate_all": 13,
+      "validate_device": 2,
+      "validate_systems": 14
+    }
+  },
+  "hostname:biamp-4217e3.local": {
+    "first_seen": "2026-04-07T04:04:40Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:35Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "BIAMP-4217e3.local"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.57"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {
+        "biamp-tesira": {
+          "best_strength": "medium",
+          "count": 19,
+          "last_seen": "2026-04-07T07:39:49Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:biamp-4217e3.local",
+        "ip:192.168.10.57"
+      ],
+      "ip": "192.168.10.57",
+      "key": "hostname:biamp-4217e3.local",
+      "key_type": "hostname",
+      "stable_hostname": "BIAMP-4217e3.local"
+    },
+    "last_seen": "2026-04-07T07:39:49Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "biamp-tesira",
+      "ip": "192.168.10.57",
+      "mac": "",
+      "mdns_name": "",
+      "name": "BIAMP-4217e3.local",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "BIAMP-4217e3.local",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [
+          "vendor fingerprint signal",
+          "repeated strong Biamp family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 19,
+        "suggested_type": "biamp",
+        "type_candidates": {
+          "biamp": {
+            "best_strength": "medium",
+            "count": 19,
+            "reasons": [
+              "vendor fingerprint signal",
+              "repeated strong Biamp family evidence"
+            ]
+          },
+          "biamp-tesira": {
+            "best_strength": "medium",
+            "count": 19,
+            "reasons": [
+              "vendor fingerprint signal",
+              "repeated strong Biamp family evidence",
+              "repeated Biamp/Tesira naming evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "biamp-tesira",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:35Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 19,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:cp-01": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "crestron": {
+          "best_strength": "low",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:39Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:38Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "CP-01"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Crestron Webserver"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.24"
+      ],
+      "observed_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:39Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:39Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [
+        "SSH-2.0-CrestronSSH"
+      ],
+      "validation_fingerprint_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:39Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:cp-01",
+        "ip:192.168.10.24"
+      ],
+      "ip": "192.168.10.24",
+      "key": "hostname:cp-01",
+      "key_type": "hostname",
+      "stable_hostname": "CP-01"
+    },
+    "last_seen": "2026-04-07T07:39:39Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "crestron",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Crestron Webserver",
+      "http_title": "",
+      "inventory_type": "crestron",
+      "ip": "192.168.10.24",
+      "mac": "",
+      "mdns_name": "",
+      "name": "CP-01",
+      "observed_platform": "crestron",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "SSH-2.0-CrestronSSH",
+      "stable_hostname": "CP-01",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 66,
+      "suggested_type": "crestron",
+      "type_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 66,
+          "last_seen": "2026-04-07T07:39:39Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:38Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:cp-02": {
+    "first_seen": "2026-04-07T04:04:36Z",
+    "history": {
+      "guessed_types": {
+        "crestron": {
+          "best_strength": "low",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:40Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:49Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "CP-02"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Crestron Webserver"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.35"
+      ],
+      "observed_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:40Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:40Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:40Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:cp-02",
+        "ip:192.168.10.35"
+      ],
+      "ip": "192.168.10.35",
+      "key": "hostname:cp-02",
+      "key_type": "hostname",
+      "stable_hostname": "CP-02"
+    },
+    "last_seen": "2026-04-07T07:39:40Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "crestron",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Crestron Webserver",
+      "http_title": "",
+      "inventory_type": "crestron",
+      "ip": "192.168.10.35",
+      "mac": "",
+      "mdns_name": "",
+      "name": "CP-02",
+      "observed_platform": "crestron",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "CP-02",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 66,
+      "suggested_type": "crestron",
+      "type_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 66,
+          "last_seen": "2026-04-07T07:39:40Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:49Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:cp-03": {
+    "first_seen": "2026-04-07T04:04:36Z",
+    "history": {
+      "guessed_types": {
+        "crestron": {
+          "best_strength": "low",
+          "count": 23,
+          "last_seen": "2026-04-07T08:12:59Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:56Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "CP-03"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Crestron Webserver"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.38"
+      ],
+      "observed_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 23,
+          "last_seen": "2026-04-07T08:12:59Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 23,
+          "last_seen": "2026-04-07T08:12:59Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [
+        "SSH-2.0-CrestronSSH"
+      ],
+      "validation_fingerprint_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 23,
+          "last_seen": "2026-04-07T08:12:59Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:cp-03",
+        "ip:192.168.10.38"
+      ],
+      "ip": "192.168.10.38",
+      "key": "hostname:cp-03",
+      "key_type": "hostname",
+      "stable_hostname": "CP-03"
+    },
+    "last_seen": "2026-04-07T08:12:59Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "crestron",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Crestron Webserver",
+      "http_title": "",
+      "inventory_type": "crestron",
+      "ip": "192.168.10.38",
+      "mac": "",
+      "mdns_name": "",
+      "name": "CP-03",
+      "observed_platform": "crestron",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "SSH-2.0-CrestronSSH",
+      "stable_hostname": "CP-03",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 23,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 23,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 69,
+      "suggested_type": "crestron",
+      "type_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 69,
+          "last_seen": "2026-04-07T08:12:59Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:56Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 25,
+    "sources": {
+      "discovery": 2,
+      "fingerprint_host": 2,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:cp-04": {
+    "first_seen": "2026-04-07T04:04:37Z",
+    "history": {
+      "guessed_types": {
+        "crestron": {
+          "best_strength": "low",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:02Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "CP-04"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Crestron Webserver"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.41"
+      ],
+      "observed_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:cp-04",
+        "ip:192.168.10.41"
+      ],
+      "ip": "192.168.10.41",
+      "key": "hostname:cp-04",
+      "key_type": "hostname",
+      "stable_hostname": "CP-04"
+    },
+    "last_seen": "2026-04-07T07:39:43Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "crestron",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Crestron Webserver",
+      "http_title": "",
+      "inventory_type": "crestron",
+      "ip": "192.168.10.41",
+      "mac": "",
+      "mdns_name": "",
+      "name": "CP-04",
+      "observed_platform": "crestron",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "CP-04",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 66,
+      "suggested_type": "crestron",
+      "type_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 66,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:02Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:ctrl": {
+    "first_seen": "2026-04-07T05:18:57Z",
+    "history": {
+      "guessed_types": {},
+      "hostnames": [
+        "ctrl"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.20"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:ctrl",
+        "ip:192.168.10.20"
+      ],
+      "ip": "192.168.10.20",
+      "key": "hostname:ctrl",
+      "key_type": "hostname",
+      "stable_hostname": "ctrl"
+    },
+    "last_seen": "2026-04-07T05:18:57Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "crestron_control",
+      "ip": "192.168.10.20",
+      "mac": "",
+      "mdns_name": "",
+      "name": "ctrl",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "ctrl",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [],
+      "confidence": "",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "crestron_control",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 0,
+      "suggested_type": "",
+      "type_candidates": {},
+      "will_override_inventory_type": false
+    },
+    "seen_count": 1,
+    "sources": {
+      "validate_systems": 1
+    }
+  },
+  "hostname:dev-01": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:47Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "windows-host": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:50Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-01"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.1"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        445
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-01",
+        "ip:192.168.10.1"
+      ],
+      "ip": "192.168.10.1",
+      "key": "hostname:dev-01",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-01"
+    },
+    "last_seen": "2026-04-07T08:12:50Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "windows-host",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "windows-host",
+      "ip": "192.168.10.1",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-01",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        445
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-01",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "windows-host",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "windows-host",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:47Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "windows-host": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:50Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 26,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 2,
+      "validate_all": 16,
+      "validate_device": 1,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-02": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:51Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "video-wall-processor": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:52Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-02"
+      ],
+      "http_keywords": [],
+      "http_servers": [
+        "nginx/1.26.2"
+      ],
+      "http_titles": [
+        "Video Wall Splicer"
+      ],
+      "ips": [
+        "192.168.10.10"
+      ],
+      "observed_platforms": {
+        "video-wall-processor": {
+          "best_strength": "high",
+          "count": 30,
+          "last_seen": "2026-04-07T07:39:32Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        8080
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [
+        "SSH-2.0-OpenSSH_9.7"
+      ],
+      "validation_fingerprint_platforms": {
+        "video-wall-processor": {
+          "best_strength": "high",
+          "count": 30,
+          "last_seen": "2026-04-07T07:39:32Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-02",
+        "ip:192.168.10.10"
+      ],
+      "ip": "192.168.10.10",
+      "key": "hostname:dev-02",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-02"
+    },
+    "last_seen": "2026-04-07T07:39:32Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "nginx/1.26.2",
+      "http_title": "Video Wall Splicer",
+      "inventory_type": "video-wall-processor",
+      "ip": "192.168.10.10",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-02",
+      "observed_platform": "video-wall-processor",
+      "observed_platform_confidence": "high",
+      "open_ports": [
+        22,
+        80,
+        8080
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "SSH-2.0-OpenSSH_9.7",
+      "stable_hostname": "DEV-02",
+      "validation_fingerprint_confidence": "high",
+      "validation_fingerprint_platform": "video-wall-processor",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "high",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "repeated strong video-wall processor evidence"
+        ],
+        "confidence": "high",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 30,
+        "suggested_type": "video-wall-processor",
+        "type_candidates": {
+          "video-wall-processor": {
+            "best_strength": "high",
+            "count": 30,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "repeated strong video-wall processor evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "video-wall-processor",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 61,
+      "suggested_type": "video-wall-processor",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:51Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "video-wall-processor": {
+          "best_strength": "high",
+          "count": 61,
+          "last_seen": "2026-04-07T07:39:32Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 31,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 16,
+      "validate_systems": 13
+    }
+  },
+  "hostname:dev-03": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:55Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:57Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-03"
+      ],
+      "http_keywords": [],
+      "http_servers": [
+        "openresty"
+      ],
+      "http_titles": [
+        "303 See Other"
+      ],
+      "ips": [
+        "192.168.10.11"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-03",
+        "ip:192.168.10.11"
+      ],
+      "ip": "192.168.10.11",
+      "key": "hostname:dev-03",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-03"
+    },
+    "last_seen": "2026-04-07T07:39:32Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "openresty",
+      "http_title": "303 See Other",
+      "inventory_type": "web-device",
+      "ip": "192.168.10.11",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-03",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-03",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "web-device",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 1,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:55Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:57Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 38,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 16,
+      "validate_systems": 20
+    }
+  },
+  "hostname:dev-04": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:58Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:01Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-04"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [
+        "303 See Other"
+      ],
+      "ips": [
+        "192.168.10.12"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-04",
+        "ip:192.168.10.12"
+      ],
+      "ip": "192.168.10.12",
+      "key": "hostname:dev-04",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-04"
+    },
+    "last_seen": "2026-04-07T07:39:33Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "303 See Other",
+      "inventory_type": "web-device",
+      "ip": "192.168.10.12",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-04",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-04",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "web-device",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 1,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:32:58Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:01Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-05": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:03Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-05"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.13"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-05",
+        "ip:192.168.10.13"
+      ],
+      "ip": "192.168.10.13",
+      "key": "hostname:dev-05",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-05"
+    },
+    "last_seen": "2026-04-07T07:39:33Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.13",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-05",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-05",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:03Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-06": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:06Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-06"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.14"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-06",
+        "ip:192.168.10.14"
+      ],
+      "ip": "192.168.10.14",
+      "key": "hostname:dev-06",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-06"
+    },
+    "last_seen": "2026-04-07T07:39:34Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.14",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-06",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-06",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:06Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-07": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:11Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-07"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.15"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-07",
+        "ip:192.168.10.15"
+      ],
+      "ip": "192.168.10.15",
+      "key": "hostname:dev-07",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-07"
+    },
+    "last_seen": "2026-04-07T07:39:35Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.15",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-07",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-07",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:11Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-08": {
+    "first_seen": "2026-04-07T04:04:34Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:14Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-08"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.16"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-08",
+        "ip:192.168.10.16"
+      ],
+      "ip": "192.168.10.16",
+      "key": "hostname:dev-08",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-08"
+    },
+    "last_seen": "2026-04-07T07:39:35Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.16",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-08",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-08",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:14Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-09": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:17Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-09"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.17"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-09",
+        "ip:192.168.10.17"
+      ],
+      "ip": "192.168.10.17",
+      "key": "hostname:dev-09",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-09"
+    },
+    "last_seen": "2026-04-07T07:39:36Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.17",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-09",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-09",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:17Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-10": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:21Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-10"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.18"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-10",
+        "ip:192.168.10.18"
+      ],
+      "ip": "192.168.10.18",
+      "key": "hostname:dev-10",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-10"
+    },
+    "last_seen": "2026-04-07T07:39:36Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.18",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-10",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-10",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:21Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-11": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:25Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-11"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.19"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-11",
+        "ip:192.168.10.19"
+      ],
+      "ip": "192.168.10.19",
+      "key": "hostname:dev-11",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-11"
+    },
+    "last_seen": "2026-04-07T07:39:37Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.19",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-11",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-11",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:25Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-12": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:28Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-12"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.20"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-12",
+        "ip:192.168.10.20"
+      ],
+      "ip": "192.168.10.20",
+      "key": "hostname:dev-12",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-12"
+    },
+    "last_seen": "2026-04-07T07:39:37Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.20",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-12",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-12",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:28Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 40,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 23
+    }
+  },
+  "hostname:dev-13": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:32Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-13"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.21"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-13",
+        "ip:192.168.10.21"
+      ],
+      "ip": "192.168.10.21",
+      "key": "hostname:dev-13",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-13"
+    },
+    "last_seen": "2026-04-07T07:39:38Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.21",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-13",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-13",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:32Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 25,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 8
+    }
+  },
+  "hostname:dev-14": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:36Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-14"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.22"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-14",
+        "ip:192.168.10.22"
+      ],
+      "ip": "192.168.10.22",
+      "key": "hostname:dev-14",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-14"
+    },
+    "last_seen": "2026-04-07T07:39:38Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.22",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-14",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-14",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:33:36Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-15": {
+    "first_seen": "2026-04-07T04:04:35Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:53Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "windows-host": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:54Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-15"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.26"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        445
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-15",
+        "ip:192.168.10.26"
+      ],
+      "ip": "192.168.10.26",
+      "key": "hostname:dev-15",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-15"
+    },
+    "last_seen": "2026-04-07T08:12:54Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "windows-host",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "windows-host",
+      "ip": "192.168.10.26",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-15",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        445
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-15",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "windows-host",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:53Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "windows-host": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:54Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 25,
+    "sources": {
+      "discovery": 2,
+      "fingerprint_host": 2,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-16": {
+    "first_seen": "2026-04-07T04:04:36Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:45Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:48Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-16"
+      ],
+      "http_keywords": [],
+      "http_servers": [
+        "openresty"
+      ],
+      "http_titles": [
+        "303 See Other"
+      ],
+      "ips": [
+        "192.168.10.33"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-16",
+        "ip:192.168.10.33"
+      ],
+      "ip": "192.168.10.33",
+      "key": "hostname:dev-16",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-16"
+    },
+    "last_seen": "2026-04-07T07:39:40Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "openresty",
+      "http_title": "303 See Other",
+      "inventory_type": "web-device",
+      "ip": "192.168.10.33",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-16",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-16",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "web-device",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 1,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:45Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:48Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-17": {
+    "first_seen": "2026-04-07T04:04:37Z",
+    "history": {
+      "guessed_types": {
+        "crestron_uc": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:08Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:06Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-17"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Microsoft-IIS/10.0"
+      ],
+      "http_titles": [
+        "Crestron UC-ENGINE"
+      ],
+      "ips": [
+        "192.168.10.42"
+      ],
+      "observed_platforms": {
+        "crestron_uc": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:44Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:44Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {
+        "crestron_uc": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:44Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-17",
+        "ip:192.168.10.42"
+      ],
+      "ip": "192.168.10.42",
+      "key": "hostname:dev-17",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-17"
+    },
+    "last_seen": "2026-04-07T07:39:44Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Microsoft-IIS/10.0",
+      "http_title": "Crestron UC-ENGINE",
+      "inventory_type": "crestron_uc",
+      "ip": "192.168.10.42",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-17",
+      "observed_platform": "crestron_uc",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-17",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron_uc",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          },
+          "crestron_uc": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence",
+              "repeated Crestron UC evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron_uc",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 45,
+      "suggested_type": "crestron_uc",
+      "type_candidates": {
+        "crestron_uc": {
+          "best_strength": "medium",
+          "count": 45,
+          "last_seen": "2026-04-07T07:39:44Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:06Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-18": {
+    "first_seen": "2026-04-07T04:04:37Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:10Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-18"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.47"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-18",
+        "ip:192.168.10.47"
+      ],
+      "ip": "192.168.10.47",
+      "key": "hostname:dev-18",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-18"
+    },
+    "last_seen": "2026-04-07T07:39:44Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.47",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-18",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-18",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:10Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-19": {
+    "first_seen": "2026-04-07T04:04:38Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:14Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-19"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.48"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-19",
+        "ip:192.168.10.48"
+      ],
+      "ip": "192.168.10.48",
+      "key": "hostname:dev-19",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-19"
+    },
+    "last_seen": "2026-04-07T07:39:45Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.48",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-19",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-19",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:14Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-20": {
+    "first_seen": "2026-04-07T04:04:38Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:18Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-20"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.49"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-20",
+        "ip:192.168.10.49"
+      ],
+      "ip": "192.168.10.49",
+      "key": "hostname:dev-20",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-20"
+    },
+    "last_seen": "2026-04-07T07:39:45Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.49",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-20",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-20",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:18Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-21": {
+    "first_seen": "2026-04-07T04:04:38Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:20Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "windows-host": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:58Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-21"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.50"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        445
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-21",
+        "ip:192.168.10.50"
+      ],
+      "ip": "192.168.10.50",
+      "key": "hostname:dev-21",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-21"
+    },
+    "last_seen": "2026-04-07T08:12:58Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "windows-host",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "windows-host",
+      "ip": "192.168.10.50",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-21",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        445
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-21",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "windows-host",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "windows-host",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:34:20Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "windows-host": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:58Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 24,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 2,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dev-22": {
+    "first_seen": "2026-04-07T04:04:39Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:01Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "linux-web-device": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:03Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-22"
+      ],
+      "http_keywords": [],
+      "http_servers": [
+        "lighttpd/1.4.48"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.53"
+      ],
+      "observed_platforms": {
+        "linux-web-device": {
+          "best_strength": "low",
+          "count": 21,
+          "last_seen": "2026-04-07T08:13:03Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u00140,Xp\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014\u001aApC\u0019Hg\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes256-",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014H\u000f,!3T\u0017\u0014}\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes25",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014X \u0002f{ $/.\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes25",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u00148R%9\u007fa%| \u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes25",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014\u0011 p\u0011 3\u0016\\\u062f>\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014DQ\u0003\u0002r%3'\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes256",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014 xT} \u03e1\u0001C8 \u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014f\u0019\u0014Hb2d O\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes25",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u00141;tvDKv_\u007f =X\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,ae",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014]\u0015\u0017m\u0006c\u0003o\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes256",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014\u05af16)n\u0003\u0010 X \u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014>4Yd#\u0015\u0005\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes256-",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014(\u0002\\ut\u0010uhml\u0010\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014 F~ D\u024f\u000f \u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes256",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014+v@Z\u0018X\b+Ov-\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014\uf869=:\\ \u000fqa9\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes25",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014\u6ed5\u0006I])w dD\u06e1\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014\u0005\u0001\u001bc/\u0010sC,9\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014jHa U\u0019k\u0017z\\\u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,aes2",
+        "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014 zYspez}\u0002z\u0004 \u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,ae"
+      ],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-22",
+        "ip:192.168.10.53"
+      ],
+      "ip": "192.168.10.53",
+      "key": "hostname:dev-22",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-22"
+    },
+    "last_seen": "2026-04-07T08:13:03Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "linux-web-device",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "lighttpd/1.4.48",
+      "http_title": "",
+      "inventory_type": "linux-web-device",
+      "ip": "192.168.10.53",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-22",
+      "observed_platform": "linux-web-device",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "SSH-2.0-dropbear_2016.74 \u0000\u0000\u0001\u0004\u0006\u0014 zYspez}\u0002z\u0004 \u0000\u0000\u00004diffie-hellman-group1-sha1,kexguess2@matt.ucc.asn.au\u0000\u0000\u0000\u000fssh-rsa,ssh-dss\u0000\u0000\u0000\u0015aes128-ctr,aes256-ctr\u0000\u0000\u0000\u0015aes128-ctr,ae",
+      "stable_hostname": "DEV-22",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "linux-web-device",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 23,
+      "suggested_type": "linux-web-device",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:01Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "linux-web-device": {
+          "best_strength": "low",
+          "count": 23,
+          "last_seen": "2026-04-07T08:13:03Z",
+          "reasons": [
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 2,
+      "fingerprint_host": 2,
+      "validate_all": 14,
+      "validate_systems": 5
+    }
+  },
+  "hostname:dev-23": {
+    "first_seen": "2026-04-07T04:04:39Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:29Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-23"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.55"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-23",
+        "ip:192.168.10.55"
+      ],
+      "ip": "192.168.10.55",
+      "key": "hostname:dev-23",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-23"
+    },
+    "last_seen": "2026-04-07T07:39:48Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.55",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-23",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-23",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:29Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 19,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:dev-24": {
+    "first_seen": "2026-04-07T04:04:39Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:34Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-24"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.56"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-24",
+        "ip:192.168.10.56"
+      ],
+      "ip": "192.168.10.56",
+      "key": "hostname:dev-24",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-24"
+    },
+    "last_seen": "2026-04-07T07:39:48Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.56",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-24",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-24",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:34Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 19,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:dev-25": {
+    "first_seen": "2026-04-07T04:04:40Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:05Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:07Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-25"
+      ],
+      "http_keywords": [],
+      "http_servers": [
+        "Hydra/0.1.8"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.58"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-25",
+        "ip:192.168.10.58"
+      ],
+      "ip": "192.168.10.58",
+      "key": "hostname:dev-25",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-25"
+    },
+    "last_seen": "2026-04-07T08:13:07Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "web-device",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "web-device",
+      "ip": "192.168.10.58",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-25",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-25",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "web-device",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:05Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:07Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 21,
+    "sources": {
+      "discovery": 2,
+      "fingerprint_host": 2,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:dev-26": {
+    "first_seen": "2026-04-07T04:04:40Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:41Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-26"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.59"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-26",
+        "ip:192.168.10.59"
+      ],
+      "ip": "192.168.10.59",
+      "key": "hostname:dev-26",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-26"
+    },
+    "last_seen": "2026-04-07T07:39:50Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.59",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-26",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-26",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T06:34:41Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 19,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:dev-27": {
+    "first_seen": "2026-04-07T04:04:41Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:08Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:10Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "DEV-27"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.253"
+      ],
+      "observed_platforms": {},
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dev-27",
+        "ip:192.168.10.253"
+      ],
+      "ip": "192.168.10.253",
+      "key": "hostname:dev-27",
+      "key_type": "hostname",
+      "stable_hostname": "DEV-27"
+    },
+    "last_seen": "2026-04-07T08:13:10Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "web-device",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "web-device",
+      "ip": "192.168.10.253",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DEV-27",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "",
+      "stable_hostname": "DEV-27",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "web-device",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:08Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "web-device": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:10Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 21,
+    "sources": {
+      "discovery": 2,
+      "fingerprint_host": 2,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:dinap3-2.local": {
+    "first_seen": "2026-04-07T04:04:36Z",
+    "history": {
+      "guessed_types": {
+        "crestron": {
+          "best_strength": "low",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:42Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:51Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "dinap3-2.local"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Crestron Webserver"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.37"
+      ],
+      "observed_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:42Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:42Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [
+        "SSH-2.0-CrestronSSH"
+      ],
+      "validation_fingerprint_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:42Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dinap3-2.local",
+        "ip:192.168.10.37"
+      ],
+      "ip": "192.168.10.37",
+      "key": "hostname:dinap3-2.local",
+      "key_type": "hostname",
+      "stable_hostname": "dinap3-2.local"
+    },
+    "last_seen": "2026-04-07T07:39:42Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "crestron",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Crestron Webserver",
+      "http_title": "",
+      "inventory_type": "crestron",
+      "ip": "192.168.10.37",
+      "mac": "",
+      "mdns_name": "",
+      "name": "dinap3-2.local",
+      "observed_platform": "crestron",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "SSH-2.0-CrestronSSH",
+      "stable_hostname": "dinap3-2.local",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 66,
+      "suggested_type": "crestron",
+      "type_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 66,
+          "last_seen": "2026-04-07T07:39:42Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:51Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dinap3.local": {
+    "first_seen": "2026-04-07T04:04:36Z",
+    "history": {
+      "guessed_types": {
+        "crestron": {
+          "best_strength": "low",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:41Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:50Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "dinap3.local"
+      ],
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_servers": [
+        "Crestron Webserver"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.36"
+      ],
+      "observed_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:41Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:41Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [
+        "SSH-2.0-CrestronSSH"
+      ],
+      "validation_fingerprint_platforms": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:41Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dinap3.local",
+        "ip:192.168.10.36"
+      ],
+      "ip": "192.168.10.36",
+      "key": "hostname:dinap3.local",
+      "key_type": "hostname",
+      "stable_hostname": "dinap3.local"
+    },
+    "last_seen": "2026-04-07T07:39:41Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "crestron",
+      "hostname": "",
+      "http_keywords": [
+        "crestron"
+      ],
+      "http_server": "Crestron Webserver",
+      "http_title": "",
+      "inventory_type": "crestron",
+      "ip": "192.168.10.36",
+      "mac": "",
+      "mdns_name": "",
+      "name": "dinap3.local",
+      "observed_platform": "crestron",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        22,
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "SSH-2.0-CrestronSSH",
+      "stable_hostname": "dinap3.local",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "crestron",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Crestron family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "crestron",
+        "type_candidates": {
+          "crestron": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Crestron family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "crestron",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 66,
+      "suggested_type": "crestron",
+      "type_candidates": {
+        "crestron": {
+          "best_strength": "medium",
+          "count": 66,
+          "last_seen": "2026-04-07T07:39:41Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:50Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:dsp-01": {
+    "first_seen": "2026-04-07T04:04:37Z",
+    "history": {
+      "guessed_types": {
+        "biamp": {
+          "best_strength": "low",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:58Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "DSP-01"
+      ],
+      "http_keywords": [
+        "biamp"
+      ],
+      "http_servers": [
+        "lighttpd"
+      ],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.40"
+      ],
+      "observed_platforms": {
+        "biamp": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        80,
+        443
+      ],
+      "signal_candidates": {
+        "biamp-tesira": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "vendor fingerprint signal"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {
+        "biamp": {
+          "best_strength": "medium",
+          "count": 22,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "validation fingerprint"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:dsp-01",
+        "ip:192.168.10.40"
+      ],
+      "ip": "192.168.10.40",
+      "key": "hostname:dsp-01",
+      "key_type": "hostname",
+      "stable_hostname": "DSP-01"
+    },
+    "last_seen": "2026-04-07T07:39:43Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "biamp",
+      "hostname": "",
+      "http_keywords": [
+        "biamp"
+      ],
+      "http_server": "lighttpd",
+      "http_title": "",
+      "inventory_type": "biamp",
+      "ip": "192.168.10.40",
+      "mac": "",
+      "mdns_name": "",
+      "name": "DSP-01",
+      "observed_platform": "biamp",
+      "observed_platform_confidence": "medium",
+      "open_ports": [
+        80,
+        443
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "DSP-01",
+      "validation_fingerprint_confidence": "medium",
+      "validation_fingerprint_platform": "biamp",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "validation fingerprint",
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [
+          "validation fingerprint",
+          "observed platform",
+          "vendor fingerprint signal",
+          "repeated strong Biamp family evidence"
+        ],
+        "confidence": "medium",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 22,
+        "suggested_type": "biamp",
+        "type_candidates": {
+          "biamp": {
+            "best_strength": "medium",
+            "count": 22,
+            "reasons": [
+              "validation fingerprint",
+              "observed platform",
+              "vendor fingerprint signal",
+              "repeated strong Biamp family evidence"
+            ]
+          }
+        }
+      },
+      "inventory_type": "biamp",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 66,
+      "suggested_type": "biamp",
+      "type_candidates": {
+        "biamp": {
+          "best_strength": "medium",
+          "count": 66,
+          "last_seen": "2026-04-07T07:39:43Z",
+          "reasons": [
+            "validation fingerprint",
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        },
+        "generic": {
+          "best_strength": "low",
+          "count": 1,
+          "last_seen": "2026-04-07T06:33:58Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 23,
+    "sources": {
+      "discovery": 1,
+      "fingerprint_host": 1,
+      "validate_all": 15,
+      "validate_systems": 6
+    }
+  },
+  "hostname:hp-5cd9088wb2-2.local": {
+    "first_seen": "2026-04-07T08:12:49Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:57Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "hostnames": [
+        "HP-5CD9088WB2-2.local"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.1",
+        "192.168.10.50"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:hp-5cd9088wb2-2.local",
+        "ip:192.168.10.1",
+        "ip:192.168.10.50"
+      ],
+      "ip": "192.168.10.50",
+      "key": "hostname:hp-5cd9088wb2-2.local",
+      "key_type": "hostname",
+      "stable_hostname": "HP-5CD9088WB2-2.local"
+    },
+    "last_seen": "2026-04-07T08:12:57Z",
+    "last_source": "discovery",
+    "latest": {
+      "guessed_type": "generic",
+      "hostname": "HP-5CD9088WB2-2.local",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "",
+      "ip": "192.168.10.50",
+      "mac": "",
+      "mdns_name": "HP-5CD9088WB2-2.local",
+      "name": "",
+      "observed_platform": "",
+      "observed_platform_confidence": "",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "discovery",
+      "ssh_banner": "",
+      "stable_hostname": "HP-5CD9088WB2-2.local",
+      "validation_fingerprint_confidence": "",
+      "validation_fingerprint_platform": "",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed guessed_type"
+      ],
+      "confidence": "low",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 2,
+      "suggested_type": "generic",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:12:57Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 2,
+    "sources": {
+      "discovery": 2
+    }
+  },
+  "hostname:pi.hole": {
+    "first_seen": "2026-04-07T04:04:41Z",
+    "history": {
+      "guessed_types": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:09Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "pi-hole": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:12Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "fingerprint_host"
+          ]
+        }
+      },
+      "hostnames": [
+        "pi.hole"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [
+        "Pi-hole pi-hole"
+      ],
+      "ips": [
+        "192.168.10.25"
+      ],
+      "observed_platforms": {
+        "pi-hole": {
+          "best_strength": "high",
+          "count": 19,
+          "last_seen": "2026-04-07T08:13:12Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443,
+        8080
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [
+        "SSH-2.0-OpenSSH_8.4p1 Raspbian-5+b1"
+      ],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:pi.hole",
+        "ip:192.168.10.25"
+      ],
+      "ip": "192.168.10.25",
+      "key": "hostname:pi.hole",
+      "key_type": "hostname",
+      "stable_hostname": "pi.hole"
+    },
+    "last_seen": "2026-04-07T08:13:12Z",
+    "last_source": "fingerprint_host",
+    "latest": {
+      "guessed_type": "pi-hole",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "Pi-hole pi-hole",
+      "inventory_type": "pi-hole",
+      "ip": "192.168.10.25",
+      "mac": "",
+      "mdns_name": "",
+      "name": "pi.hole",
+      "observed_platform": "pi-hole",
+      "observed_platform_confidence": "high",
+      "open_ports": [
+        22,
+        80,
+        443,
+        8080
+      ],
+      "reverse_dns": "",
+      "source": "fingerprint_host",
+      "ssh_banner": "SSH-2.0-OpenSSH_8.4p1 Raspbian-5+b1",
+      "stable_hostname": "pi.hole",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed platform",
+        "observed guessed_type"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "pi-hole",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 21,
+      "suggested_type": "pi-hole",
+      "type_candidates": {
+        "generic": {
+          "best_strength": "low",
+          "count": 2,
+          "last_seen": "2026-04-07T08:13:09Z",
+          "reasons": [
+            "observed guessed_type"
+          ],
+          "sources": [
+            "discovery"
+          ]
+        },
+        "pi-hole": {
+          "best_strength": "medium",
+          "count": 21,
+          "last_seen": "2026-04-07T08:13:12Z",
+          "reasons": [
+            "observed platform",
+            "observed guessed_type"
+          ],
+          "sources": [
+            "validate_systems",
+            "validate_all",
+            "fingerprint_host"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 21,
+    "sources": {
+      "discovery": 2,
+      "fingerprint_host": 2,
+      "validate_all": 12,
+      "validate_systems": 5
+    }
+  },
+  "hostname:test": {
+    "first_seen": "2026-04-07T05:05:25Z",
+    "history": {
+      "guessed_types": {},
+      "hostnames": [
+        "test"
+      ],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.54"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "hostname:test",
+        "ip:192.168.10.54"
+      ],
+      "ip": "192.168.10.54",
+      "key": "hostname:test",
+      "key_type": "hostname",
+      "stable_hostname": "test"
+    },
+    "last_seen": "2026-04-07T05:20:10Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.54",
+      "mac": "",
+      "mdns_name": "",
+      "name": "test",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "test",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [],
+      "confidence": "",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 0,
+      "suggested_type": "",
+      "type_candidates": {},
+      "will_override_inventory_type": false
+    },
+    "seen_count": 6,
+    "sources": {
+      "validate_systems": 6
+    }
+  },
+  "ip:127.0.0.1": {
+    "first_seen": "2026-04-10T04:03:20Z",
+    "history": {
+      "guessed_types": {},
+      "hostnames": [],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [
+        "Pi-hole pi-hole"
+      ],
+      "ips": [
+        "127.0.0.1"
+      ],
+      "observed_platforms": {
+        "pi-hole": {
+          "best_strength": "high",
+          "count": 1,
+          "last_seen": "2026-04-10T04:03:20Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems"
+          ]
+        }
+      },
+      "open_ports": [
+        22,
+        80,
+        443,
+        8080
+      ],
+      "signal_candidates": {},
+      "ssh_banners": [
+        "SSH-2.0-OpenSSH_8.4p1 Raspbian-5+b1"
+      ],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "ip:127.0.0.1"
+      ],
+      "ip": "127.0.0.1",
+      "key": "ip:127.0.0.1",
+      "key_type": "ip"
+    },
+    "last_seen": "2026-04-10T04:03:20Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "Pi-hole pi-hole",
+      "inventory_type": "unknown",
+      "ip": "127.0.0.1",
+      "mac": "",
+      "mdns_name": "",
+      "name": "",
+      "observed_platform": "pi-hole",
+      "observed_platform_confidence": "high",
+      "open_ports": [
+        22,
+        80,
+        443,
+        8080
+      ],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "SSH-2.0-OpenSSH_8.4p1 Raspbian-5+b1",
+      "stable_hostname": "",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [
+        "observed platform"
+      ],
+      "confidence": "medium",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "unknown",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 1,
+      "suggested_type": "pi-hole",
+      "type_candidates": {
+        "pi-hole": {
+          "best_strength": "medium",
+          "count": 1,
+          "last_seen": "2026-04-10T04:03:20Z",
+          "reasons": [
+            "observed platform"
+          ],
+          "sources": [
+            "validate_systems"
+          ]
+        }
+      },
+      "will_override_inventory_type": false
+    },
+    "seen_count": 1,
+    "sources": {
+      "validate_systems": 1
+    }
+  },
+  "ip:192.168.10.101": {
+    "first_seen": "2026-04-07T06:08:18Z",
+    "history": {
+      "guessed_types": {},
+      "hostnames": [],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.101"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "ip:192.168.10.101"
+      ],
+      "ip": "192.168.10.101",
+      "key": "ip:192.168.10.101",
+      "key_type": "ip"
+    },
+    "last_seen": "2026-04-07T06:08:18Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.101",
+      "mac": "",
+      "mdns_name": "",
+      "name": "",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [],
+      "confidence": "",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 0,
+      "suggested_type": "",
+      "type_candidates": {},
+      "will_override_inventory_type": false
+    },
+    "seen_count": 1,
+    "sources": {
+      "validate_systems": 1
+    }
+  },
+  "ip:192.168.10.102": {
+    "first_seen": "2026-04-07T06:08:18Z",
+    "history": {
+      "guessed_types": {},
+      "hostnames": [],
+      "http_keywords": [],
+      "http_servers": [],
+      "http_titles": [],
+      "ips": [
+        "192.168.10.102"
+      ],
+      "observed_platforms": {},
+      "open_ports": [],
+      "signal_candidates": {},
+      "ssh_banners": [],
+      "validation_fingerprint_platforms": {},
+      "vendors": []
+    },
+    "identity": {
+      "aliases": [
+        "ip:192.168.10.102"
+      ],
+      "ip": "192.168.10.102",
+      "key": "ip:192.168.10.102",
+      "key_type": "ip"
+    },
+    "last_seen": "2026-04-07T06:08:18Z",
+    "last_source": "validate_systems",
+    "latest": {
+      "guessed_type": "",
+      "hostname": "",
+      "http_keywords": [],
+      "http_server": "",
+      "http_title": "",
+      "inventory_type": "generic",
+      "ip": "192.168.10.102",
+      "mac": "",
+      "mdns_name": "",
+      "name": "",
+      "observed_platform": "unknown",
+      "observed_platform_confidence": "low",
+      "open_ports": [],
+      "reverse_dns": "",
+      "source": "validate_systems",
+      "ssh_banner": "",
+      "stable_hostname": "",
+      "validation_fingerprint_confidence": "low",
+      "validation_fingerprint_platform": "unknown",
+      "vendor": ""
+    },
+    "learned": {
+      "basis": [],
+      "confidence": "",
+      "fingerprint_library": {
+        "basis": [],
+        "confidence": "",
+        "note": "Reusable device-class patterns are promoted only from repeated strong evidence with identity safety still enforced.",
+        "observation_count": 0,
+        "suggested_type": "",
+        "type_candidates": {}
+      },
+      "inventory_type": "generic",
+      "note": "Conservative evidence only. Weak learned signals do not rewrite saved device truth.",
+      "observation_count": 0,
+      "suggested_type": "",
+      "type_candidates": {},
+      "will_override_inventory_type": false
+    },
+    "seen_count": 1,
+    "sources": {
+      "validate_systems": 1
+    }
+  }
+}
