@@ -3579,8 +3579,21 @@ def api_traceroute():
         return jsonify({'error': 'No host'}), 400
 
     try:
-        out = subprocess.check_output(['traceroute', '-m', '15', host], timeout=30).decode()
+        if platform.system().lower() == 'windows':
+            trace_cmd = ['tracert', '-h', '15', '-d', host]
+            trace_timeout = 60
+        else:
+            trace_cmd = ['traceroute', '-m', '15', host]
+            trace_timeout = 30
+
+        out = subprocess.check_output(
+            trace_cmd,
+            timeout=trace_timeout,
+            stderr=subprocess.STDOUT
+        ).decode(errors='replace')
         return jsonify({'output': out})
+    except subprocess.CalledProcessError as e:
+        return jsonify({'output': e.output.decode(errors='replace'), 'error': 'Traceroute failed'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
