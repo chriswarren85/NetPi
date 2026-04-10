@@ -48,4 +48,16 @@
 - Summary of changes:
   - Added a tiny platform-aware command helper layer for ping, traceroute/tracert, and nmap command construction
   - Replaced duplicated inline command selection in diagnostics endpoints with helper calls while preserving subprocess behavior and response shapes
-  - Kept Linux Pi behavior unchanged and retained Windows-compatible command selection for ping, tracert, and PATH-based nmap
+  - Kept Linux Pi behavior unchanged and retained Windows-compatible command selection for ping, tracert, and PATH-based nmap### Last Update
+- Feature: Stage W0.4 helper coverage for remaining OS-sensitive ping and discovery commands
+- Files modified:
+  - app.py
+  - command_helpers.py
+  - checks/devices.py
+  - checks/network.py
+  - checks/validation.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Extended the tiny command helper layer to cover validation-style ping commands and nmap host-discovery command construction
+  - Replaced remaining inline Linux-only ping command construction in backend checks and validation paths with helper calls
+  - Replaced inline discovery nmap command construction in app and network checks while preserving existing subprocess flow and response shapes

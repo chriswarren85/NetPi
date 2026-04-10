@@ -1,6 +1,7 @@
 import subprocess
 import socket
 import struct
+from command_helpers import build_nmap_host_discovery_command, build_ping_check_command
 try:
     import fcntl
     HAS_FCNTL = True
@@ -11,7 +12,7 @@ import os
 def ping_test(ip, name, count=3):
     try:
         result = subprocess.run(
-            ['ping', '-c', str(count), '-W', '1', ip],
+            build_ping_check_command(ip, count=count, wait_timeout=1),
             capture_output=True, text=True, timeout=10
         )
         if result.returncode == 0:
@@ -54,7 +55,7 @@ def duplicate_ip_test(subnet):
     try:
         # Run a quick nmap ping scan to find all hosts
         result = subprocess.run(
-            ['sudo', 'nmap', '-sn', subnet, '--oG', '-'],
+            build_nmap_host_discovery_command(subnet, output_flag='--oG'),
             capture_output=True, text=True, timeout=60
         )
         ips = []

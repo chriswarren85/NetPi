@@ -2,12 +2,13 @@ import subprocess
 import socket
 import time
 import requests
+from command_helpers import build_ping_check_command
 
 def ping_device(ip, name):
     try:
         start = time.time()
         result = subprocess.run(
-            ['ping', '-c', '3', '-W', '1', ip],
+            build_ping_check_command(ip, count=3, wait_timeout=1),
             capture_output=True, text=True, timeout=10
         )
         elapsed = round((time.time() - start) * 1000)

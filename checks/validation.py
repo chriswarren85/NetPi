@@ -3,6 +3,7 @@ import socket
 import time
 import ssl
 import re
+from command_helpers import build_ping_check_command
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from checks.connectivity_matrix import get_connectivity_rules, format_ports_for_display
 
@@ -155,7 +156,11 @@ def run_ping_check(ip):
     start = time.time()
     try:
         result = subprocess.run(
-            ["ping", "-c", str(DEFAULT_PING_COUNT), "-W", str(DEFAULT_PING_TIMEOUT), ip],
+            build_ping_check_command(
+                ip,
+                count=DEFAULT_PING_COUNT,
+                wait_timeout=DEFAULT_PING_TIMEOUT,
+            ),
             capture_output=True,
             text=True,
             timeout=DEFAULT_PING_TIMEOUT + 2,

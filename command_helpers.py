@@ -11,6 +11,12 @@ def build_ping_command(host, count=4):
     return ["ping", "-c", str(count), host]
 
 
+def build_ping_check_command(host, count=3, wait_timeout=1):
+    if is_windows():
+        return ["ping", "-n", str(count), "-w", str(int(wait_timeout) * 1000), host]
+    return ["ping", "-c", str(count), "-W", str(wait_timeout), host]
+
+
 def build_traceroute_command(host, max_hops=15):
     if is_windows():
         return {
@@ -28,3 +34,10 @@ def build_nmap_command(host, fast_scan=True):
     if is_windows():
         return ["nmap"] + args
     return ["sudo", "nmap"] + args
+
+
+def build_nmap_host_discovery_command(subnet, output_flag="-oG"):
+    command = ["nmap", "-sn", "--open", subnet, output_flag, "-"]
+    if is_windows():
+        return command
+    return ["sudo"] + command

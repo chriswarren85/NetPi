@@ -6,7 +6,12 @@ import socket
 import platform
 import threading
 import uuid
-from command_helpers import build_nmap_command, build_ping_command, build_traceroute_command
+from command_helpers import (
+    build_nmap_command,
+    build_nmap_host_discovery_command,
+    build_ping_command,
+    build_traceroute_command,
+)
 from checks.network import run_base_checks
 from checks.devices import run_device_checks
 import io
@@ -430,7 +435,7 @@ def _parse_discovery_line(line):
 def _discover_hosts_for_subnet(subnet, job_id=None):
     devices = []
     process = subprocess.Popen(
-        ['sudo', 'nmap', '-sn', '--open', subnet, '-oG', '-'],
+        build_nmap_host_discovery_command(subnet, output_flag='-oG'),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -3519,7 +3524,7 @@ def api_scan():
 
     try:
         result = subprocess.check_output(
-            ['sudo', 'nmap', '-sn', '--open', subnet, '--oG', '-'],
+            build_nmap_host_discovery_command(subnet, output_flag='--oG'),
             timeout=90
         ).decode()
 
