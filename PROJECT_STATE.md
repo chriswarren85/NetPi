@@ -60,4 +60,14 @@
 - Summary of changes:
   - Extended the tiny command helper layer to cover validation-style ping commands and nmap host-discovery command construction
   - Replaced remaining inline Linux-only ping command construction in backend checks and validation paths with helper calls
-  - Replaced inline discovery nmap command construction in app and network checks while preserving existing subprocess flow and response shapes
+  - Replaced inline discovery nmap command construction in app and network checks while preserving existing subprocess flow and response shapes### Last Update
+- Feature: Stage W0.8 Windows runtime readiness launch helpers and dependency manifest
+- Files modified:
+  - requirements.txt
+  - start_netpi.ps1
+  - run_netpi.bat
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a minimal requirements.txt based on current NetPi third-party imports
+  - Added a simple PowerShell launch script for Windows operators that starts app.py from the repo directory and prints the local tools URL
+  - Added a trivial batch launcher for Windows environments where double-click or cmd.exe startup is preferred
