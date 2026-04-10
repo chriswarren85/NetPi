@@ -3,6 +3,7 @@ import json, os, subprocess, csv
 from datetime import datetime
 import copy
 import socket
+import platform
 import threading
 import uuid
 from checks.network import run_base_checks
@@ -3541,14 +3542,19 @@ def api_ping():
         return jsonify({'error': 'No host'}), 400
 
     try:
+        if platform.system().lower() == 'windows':
+            ping_cmd = ['ping', '-n', '4', host]
+        else:
+            ping_cmd = ['ping', '-c', '4', host]
+
         out = subprocess.check_output(
-            ['ping', '-c', '4', host],
+            ping_cmd,
             timeout=15,
             stderr=subprocess.STDOUT
-        ).decode()
+        ).decode(errors='replace')
         return jsonify({'output': out})
     except subprocess.CalledProcessError as e:
-        return jsonify({'output': e.output.decode(), 'error': 'Host unreachable'})
+        return jsonify({'output': e.output.decode(errors='replace'), 'error': 'Host unreachable'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
