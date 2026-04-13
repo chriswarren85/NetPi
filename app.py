@@ -875,7 +875,11 @@ def normalize_devices_for_save(devices_in, settings=None):
     normalized = []
     for device in devices_in or []:
         if isinstance(device, dict):
-            normalized.append(assign_inferred_vlan(device, settings=settings))
+            normalized.append(
+                _normalize_device_freshness(
+                    assign_inferred_vlan(device, settings=settings)
+                )
+            )
     return normalized
 
 
@@ -1456,7 +1460,65 @@ def load_devices():
         return []
 
 
+def _clean_freshness_timestamp(value):
+    return str(value or "").strip()
+
+
+def _normalize_device_freshness(device, *, default_first_seen=""):
+    item = dict(device or {})
+    first_seen = _clean_freshness_timestamp(item.get("first_seen"))
+    last_seen = _clean_freshness_timestamp(item.get("last_seen"))
+    last_reachable = _clean_freshness_timestamp(item.get("last_reachable"))
+
+    if not first_seen:
+        first_seen = last_seen or last_reachable or _clean_freshness_timestamp(default_first_seen) or utc_now_iso()
+
+    item["first_seen"] = first_seen
+
+    if last_seen:
+        item["last_seen"] = last_seen
+    else:
+        item.pop("last_seen", None)
+
+    if last_reachable:
+        item["last_reachable"] = last_reachable
+    else:
+        item.pop("last_reachable", None)
+
+    return item
+
+
+def _mark_device_freshness(device, *, seen=False, reachable=False, timestamp=None):
+    seen_at = _clean_freshness_timestamp(timestamp) or utc_now_iso()
+    item = _normalize_device_freshness(device, default_first_seen=seen_at)
+
+    if seen or reachable:
+        item["last_seen"] = seen_at
+    if reachable:
+        item["last_reachable"] = seen_at
+
+    return item
+
+
+def _validation_confirms_reachability(validation):
+    if not validation:
+        return False
+
+    if str(validation.get("overall") or "").strip().lower() == "pass":
+        return True
+
+    if list(validation.get("open_ports") or []):
+        return True
+
+    for result in validation.get("results", []) or []:
+        if result.get("check") == "ping" and result.get("status") == "pass":
+            return True
+
+    return False
+
+
 def save_devices_file(devices):
+    devices = normalize_devices_for_save(devices, settings=load_settings())
     with open(DEVICES_FILE, 'w') as f:
         json.dump({'devices': devices}, f, indent=2)
 
@@ -3173,6 +3235,11 @@ def api_validate_device():
             }), 404
 
         result = run_validation(device)
+        if _validation_confirms_reachability(result):
+            refreshed_device = _mark_device_freshness(device, seen=True, reachable=True)
+            device.clear()
+            device.update(refreshed_device)
+            save_devices_file(devices)
 
         auto_type = decide_auto_promoted_type(device, result)
         result["auto_type"] = auto_type
@@ -3220,13 +3287,21 @@ def api_validate_all():
         payload = request.get_json(silent=True) or {}
         vlan = str(payload.get("vlan") or "").strip()
 
-        devices = load_devices()
+        inventory_devices = load_devices()
+        devices = inventory_devices
         if vlan:
             devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
         results = run_validation_for_all(devices)
         fingerprint_updates = []
+        devices_changed = False
 
         for device, result in zip(devices, results):
+            if _validation_confirms_reachability(result):
+                refreshed_device = _mark_device_freshness(device, seen=True, reachable=True)
+                if refreshed_device != device:
+                    device.clear()
+                    device.update(refreshed_device)
+                    devices_changed = True
             auto_type = decide_auto_promoted_type(device, result)
             type_suggestion = build_type_suggestion(device, result)
             result["type_suggestion"] = type_suggestion
@@ -3260,6 +3335,9 @@ def api_validate_all():
                 update_fingerprint_store(fingerprint_updates)
             except Exception:
                 pass
+
+        if devices_changed:
+            save_devices_file(inventory_devices)
 
         detected = {
             "systems": [],
@@ -3630,6 +3708,14 @@ def fingerprint_host():
             device_updated = True
         effective_type = resolve_effective_type(updated_device or device, guessed, type_suggestion, validation)
 
+        if matched_inventory_device is not None and _validation_confirms_reachability(validation):
+            refreshed_device = _mark_device_freshness(matched_inventory_device, seen=True, reachable=True)
+            if refreshed_device != matched_inventory_device:
+                matched_inventory_device.clear()
+                matched_inventory_device.update(refreshed_device)
+                updated_device = dict(matched_inventory_device)
+                device_updated = True
+
         if device_updated:
             save_devices_file(devices)
 
@@ -3690,7 +3776,11 @@ def add_discovered_devices_to_inventory(devices_in):
         if not ip:
             continue
 
-        if any(existing.get("ip") == ip for existing in devices):
+        existing_device = next((existing for existing in devices if existing.get("ip") == ip), None)
+        if existing_device is not None:
+            refreshed_device = _mark_device_freshness(existing_device, seen=True, reachable=True)
+            existing_device.clear()
+            existing_device.update(refreshed_device)
             skipped_existing += 1
             continue
 
@@ -3700,7 +3790,7 @@ def add_discovered_devices_to_inventory(devices_in):
         notes = (normalized.get("notes") or "").strip()
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
-        devices.append({
+        devices.append(_mark_device_freshness({
             "name": generated_name,
             "ip": ip,
             "type": device_type,
@@ -3708,7 +3798,7 @@ def add_discovered_devices_to_inventory(devices_in):
             "notes": notes or (f"Auto-discovered ({vendor})" if vendor else "Auto-discovered"),
             "mac": (normalized.get("mac") or "").strip(),
             "vendor": vendor
-        })
+        }, seen=True, reachable=True))
         added += 1
         added_ips.append(ip)
 
@@ -3735,14 +3825,19 @@ def add_discovered_device():
 
     devices = load_devices()
 
-    if any(d.get("ip") == ip for d in devices):
+    existing_device = next((d for d in devices if d.get("ip") == ip), None)
+    if existing_device is not None:
+        refreshed_device = _mark_device_freshness(existing_device, seen=True, reachable=True)
+        existing_device.clear()
+        existing_device.update(refreshed_device)
+        save_devices_file(devices)
         return jsonify({"success": True, "message": "Device already exists"})
 
     normalized = assign_inferred_vlan(data, settings=load_settings())
     vlan = (normalized.get("vlan") or "").strip()
     name = generate_device_name(devices, device_type, hostname)
 
-    devices.append({
+    devices.append(_mark_device_freshness({
         "name": name,
         "ip": ip,
         "type": device_type,
@@ -3750,7 +3845,7 @@ def add_discovered_device():
         "notes": f"Auto-discovered ({vendor})" if vendor else "Auto-discovered",
         "mac": mac,
         "vendor": vendor
-    })
+    }, seen=True, reachable=True))
 
     save_devices_file(devices)
     return jsonify({"success": True, "message": f"Device added as {name}"})
@@ -4459,8 +4554,7 @@ def api_auto_type_devices():
             except Exception:
                 pass
 
-        with open(DEVICES_FILE, "w") as f:
-            json.dump(devices, f, indent=2)
+        save_devices_file(devices)
 
         return jsonify({
             "ok": True,
@@ -4485,7 +4579,10 @@ def api_validate_systems():
         explicit_devices = isinstance(devices, list) and bool(devices)
 
         if not explicit_devices:
-            devices = load_devices()
+            inventory_devices = load_devices()
+            devices = inventory_devices
+        else:
+            inventory_devices = None
 
         if vlan:
             devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
@@ -4522,9 +4619,16 @@ def api_validate_systems():
         enriched_devices = [enrich_device_runtime(device) for device in devices]
         validations_by_ip = {}
         fingerprint_updates = []
+        devices_changed = False
 
         for device, item in zip(devices, enriched_devices):
             result = dict(item.get("_validation_result") or {})
+            if not explicit_devices and _validation_confirms_reachability(result):
+                refreshed_device = _mark_device_freshness(device, seen=True, reachable=True)
+                if refreshed_device != device:
+                    device.clear()
+                    device.update(refreshed_device)
+                    devices_changed = True
             auto_type = result.get("auto_type") or {}
             role = item.get("av_role")
             validations_by_ip[result.get("ip", "")] = result
@@ -4552,6 +4656,9 @@ def api_validate_systems():
                 update_fingerprint_store(fingerprint_updates)
             except Exception:
                 pass
+
+        if devices_changed and not explicit_devices and inventory_devices is not None:
+            save_devices_file(inventory_devices)
 
         system_groups = build_runtime_system_groups(enriched_devices)
         results = run_system_validation(enriched_devices, validations_by_ip)
