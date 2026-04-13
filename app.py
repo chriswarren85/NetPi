@@ -1464,11 +1464,56 @@ def _clean_freshness_timestamp(value):
     return str(value or "").strip()
 
 
+def _parse_freshness_timestamp(value):
+    text = _clean_freshness_timestamp(value)
+    if not text:
+        return None
+
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def _derive_device_freshness(device):
+    item = dict(device or {})
+    first_seen = _clean_freshness_timestamp(item.get("first_seen"))
+    last_seen = _clean_freshness_timestamp(item.get("last_seen"))
+    last_reachable = _clean_freshness_timestamp(item.get("last_reachable"))
+    evidence = last_reachable or last_seen
+    evidence_dt = _parse_freshness_timestamp(evidence)
+
+    label = "unknown"
+    age_days = None
+
+    if evidence_dt:
+        age_seconds = max(0, (datetime.utcnow() - evidence_dt.replace(tzinfo=None)).total_seconds())
+        age_days = int(age_seconds // 86400)
+        if age_seconds <= 7 * 86400:
+            label = "fresh"
+        elif age_seconds <= 30 * 86400:
+            label = "aging"
+        else:
+            label = "stale"
+
+    return {
+        "first_seen": first_seen,
+        "last_seen": last_seen,
+        "last_reachable": last_reachable,
+        "freshness_label": label,
+        "freshness_age_days": age_days,
+    }
+
+
 def _normalize_device_freshness(device, *, default_first_seen=""):
     item = dict(device or {})
     first_seen = _clean_freshness_timestamp(item.get("first_seen"))
     last_seen = _clean_freshness_timestamp(item.get("last_seen"))
     last_reachable = _clean_freshness_timestamp(item.get("last_reachable"))
+    item.pop("freshness_label", None)
+    item.pop("freshness_age_days", None)
 
     if not first_seen:
         first_seen = last_seen or last_reachable or _clean_freshness_timestamp(default_first_seen) or utc_now_iso()
@@ -1521,6 +1566,16 @@ def save_devices_file(devices):
     devices = normalize_devices_for_save(devices, settings=load_settings())
     with open(DEVICES_FILE, 'w') as f:
         json.dump({'devices': devices}, f, indent=2)
+
+
+def _devices_with_freshness_view(devices):
+    enriched = []
+    for device in devices or []:
+        if isinstance(device, dict):
+            item = dict(device)
+            item.update(_derive_device_freshness(item))
+            enriched.append(item)
+    return enriched
 
 
 def load_fingerprints():
@@ -2395,7 +2450,7 @@ def diagnostics():
 
 @app.route('/tools/devices')
 def devices():
-    return render_template('devices.html', s=load_settings(), devices=load_devices())
+    return render_template('devices.html', s=load_settings(), devices=_devices_with_freshness_view(load_devices()))
 
 
 @app.route('/tools/settings', methods=['GET', 'POST'])

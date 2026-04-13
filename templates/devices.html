@@ -100,6 +100,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
           <th>IP</th>
           <th>Type</th>
           <th>VLAN</th>
+          <th>Freshness</th>
           <th>Notes</th>
           <th></th>
           <th>Validation</th>
@@ -112,8 +113,15 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
           <td style="font-family:monospace">{{ d.ip }}</td>
           <td>{{ d.type }}</td>
           <td>{{ d.vlan or "" }}</td>
+          <td>
+            <div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:#1f2937;color:#d1d5db">{{ d.freshness_label or "unknown" }}</div>
+            <div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280">Seen: {{ d.last_seen or "Never" }}</div>
+            <div style="font-size:11px;line-height:1.4;color:#6b7280">Reachable: {{ d.last_reachable or "Never" }}</div>
+            <div style="font-size:11px;line-height:1.4;color:#6b7280">First: {{ d.first_seen or "Unknown" }}</div>
+          </td>
           <td style="color:#6b7280">{{ d.notes or "" }}</td>
           <td><button class="btn btn-danger" onclick="removeDevice('{{ d.ip }}')">Remove</button></td>
+          <td></td>
         </tr>
         {% else %}
         <tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — add one above</td></tr>
@@ -635,6 +643,49 @@ function removeDevice(ip){
   renderTable();
 }
 
+function getFreshnessInfo(device){
+  const firstSeen = String((device && device.first_seen) || '').trim();
+  const lastSeen = String((device && device.last_seen) || '').trim();
+  const lastReachable = String((device && device.last_reachable) || '').trim();
+  const evidence = lastReachable || lastSeen;
+
+  let label = String((device && device.freshness_label) || '').trim().toLowerCase();
+  if(!label){
+    if(!evidence){
+      label = 'unknown';
+    } else {
+      const parsed = new Date(evidence);
+      if(Number.isNaN(parsed.getTime())){
+        label = 'unknown';
+      } else {
+        const ageMs = Math.max(0, Date.now() - parsed.getTime());
+        if(ageMs <= 7 * 24 * 60 * 60 * 1000){
+          label = 'fresh';
+        } else if(ageMs <= 30 * 24 * 60 * 60 * 1000){
+          label = 'aging';
+        } else {
+          label = 'stale';
+        }
+      }
+    }
+  }
+
+  const tones = {
+    fresh: { background: '#052e16', color: '#bbf7d0' },
+    aging: { background: '#3f2a06', color: '#fde68a' },
+    stale: { background: '#3b0d0d', color: '#fecaca' },
+    unknown: { background: '#1f2937', color: '#d1d5db' }
+  };
+
+  return {
+    label,
+    firstSeen,
+    lastSeen,
+    lastReachable,
+    tone: tones[label] || tones.unknown
+  };
+}
+
 function renderTable(){
   const tbody = document.getElementById('device-table');
   const filterVlan = document.getElementById('filter-vlan').value;
@@ -646,7 +697,7 @@ function renderTable(){
   }
 
   if(filtered.length === 0){
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No matching devices</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color:#4b5563;text-align:center;padding:1rem">No matching devices</td></tr>';
     return;
   }
 
@@ -659,7 +710,7 @@ function renderTable(){
 
   Object.keys(groups).sort().forEach(groupName => {
     const groupRow = document.createElement('tr');
-    groupRow.innerHTML = '<td colspan="7" style="background:#111827;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
+    groupRow.innerHTML = '<td colspan="8" style="background:#111827;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
     tbody.appendChild(groupRow);
 
     groups[groupName].forEach(d => {
@@ -667,6 +718,12 @@ function renderTable(){
       const safeIp = String(d.ip || '').replace(/'/g, "\\'");
       const r = validationResults[d.ip];
       const actionState = activeDeviceActions[d.ip];
+      const freshness = getFreshnessInfo(d);
+      const freshnessHtml =
+        '<div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:' + freshness.tone.background + ';color:' + freshness.tone.color + '">' + escapeHtml(freshness.label) + '</div>' +
+        '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280"><strong>Seen:</strong> ' + escapeHtml(freshness.lastSeen || 'Never') + '</div>' +
+        '<div style="font-size:11px;line-height:1.4;color:#6b7280"><strong>Reachable:</strong> ' + escapeHtml(freshness.lastReachable || 'Never') + '</div>' +
+        '<div style="font-size:11px;line-height:1.4;color:#6b7280"><strong>First:</strong> ' + escapeHtml(freshness.firstSeen || 'Unknown') + '</div>';
 
       let validationButtonText = 'Validate';
       let validationButtonDisabled = '';
@@ -730,6 +787,7 @@ function renderTable(){
         '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
         '<td>' + escapeHtml(d.type) + '</td>' +
         '<td>' + escapeHtml(d.vlan || '') + '</td>' +
+        '<td>' + freshnessHtml + '</td>' +
         '<td style="color:#6b7280">' + escapeHtml(d.notes || '') + '</td>' +
         '<td><button class="btn btn-danger" onclick="removeDevice(\'' + safeIp + '\')">Remove</button></td>' +
         '<td>' + validationHtml + '</td>';
