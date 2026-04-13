@@ -210,6 +210,31 @@ def _discovery_progress_message(current_subnet, current_index=0, total_subnets=0
     return f"Scanning {current_subnet}..."
 
 
+def _is_known_discovery_assertion_failure(stderr_output):
+    stderr_text = (stderr_output or "").strip()
+    if not stderr_text:
+        return False
+
+    known_markers = (
+        "target.cc:503",
+        "htn.toclock_running",
+        "assertion",
+        "void target::stoptimeoutclock",
+    )
+    stderr_lower = stderr_text.lower()
+    return any(marker in stderr_lower for marker in known_markers)
+
+
+def _format_discovery_process_error(stderr_output, returncode):
+    stderr_text = (stderr_output or "").strip()
+    if _is_known_discovery_assertion_failure(stderr_text):
+        return (
+            "Nmap host discovery failed due to a known scanner assertion "
+            "error on this platform/version."
+        )
+    return stderr_text or f"nmap exited with status {returncode}"
+
+
 def _get_configured_vlan_subnets(settings):
     subnets = []
     seen = set()
@@ -677,8 +702,11 @@ def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SU
                 )
                 return devices
 
+        if _is_known_discovery_assertion_failure(stderr_output):
+            raise RuntimeError(_format_discovery_process_error(stderr_output, returncode))
+
         if returncode != 0:
-            raise RuntimeError(stderr_output or f"nmap exited with status {returncode}")
+            raise RuntimeError(_format_discovery_process_error(stderr_output, returncode))
 
         return devices
     finally:
