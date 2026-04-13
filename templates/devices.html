@@ -81,6 +81,14 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
           {% endfor %}
         </select>
       </div>
+      <div class="form-group" style="max-width:260px">
+        <label>Freshness View</label>
+        <select id="filter-freshness" onchange="renderTable()">
+          <option value="all">Show all devices</option>
+          <option value="active">Hide stale devices</option>
+          <option value="stale">Show only stale devices</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -689,15 +697,27 @@ function getFreshnessInfo(device){
 function renderTable(){
   const tbody = document.getElementById('device-table');
   const filterVlan = document.getElementById('filter-vlan').value;
+  const filterFreshness = document.getElementById('filter-freshness').value;
   tbody.innerHTML = '';
 
   let filtered = deviceList;
   if(filterVlan){
     filtered = deviceList.filter(d => (d.vlan || '') === filterVlan);
   }
+  if(filterFreshness === 'active'){
+    filtered = filtered.filter(d => getFreshnessInfo(d).label !== 'stale');
+  } else if(filterFreshness === 'stale'){
+    filtered = filtered.filter(d => getFreshnessInfo(d).label === 'stale');
+  }
 
   if(filtered.length === 0){
-    tbody.innerHTML = '<tr><td colspan="8" style="color:#4b5563;text-align:center;padding:1rem">No matching devices</td></tr>';
+    let emptyMessage = 'No matching devices';
+    if(filterFreshness === 'active'){
+      emptyMessage = 'No fresh, aging, or unknown devices match this view';
+    } else if(filterFreshness === 'stale'){
+      emptyMessage = 'No stale devices match this view';
+    }
+    tbody.innerHTML = '<tr><td colspan="8" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
     return;
   }
 
