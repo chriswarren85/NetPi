@@ -114,6 +114,7 @@ let discoveryPollTimer = null;
 let fingerprintRequests = new Set();
 let fingerprintResults = {};
 let fingerprintFailures = new Set();
+let latestDiscoveryProgressMessage = '';
 
 function setDiscoveryUiState(state, message){
   latestDiscoveryState = state;
@@ -129,7 +130,9 @@ function setDiscoveryUiState(state, message){
   discoverBtn.textContent = isRunning ? 'Discovering...' : 'Discover Hosts';
   cancelBtn.style.display = isRunning ? 'inline-block' : 'none';
   discoveringMsg.style.display = isRunning ? 'block' : 'none';
-  discoveringMsg.textContent = isRunning ? 'Discovering live hosts on selected subnet...' : '';
+  discoveringMsg.textContent = isRunning
+    ? (latestDiscoveryProgressMessage || 'Discovering live hosts on selected subnet...')
+    : '';
   addAllBtn.disabled = isRunning || latestDiscoveredDevices.length === 0;
 
   if(message){
@@ -162,6 +165,7 @@ function resetDiscoverySession(){
   currentDiscoveryJobId = '';
   latestDiscoveredDevices = [];
   latestDiscoveredSubnet = '';
+  latestDiscoveryProgressMessage = '';
   fingerprintRequests = new Set();
   fingerprintResults = {};
   fingerprintFailures = new Set();
@@ -573,6 +577,7 @@ function discoverHosts(){
       currentDiscoveryJobId = data.job_id || '';
       latestDiscoveredDevices = Array.isArray(data.devices) ? data.devices.slice() : [];
       latestDiscoveredSubnet = data.subnet || '';
+      latestDiscoveryProgressMessage = data.progress_message || '';
       renderDiscoveredHosts(latestDiscoveredDevices, latestDiscoveredSubnet, data.status || 'queued');
       setDiscoveryUiState(data.status || 'queued', data.message || 'Discovery job started.');
       pollDiscoveryStatus();
@@ -603,6 +608,7 @@ function pollDiscoveryStatus(){
 
       latestDiscoveredDevices = Array.isArray(data.devices) ? data.devices.slice() : [];
       latestDiscoveredSubnet = data.subnet || '';
+      latestDiscoveryProgressMessage = data.progress_message || '';
       renderDiscoveredHosts(latestDiscoveredDevices, latestDiscoveredSubnet, data.status || latestDiscoveryState);
       setDiscoveryUiState(data.status || latestDiscoveryState, data.message || '');
 
@@ -642,6 +648,7 @@ function cancelDiscovery(){
 
       latestDiscoveredDevices = Array.isArray(data.devices) ? data.devices.slice() : latestDiscoveredDevices;
       latestDiscoveredSubnet = data.subnet || latestDiscoveredSubnet;
+      latestDiscoveryProgressMessage = data.progress_message || '';
       renderDiscoveredHosts(latestDiscoveredDevices, latestDiscoveredSubnet, data.status || 'cancelled');
       setDiscoveryUiState(data.status || 'cancelled', data.message || 'Discovery cancelled.');
     })

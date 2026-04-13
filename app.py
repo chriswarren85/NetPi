@@ -6,6 +6,8 @@ import socket
 import platform
 import threading
 import uuid
+import queue
+import time
 from command_helpers import (
     build_nmap_command,
     build_nmap_host_discovery_command,
@@ -35,6 +37,7 @@ DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, 'device_evidence.json')
 BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
+DISCOVERY_SUBNET_TIMEOUT_SECONDS = 45
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -165,6 +168,9 @@ def utc_now_iso():
 
 def resolve_selected_subnet(settings, selected_vlan=""):
     selected_vlan = (selected_vlan or "").strip()
+    if selected_vlan and "/" in selected_vlan:
+        return selected_vlan
+
     if selected_vlan:
         for vlan in settings.get("vlans", []):
             if (vlan.get("name") or "").strip() == selected_vlan:
@@ -194,6 +200,58 @@ def _discovery_status_message(status, devices_found_count, subnet):
     return ""
 
 
+def _discovery_progress_message(current_subnet, current_index=0, total_subnets=0):
+    current_subnet = (current_subnet or "").strip()
+    if not current_subnet:
+        return ""
+    if total_subnets and total_subnets > 1 and current_index:
+        return f"Scanning subnet {current_index} of {total_subnets}: {current_subnet}"
+    return f"Scanning {current_subnet}..."
+
+
+def _get_configured_vlan_subnets(settings):
+    subnets = []
+    seen = set()
+
+    for vlan in settings.get("vlans", []):
+        subnet = (vlan.get("subnet") or "").strip()
+        if subnet and subnet not in seen:
+            subnets.append(subnet)
+            seen.add(subnet)
+
+    return subnets
+
+
+def _resolve_discovery_subnets(settings, selected_vlan=""):
+    selected_vlan = (selected_vlan or "").strip()
+    if selected_vlan:
+        subnet = resolve_selected_subnet(settings, selected_vlan)
+        return [subnet] if subnet else [], False
+
+    subnets = _get_configured_vlan_subnets(settings)
+    if subnets:
+        return subnets, True
+
+    fallback_subnet = (resolve_subnet(settings) or "").strip()
+    return ([fallback_subnet] if fallback_subnet else []), True
+
+
+def _merge_discovered_devices(*device_groups):
+    merged = []
+    seen_ips = set()
+
+    for group in device_groups:
+        for device in group or []:
+            ip = (device.get("ip") or "").strip()
+            if ip and ip in seen_ips:
+                continue
+            if ip:
+                seen_ips.add(ip)
+            merged.append(device)
+
+    return merged
+
+
 def _snapshot_background_job(job):
     progress = copy.deepcopy(job.get("progress") or {})
     results = copy.deepcopy(job.get("results") or {})
@@ -213,6 +271,11 @@ def _snapshot_background_job(job):
         snapshot["devices_found_count"] = progress.get("devices_found_count", 0)
         snapshot["devices"] = copy.deepcopy(results.get("devices") or [])
         snapshot["subnet"] = results.get("subnet") or ""
+        snapshot["subnets"] = copy.deepcopy(results.get("subnets") or [])
+        snapshot["current_subnet"] = progress.get("current_subnet", "")
+        snapshot["current_subnet_index"] = progress.get("current_subnet_index", 0)
+        snapshot["total_subnets"] = progress.get("total_subnets", len(snapshot["subnets"]))
+        snapshot["progress_message"] = progress.get("progress_message", "")
 
     return snapshot
 
@@ -314,16 +377,26 @@ def _cancel_background_job(job_id, *, expected_kind=None, message=None):
 
 
 def _create_discovery_job(subnet):
+    subnets = [subnet] if subnet else []
+    progress_message = _discovery_progress_message(subnet, 1 if subnet else 0, len(subnets))
     return _create_background_job(
         "discover_hosts",
         message=_discovery_status_message("queued", 0, subnet),
-        progress={"devices_found_count": 0},
+        progress={
+            "devices_found_count": 0,
+            "current_subnet": subnet,
+            "current_subnet_index": 1 if subnet else 0,
+            "total_subnets": len(subnets),
+            "progress_message": progress_message
+        },
         results={
             "devices": [],
-            "subnet": subnet
+            "subnet": subnet,
+            "subnets": subnets
         },
         cancel_requested=False,
-        process=None
+        process=None,
+        auto_mode=False
     )
 
 
@@ -342,11 +415,20 @@ def _append_discovery_device(job_id, device):
     def mutate(job):
         results = job.setdefault("results", {})
         devices = results.setdefault("devices", [])
+        device_ip = (device.get("ip") or "").strip()
+        if device_ip and any((existing.get("ip") or "").strip() == device_ip for existing in devices):
+            count = len(devices)
+            job.setdefault("progress", {})["devices_found_count"] = count
+            return
+
         devices.append(device)
         count = len(devices)
-        job.setdefault("progress", {})["devices_found_count"] = count
+        progress = job.setdefault("progress", {})
+        progress["devices_found_count"] = count
         subnet = results.get("subnet") or ""
-        job["message"] = _discovery_status_message(job.get("status"), count, subnet)
+        progress_message = progress.get("progress_message") or ""
+        status_message = _discovery_status_message(job.get("status"), count, subnet)
+        job["message"] = f"{progress_message} {status_message}".strip() if progress_message else status_message
 
     return _update_background_job(job_id, mutate_fn=mutate)
 
@@ -432,7 +514,7 @@ def _parse_discovery_line(line):
     }
 
 
-def _discover_hosts_for_subnet(subnet, job_id=None):
+def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SUBNET_TIMEOUT_SECONDS):
     devices = []
     process = subprocess.Popen(
         build_nmap_host_discovery_command(subnet, output_flag='-oG'),
@@ -441,12 +523,26 @@ def _discover_hosts_for_subnet(subnet, job_id=None):
         text=True,
         bufsize=1
     )
+    stdout_queue = queue.Queue()
+
+    def _read_stdout_lines():
+        try:
+            for raw_line in iter(process.stdout.readline, ''):
+                stdout_queue.put(raw_line)
+        finally:
+            stdout_queue.put(None)
+
+    stdout_thread = threading.Thread(target=_read_stdout_lines, daemon=True)
+    stdout_thread.start()
 
     if job_id:
         _update_background_job(job_id, process=process)
 
     try:
-        for raw_line in iter(process.stdout.readline, ''):
+        started_at = time.monotonic()
+        stdout_complete = False
+
+        while True:
             if job_id:
                 job = _get_discovery_job(job_id)
                 if not job:
@@ -457,6 +553,33 @@ def _discover_hosts_for_subnet(subnet, job_id=None):
                     except Exception:
                         pass
                     break
+
+            if process.poll() is None and (time.monotonic() - started_at) > timeout_seconds:
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    try:
+                        process.kill()
+                    except Exception:
+                        pass
+                raise TimeoutError(f"Discovery timed out for {subnet} after {timeout_seconds} seconds")
+
+            try:
+                raw_line = stdout_queue.get(timeout=0.2)
+            except queue.Empty:
+                if process.poll() is not None and stdout_complete:
+                    break
+                continue
+
+            if raw_line is None:
+                stdout_complete = True
+                if process.poll() is not None:
+                    break
+                continue
 
             line = raw_line.strip()
             if not line:
@@ -497,28 +620,85 @@ def _discover_hosts_for_subnet(subnet, job_id=None):
             process.stderr.close()
 
 
+def _discover_hosts_across_subnets(subnets, job_id=None, timeout_seconds=DISCOVERY_SUBNET_TIMEOUT_SECONDS):
+    merged_devices = []
+    subnet_errors = []
+    total_subnets = len(subnets)
+
+    for index, subnet in enumerate(subnets, start=1):
+        if job_id:
+            progress_message = _discovery_progress_message(subnet, index, total_subnets)
+            _update_background_job(
+                job_id,
+                progress_updates={
+                    "current_subnet": subnet,
+                    "current_subnet_index": index,
+                    "total_subnets": total_subnets,
+                    "progress_message": progress_message
+                },
+                message=progress_message
+            )
+            job = _get_discovery_job(job_id)
+            if not job or job.get("cancel_requested"):
+                break
+
+        try:
+            discovered = _discover_hosts_for_subnet(subnet, job_id=job_id, timeout_seconds=timeout_seconds)
+            merged_devices = _merge_discovered_devices(merged_devices, discovered)
+        except Exception as exc:
+            subnet_errors.append({"subnet": subnet, "error": str(exc)})
+            if job_id:
+                job = _get_discovery_job(job_id)
+                if not job or job.get("cancel_requested"):
+                    break
+                _update_background_job(
+                    job_id,
+                    message=f"{_discovery_progress_message(subnet, index, total_subnets)} Skipping subnet after error: {exc}"
+                )
+
+    return merged_devices, subnet_errors
+
+
 def _run_discovery_job(job_id):
     job = _get_discovery_job(job_id)
     if not job:
         return
 
-    subnet = ((job.get("results") or {}).get("subnet") or "")
+    results = job.get("results") or {}
+    subnet = (results.get("subnet") or "")
+    subnets = results.get("subnets") or ([subnet] if subnet else [])
+    is_auto_mode = bool(job.get("auto_mode"))
+    initial_progress_message = (job.get("progress") or {}).get("progress_message") or ""
     _update_background_job(
         job_id,
         status="running",
-        message=_discovery_status_message("running", 0, subnet),
+        message=f"{initial_progress_message} {_discovery_status_message('running', 0, subnet)}".strip() if initial_progress_message else _discovery_status_message("running", 0, subnet),
         error=""
     )
 
     try:
-        devices = _discover_hosts_for_subnet(subnet, job_id=job_id)
+        if is_auto_mode:
+            devices, subnet_errors = _discover_hosts_across_subnets(subnets, job_id=job_id)
+        else:
+            devices = _discover_hosts_for_subnet(subnet, job_id=job_id)
+            subnet_errors = []
+
         final_job = _get_discovery_job(job_id)
         if final_job and final_job.get("status") != "cancelled":
+            results_updates = {"devices": devices}
+            if subnet_errors:
+                results_updates["subnet_errors"] = subnet_errors
+            completed_message = _discovery_status_message("completed", len(devices), subnet)
+            if is_auto_mode:
+                completed_message = f"Discovery completed across {len(subnets)} subnet(s): {len(devices)} live {'host' if len(devices) == 1 else 'hosts'} found."
+                if subnet_errors:
+                    completed_message += f" Skipped {len(subnet_errors)} subnet(s) with errors/timeouts."
             _update_background_job(
                 job_id,
                 status="completed",
-                message=_discovery_status_message("completed", len(devices), subnet),
-                error=""
+                message=completed_message,
+                error="",
+                results_updates=results_updates
             )
     except Exception as exc:
         _update_background_job(
@@ -3172,18 +3352,25 @@ def download_csv():
 def discover_hosts():
     s = load_settings()
     data = request.json or {}
-    subnet = resolve_selected_subnet(s, data.get("vlan"))
+    subnets, is_auto_mode = _resolve_discovery_subnets(s, data.get("vlan"))
+    subnet = subnets[0] if len(subnets) == 1 else ("configured VLAN subnets" if subnets else "")
 
-    if not subnet:
+    if not subnets:
         return jsonify({"error": "No subnet available"}), 400
 
     try:
-        devices = _discover_hosts_for_subnet(subnet)
+        if is_auto_mode:
+            devices, subnet_errors = _discover_hosts_across_subnets(subnets)
+        else:
+            devices = _discover_hosts_for_subnet(subnet)
+            subnet_errors = []
 
         return jsonify({
             "subnet": subnet,
+            "subnets": subnets,
             "count": len(devices),
-            "devices": devices
+            "devices": devices,
+            "subnet_errors": subnet_errors
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -3193,15 +3380,30 @@ def discover_hosts():
 def start_discover_hosts():
     s = load_settings()
     data = request.json or {}
-    subnet = resolve_selected_subnet(s, data.get("vlan"))
+    subnets, is_auto_mode = _resolve_discovery_subnets(s, data.get("vlan"))
+    subnet = subnets[0] if len(subnets) == 1 else ("configured VLAN subnets" if subnets else "")
 
-    if not subnet:
+    if not subnets:
         return jsonify({"error": "No subnet available"}), 400
 
     job = _create_discovery_job(subnet)
+    _update_background_job(
+        job["job_id"],
+        progress_updates={
+            "current_subnet": subnets[0] if subnets else "",
+            "current_subnet_index": 1 if subnets else 0,
+            "total_subnets": len(subnets),
+            "progress_message": _discovery_progress_message(subnets[0] if subnets else "", 1 if subnets else 0, len(subnets))
+        },
+        results_updates={
+            "subnet": subnet,
+            "subnets": subnets
+        },
+        auto_mode=is_auto_mode
+    )
     _start_background_job(_run_discovery_job, job["job_id"])
 
-    return jsonify(job), 202
+    return jsonify(_snapshot_discovery_job(_get_discovery_job(job["job_id"]))), 202
 
 
 @app.route("/tools/api/discover_hosts/status/<job_id>")
