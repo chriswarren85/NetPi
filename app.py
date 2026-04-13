@@ -38,7 +38,7 @@ DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, 'device_evidence.json')
 BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
-DISCOVERY_SUBNET_TIMEOUT_SECONDS = 45
+DISCOVERY_SUBNET_TIMEOUT_SECONDS = 10
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
