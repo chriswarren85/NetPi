@@ -360,8 +360,46 @@ def _build_discovery_popen_kwargs():
     return kwargs
 
 
-def _terminate_discovery_process(process, *, force=False):
+def _terminate_lingering_discovery_children(subnet, *, force=False):
+    subnet = (subnet or "").strip()
+    if os.name == "nt" or not subnet:
+        return
+
+    sig = signal.SIGKILL if force else signal.SIGTERM
+
+    try:
+        output = subprocess.check_output(
+            ["ps", "-eo", "pid=,args="],
+            text=True,
+            timeout=3,
+        )
+    except Exception:
+        return
+
+    current_pid = os.getpid()
+    for raw_line in output.splitlines():
+        line = (raw_line or "").strip()
+        if not line or f"nmap -sn {subnet}" not in line or "-oG -" not in line:
+            continue
+
+        try:
+            pid_text, _args = line.split(None, 1)
+            pid = int(pid_text)
+        except Exception:
+            continue
+
+        if pid == current_pid:
+            continue
+
+        try:
+            os.kill(pid, sig)
+        except Exception:
+            pass
+
+
+def _terminate_discovery_process(process, *, force=False, subnet=""):
     if not process or process.poll() is not None:
+        _terminate_lingering_discovery_children(subnet, force=force)
         return
 
     try:
@@ -375,7 +413,7 @@ def _terminate_discovery_process(process, *, force=False):
             )
         else:
             sig = signal.SIGKILL if force else signal.SIGTERM
-            os.killpg(process.pid, sig)
+            os.killpg(os.getpgid(process.pid), sig)
     except Exception:
         try:
             if force:
@@ -384,6 +422,8 @@ def _terminate_discovery_process(process, *, force=False):
                 process.terminate()
         except Exception:
             pass
+    finally:
+        _terminate_lingering_discovery_children(subnet, force=force)
 
 
 def _cancel_background_job(job_id, *, expected_kind=None, message=None):
@@ -404,7 +444,8 @@ def _cancel_background_job(job_id, *, expected_kind=None, message=None):
         process = job.get("process")
 
     if process:
-        _terminate_discovery_process(process)
+        subnet = ((job.get("progress") or {}).get("current_subnet") or (job.get("results") or {}).get("subnet") or "")
+        _terminate_discovery_process(process, subnet=subnet)
 
     return _snapshot_background_job(_get_background_job(job_id))
 
@@ -582,15 +623,15 @@ def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SU
                 if not job:
                     break
                 if job.get("cancel_requested"):
-                    _terminate_discovery_process(process)
+                    _terminate_discovery_process(process, subnet=subnet)
                     break
 
             if process.poll() is None and (time.monotonic() - started_at) > timeout_seconds:
-                _terminate_discovery_process(process)
+                _terminate_discovery_process(process, subnet=subnet)
                 try:
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
-                    _terminate_discovery_process(process, force=True)
+                    _terminate_discovery_process(process, force=True, subnet=subnet)
                     try:
                         process.wait(timeout=2)
                     except subprocess.TimeoutExpired:
