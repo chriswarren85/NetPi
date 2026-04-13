@@ -1482,8 +1482,9 @@ def _derive_device_freshness(device):
     first_seen = _clean_freshness_timestamp(item.get("first_seen"))
     last_seen = _clean_freshness_timestamp(item.get("last_seen"))
     last_reachable = _clean_freshness_timestamp(item.get("last_reachable"))
-    evidence = last_reachable or last_seen
+    evidence = last_reachable or last_seen or first_seen
     evidence_dt = _parse_freshness_timestamp(evidence)
+    evidence_source = "last_reachable" if last_reachable else ("last_seen" if last_seen else ("first_seen" if first_seen else ""))
 
     label = "unknown"
     age_days = None
@@ -1491,7 +1492,12 @@ def _derive_device_freshness(device):
     if evidence_dt:
         age_seconds = max(0, (datetime.utcnow() - evidence_dt.replace(tzinfo=None)).total_seconds())
         age_days = int(age_seconds // 86400)
-        if age_seconds <= 7 * 86400:
+        if evidence_source == "first_seen":
+            if age_seconds <= 30 * 86400:
+                label = "aging"
+            else:
+                label = "stale"
+        elif age_seconds <= 7 * 86400:
             label = "fresh"
         elif age_seconds <= 30 * 86400:
             label = "aging"

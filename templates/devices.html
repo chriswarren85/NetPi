@@ -655,7 +655,8 @@ function getFreshnessInfo(device){
   const firstSeen = String((device && device.first_seen) || '').trim();
   const lastSeen = String((device && device.last_seen) || '').trim();
   const lastReachable = String((device && device.last_reachable) || '').trim();
-  const evidence = lastReachable || lastSeen;
+  const evidence = lastReachable || lastSeen || firstSeen;
+  const evidenceSource = lastReachable ? 'last_reachable' : (lastSeen ? 'last_seen' : (firstSeen ? 'first_seen' : ''));
 
   let label = String((device && device.freshness_label) || '').trim().toLowerCase();
   if(!label){
@@ -667,7 +668,13 @@ function getFreshnessInfo(device){
         label = 'unknown';
       } else {
         const ageMs = Math.max(0, Date.now() - parsed.getTime());
-        if(ageMs <= 7 * 24 * 60 * 60 * 1000){
+        if(evidenceSource === 'first_seen'){
+          if(ageMs <= 30 * 24 * 60 * 60 * 1000){
+            label = 'aging';
+          } else {
+            label = 'stale';
+          }
+        } else if(ageMs <= 7 * 24 * 60 * 60 * 1000){
           label = 'fresh';
         } else if(ageMs <= 30 * 24 * 60 * 60 * 1000){
           label = 'aging';
