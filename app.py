@@ -8,6 +8,7 @@ import threading
 import uuid
 import queue
 import time
+import signal
 from command_helpers import (
     build_nmap_command,
     build_nmap_host_discovery_command,
@@ -350,6 +351,41 @@ def _start_background_job(target, *args):
     return thread
 
 
+def _build_discovery_popen_kwargs():
+    kwargs = {}
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["start_new_session"] = True
+    return kwargs
+
+
+def _terminate_discovery_process(process, *, force=False):
+    if not process or process.poll() is not None:
+        return
+
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
+        else:
+            sig = signal.SIGKILL if force else signal.SIGTERM
+            os.killpg(process.pid, sig)
+    except Exception:
+        try:
+            if force:
+                process.kill()
+            else:
+                process.terminate()
+        except Exception:
+            pass
+
+
 def _cancel_background_job(job_id, *, expected_kind=None, message=None):
     with BACKGROUND_JOBS_LOCK:
         job = BACKGROUND_JOBS.get(job_id)
@@ -368,10 +404,7 @@ def _cancel_background_job(job_id, *, expected_kind=None, message=None):
         process = job.get("process")
 
     if process:
-        try:
-            process.terminate()
-        except Exception:
-            pass
+        _terminate_discovery_process(process)
 
     return _snapshot_background_job(_get_background_job(job_id))
 
@@ -521,7 +554,8 @@ def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SU
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        bufsize=1
+        bufsize=1,
+        **_build_discovery_popen_kwargs()
     )
     stdout_queue = queue.Queue()
 
@@ -548,23 +582,18 @@ def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SU
                 if not job:
                     break
                 if job.get("cancel_requested"):
-                    try:
-                        process.terminate()
-                    except Exception:
-                        pass
+                    _terminate_discovery_process(process)
                     break
 
             if process.poll() is None and (time.monotonic() - started_at) > timeout_seconds:
-                try:
-                    process.terminate()
-                except Exception:
-                    pass
+                _terminate_discovery_process(process)
                 try:
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
+                    _terminate_discovery_process(process, force=True)
                     try:
-                        process.kill()
-                    except Exception:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
                         pass
                 raise TimeoutError(f"Discovery timed out for {subnet} after {timeout_seconds} seconds")
 
