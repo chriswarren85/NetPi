@@ -664,6 +664,73 @@ function getSuggestedType(r, currentType){
   return null;
 }
 
+function normalizeTypeValue(value){
+  const text = String(value || '').trim();
+  if(!text) return '';
+  const lower = text.toLowerCase();
+  if(lower === 'unknown' || lower === 'none' || lower === 'n/a' || lower === 'null'){
+    return '';
+  }
+  return text;
+}
+
+function buildTypeCellHtml(device, validation){
+  const savedType = normalizeTypeValue(device && device.type);
+  const savedTypeLower = savedType.toLowerCase();
+  const suggestionObj = (validation && validation.type_suggestion && typeof validation.type_suggestion === 'object')
+    ? validation.type_suggestion
+    : ((device && device.type_suggestion && typeof device.type_suggestion === 'object') ? device.type_suggestion : null);
+  const guessedType = normalizeTypeValue(
+    (validation && validation.auto_type && validation.auto_type.proposed_type)
+    || (validation && validation.guessed_type)
+    || (device && device.guessed_type)
+  );
+  const suggestedType = normalizeTypeValue(
+    (validation && validation.suggested_type)
+    || (suggestionObj && suggestionObj.suggested_type)
+    || (device && device.suggested_type)
+  );
+  const effectiveType = normalizeTypeValue(
+    (validation && validation.effective_type)
+    || (device && device._resolved_type)
+    || (device && device.effective_type)
+  );
+  const suggestionConfidence = String(
+    (validation && validation.confidence_label)
+    || (suggestionObj && suggestionObj.confidence_label)
+    || ''
+  ).trim();
+
+  let html = '<div style="font-size:12px;line-height:1.4"><strong>Saved:</strong> ' + escapeHtml(savedType || 'not set') + '</div>';
+
+  const seenRuntimeTypes = new Set();
+  const runtimeLines = [];
+  const addRuntimeLine = (label, value, suffix) => {
+    if(!value) return;
+    const key = value.toLowerCase();
+    if(key === savedTypeLower) return;
+    if(seenRuntimeTypes.has(key)) return;
+    seenRuntimeTypes.add(key);
+    runtimeLines.push('<div><strong>' + label + ':</strong> ' + escapeHtml(value) + (suffix || '') + '</div>');
+  };
+
+  const suggestionSuffix = (suggestionConfidence && suggestionConfidence.toLowerCase() !== 'none')
+    ? ' <span style="color:#9ca3af">(' + escapeHtml(suggestionConfidence) + ')</span>'
+    : '';
+
+  addRuntimeLine('Runtime guess', guessedType, '');
+  addRuntimeLine('Runtime suggested', suggestedType, suggestionSuffix);
+  addRuntimeLine('Runtime effective', effectiveType, '');
+
+  if(runtimeLines.length){
+    html += '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#9ca3af">' + runtimeLines.join('') + '</div>';
+  } else {
+    html += '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280">Runtime: none</div>';
+  }
+
+  return html;
+}
+
 function applySuggestedType(ip, newType){
   deviceList = deviceList.map(d => {
     if(d.ip === ip){
@@ -793,6 +860,7 @@ function renderTable(){
       const r = validationResults[d.ip];
       const actionState = activeDeviceActions[d.ip];
       const freshness = getFreshnessInfo(d);
+      const typeCellHtml = buildTypeCellHtml(d, r);
       const freshnessHtml =
         '<div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:' + freshness.tone.background + ';color:' + freshness.tone.color + '">' + escapeHtml(freshness.label) + '</div>' +
         '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280"><strong>Seen:</strong> ' + escapeHtml(freshness.lastSeen || 'Never') + '</div>' +
@@ -859,7 +927,7 @@ function renderTable(){
       tr.innerHTML =
         '<td>' + escapeHtml(d.name) + '</td>' +
         '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
-        '<td>' + escapeHtml(d.type) + '</td>' +
+        '<td>' + typeCellHtml + '</td>' +
         '<td>' + escapeHtml(d.vlan || '') + '</td>' +
         '<td>' + freshnessHtml + '</td>' +
         '<td style="color:#6b7280">' + escapeHtml(d.notes || '') + '</td>' +
