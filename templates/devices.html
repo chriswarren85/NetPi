@@ -167,8 +167,9 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
 let deviceList = {{ devices | tojson }};
 let pastedPreview = [];
 
-let validationResults = {};
 const FILTER_STATE_KEY = 'netpi.devices.filterState.v1';
+const VALIDATION_STATE_KEY = 'netpi.devices.validationState.v1';
+let validationResults = loadValidationState();
 
 let systemResults = [];
 let connectivityResults = [];
@@ -222,6 +223,45 @@ function restoreFilterState(){
   if(freshnessEl && (state.freshness === 'all' || state.freshness === 'active' || state.freshness === 'stale')){
     freshnessEl.value = state.freshness;
   }
+}
+
+function loadValidationState(){
+  try {
+    const raw = localStorage.getItem(VALIDATION_STATE_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveValidationState(){
+  try {
+    localStorage.setItem(VALIDATION_STATE_KEY, JSON.stringify(validationResults || {}));
+  } catch (e) {
+    // Ignore storage failures; runtime state still works.
+  }
+}
+
+function rememberValidationResult(ip, result){
+  const targetIp = String(ip || '').trim();
+  if(!targetIp || !result || typeof result !== 'object') return;
+  const snapshot = Object.assign({}, result);
+  if(
+    !snapshot.last_validated &&
+    !snapshot.last_validated_at &&
+    !snapshot.validated_at &&
+    !snapshot.validation_time &&
+    !snapshot.timestamp &&
+    !snapshot.checked_at &&
+    !snapshot.run_at &&
+    !snapshot._netpi_validated_at
+  ){
+    snapshot._netpi_validated_at = new Date().toISOString();
+  }
+  validationResults[targetIp] = snapshot;
+  saveValidationState();
 }
 
 function stopDeviceActionProgress(){
@@ -494,7 +534,7 @@ async function validateDevice(ip){
     const data = await res.json();
 
     if(data.ok){
-      validationResults[ip] = data.result;
+      rememberValidationResult(ip, data.result);
       activeDeviceActions[ip] = {
         startedAt: Date.now(),
         status: 'success',
@@ -543,7 +583,7 @@ async function validateAllDevices(){
 
     if(data.ok){
       data.results.forEach(r => {
-        validationResults[r.ip] = r;
+        rememberValidationResult(r.ip, r);
       });
       finishDeviceActionProgress('Validate All completed for ' + (data.count || 0) + ' device(s).', 'success');
       alert('Validated ' + (data.count || 0) + ' devices');
@@ -762,6 +802,8 @@ function addDevice(){
 
 function removeDevice(ip){
   deviceList = deviceList.filter(d => d.ip !== ip);
+  delete validationResults[ip];
+  saveValidationState();
   renderTable();
 }
 
@@ -815,10 +857,214 @@ function getFreshnessInfo(device){
   };
 }
 
+function normalizeValidationStatus(value){
+  const text = String(value || '').trim().toLowerCase();
+  if(!text) return '';
+  if(text.includes('fail') || text.includes('error') || text.includes('not ready')){
+    return 'fail';
+  }
+  if(text.includes('warn') || text.includes('warning')){
+    return 'warn';
+  }
+  if(text === 'ok' || text.includes('pass') || text.includes('ready') || text.includes('success')){
+    return 'pass';
+  }
+  return '';
+}
+
+function toNumericCount(value){
+  const n = Number(value);
+  if(Number.isFinite(n) && n >= 0){
+    return Math.floor(n);
+  }
+  return null;
+}
+
+function readCountField(source, keys){
+  if(!source || typeof source !== 'object') return null;
+  for(let i = 0; i < keys.length; i += 1){
+    const count = toNumericCount(source[keys[i]]);
+    if(count !== null){
+      return count;
+    }
+  }
+  return null;
+}
+
+function extractValidationCounts(result){
+  const sources = [];
+  if(result && typeof result === 'object'){
+    sources.push(result);
+    if(result.counts && typeof result.counts === 'object') sources.push(result.counts);
+    if(result.summary && typeof result.summary === 'object') sources.push(result.summary);
+    if(result.validation_summary && typeof result.validation_summary === 'object') sources.push(result.validation_summary);
+    if(result.result_summary && typeof result.result_summary === 'object') sources.push(result.result_summary);
+  }
+
+  let passCount = null;
+  let warnCount = null;
+  let failCount = null;
+
+  for(let i = 0; i < sources.length; i += 1){
+    const source = sources[i];
+    if(passCount === null){
+      passCount = readCountField(source, ['pass', 'passed', 'ok', 'success']);
+    }
+    if(warnCount === null){
+      warnCount = readCountField(source, ['warn', 'warned', 'warning', 'warnings']);
+    }
+    if(failCount === null){
+      failCount = readCountField(source, ['fail', 'failed', 'error', 'errors']);
+    }
+  }
+
+  if(passCount !== null || warnCount !== null || failCount !== null){
+    return {
+      pass: Math.max(0, passCount || 0),
+      warn: Math.max(0, warnCount || 0),
+      fail: Math.max(0, failCount || 0),
+      hasCounts: true
+    };
+  }
+
+  const results = Array.isArray(result && result.results) ? result.results : [];
+  if(!results.length){
+    return { pass: 0, warn: 0, fail: 0, hasCounts: false };
+  }
+
+  let pass = 0;
+  let warn = 0;
+  let fail = 0;
+  results.forEach(item => {
+    const status = normalizeValidationStatus(item && item.status);
+    if(status === 'fail') fail += 1;
+    else if(status === 'warn') warn += 1;
+    else if(status === 'pass') pass += 1;
+  });
+
+  return { pass, warn, fail, hasCounts: true };
+}
+
+function extractValidationTimestamp(result){
+  if(!result || typeof result !== 'object') return '';
+  const candidates = [
+    result.last_validated,
+    result.last_validated_at,
+    result.validated_at,
+    result.validation_time,
+    result.timestamp,
+    result.checked_at,
+    result.run_at,
+    result._netpi_validated_at
+  ];
+  for(let i = 0; i < candidates.length; i += 1){
+    const raw = String(candidates[i] || '').trim();
+    if(!raw) continue;
+    const parsed = new Date(raw);
+    if(!Number.isNaN(parsed.getTime())){
+      return parsed.toLocaleString();
+    }
+    return raw;
+  }
+  return '';
+}
+
+function getValidationSummary(result){
+  if(!result || typeof result !== 'object'){
+    return {
+      status: 'unknown',
+      label: 'UNKNOWN',
+      pass: 0,
+      warn: 0,
+      fail: 0,
+      hasCounts: false,
+      lastValidated: ''
+    };
+  }
+
+  const statusCandidates = [
+    result.overall,
+    result.overall_status,
+    result.status,
+    result.overall_class,
+    result.summary && result.summary.overall,
+    result.summary && result.summary.status,
+    result.summary && result.summary.overall_class,
+    result.validation_summary && result.validation_summary.overall,
+    result.validation_summary && result.validation_summary.status,
+    result.validation_summary && result.validation_summary.overall_class
+  ];
+
+  let status = '';
+  for(let i = 0; i < statusCandidates.length; i += 1){
+    status = normalizeValidationStatus(statusCandidates[i]);
+    if(status) break;
+  }
+
+  const counts = extractValidationCounts(result);
+  if(!status){
+    if(counts.fail > 0){
+      status = 'fail';
+    } else if(counts.warn > 0){
+      status = 'warn';
+    } else if(counts.pass > 0){
+      status = 'pass';
+    } else {
+      status = 'unknown';
+    }
+  }
+
+  return {
+    status,
+    label: status.toUpperCase(),
+    pass: counts.pass,
+    warn: counts.warn,
+    fail: counts.fail,
+    hasCounts: counts.hasCounts,
+    lastValidated: extractValidationTimestamp(result)
+  };
+}
+
+function buildValidationSummaryHtml(summary){
+  const tones = {
+    pass: { background: '#052e16', color: '#bbf7d0' },
+    warn: { background: '#3f2a06', color: '#fde68a' },
+    fail: { background: '#3b0d0d', color: '#fecaca' },
+    unknown: { background: '#1f2937', color: '#d1d5db' }
+  };
+
+  const tone = tones[summary.status] || tones.unknown;
+  let html =
+    '<div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;background:' + tone.background + ';color:' + tone.color + '">' +
+    escapeHtml(summary.label) +
+    '</div>';
+
+  if(summary.hasCounts){
+    html += '<div style="margin-top:4px;font-size:11px;line-height:1.35;color:#9ca3af">pass ' + summary.pass + ' | warn ' + summary.warn + ' | fail ' + summary.fail + '</div>';
+  }
+
+  if(summary.lastValidated){
+    html += '<div style="margin-top:2px;font-size:11px;line-height:1.35;color:#6b7280">Last validated: ' + escapeHtml(summary.lastValidated) + '</div>';
+  }
+
+  return html;
+}
+
 function renderTable(){
   const tbody = document.getElementById('device-table');
   const filterVlan = document.getElementById('filter-vlan').value;
   const filterFreshness = document.getElementById('filter-freshness').value;
+  const activeIps = new Set(deviceList.map(d => String((d && d.ip) || '').trim()).filter(Boolean));
+  let removedStaleValidation = false;
+  Object.keys(validationResults || {}).forEach(ip => {
+    if(!activeIps.has(String(ip || '').trim())){
+      delete validationResults[ip];
+      removedStaleValidation = true;
+    }
+  });
+  if(removedStaleValidation){
+    saveValidationState();
+  }
   tbody.innerHTML = '';
 
   let filtered = deviceList.slice();
@@ -858,6 +1104,7 @@ function renderTable(){
       const tr = document.createElement('tr');
       const safeIp = String(d.ip || '').replace(/'/g, "\\'");
       const r = validationResults[d.ip];
+      const validationSummary = getValidationSummary(r);
       const actionState = activeDeviceActions[d.ip];
       const freshness = getFreshnessInfo(d);
       const typeCellHtml = buildTypeCellHtml(d, r);
@@ -873,7 +1120,8 @@ function renderTable(){
         validationButtonText = 'Validating...';
         validationButtonDisabled = ' disabled';
       }
-      let validationHtml = '<button class="btn" onclick="validateDevice(\'' + safeIp + '\')"' + validationButtonDisabled + '>' + escapeHtml(validationButtonText) + '</button>';
+      let validationHtml = '<div style="margin-bottom:6px">' + buildValidationSummaryHtml(validationSummary) + '</div>';
+      validationHtml += '<button class="btn" onclick="validateDevice(\'' + safeIp + '\')"' + validationButtonDisabled + '>' + escapeHtml(validationButtonText) + '</button>';
 
       if(actionState){
         const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(actionState.startedAt || Date.now())) / 1000));
@@ -895,7 +1143,7 @@ function renderTable(){
 
       if(r){
         validationHtml += '<div style="margin-top:6px;font-size:11px;line-height:1.4">';
-        validationHtml += '<div><strong>Status:</strong> ' + escapeHtml(r.overall || '-') + '</div>';
+        validationHtml += '<div><strong>Raw status:</strong> ' + escapeHtml(r.overall || '-') + '</div>';
 
         if(r.open_ports && r.open_ports.length){
           validationHtml += '<div><strong>Ports:</strong> ' + escapeHtml(r.open_ports.join(', ')) + '</div>';
