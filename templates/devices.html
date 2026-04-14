@@ -168,6 +168,7 @@ let deviceList = {{ devices | tojson }};
 let pastedPreview = [];
 
 let validationResults = {};
+const FILTER_STATE_KEY = 'netpi.devices.filterState.v1';
 
 let systemResults = [];
 let connectivityResults = [];
@@ -176,6 +177,52 @@ let connectivityNote = "";
 let deviceActionProgressTimer = null;
 let deviceActionProgressStartedAt = 0;
 let activeDeviceActions = {};
+
+function normalizeFreshnessLabel(value){
+  const label = String(value || '').trim().toLowerCase();
+  if(label === 'fresh' || label === 'aging' || label === 'stale' || label === 'unknown'){
+    return label;
+  }
+  return '';
+}
+
+function loadFilterState(){
+  try {
+    const raw = localStorage.getItem(FILTER_STATE_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveFilterState(){
+  const vlanEl = document.getElementById('filter-vlan');
+  const freshnessEl = document.getElementById('filter-freshness');
+  if(!vlanEl || !freshnessEl) return;
+  const state = {
+    vlan: String(vlanEl.value || ''),
+    freshness: String(freshnessEl.value || 'all')
+  };
+  try {
+    localStorage.setItem(FILTER_STATE_KEY, JSON.stringify(state));
+  } catch (e) {
+    // Ignore storage failures; filtering still works in-memory.
+  }
+}
+
+function restoreFilterState(){
+  const state = loadFilterState();
+  const vlanEl = document.getElementById('filter-vlan');
+  const freshnessEl = document.getElementById('filter-freshness');
+  if(vlanEl && typeof state.vlan === 'string'){
+    vlanEl.value = state.vlan;
+  }
+  if(freshnessEl && (state.freshness === 'all' || state.freshness === 'active' || state.freshness === 'stale')){
+    freshnessEl.value = state.freshness;
+  }
+}
 
 function stopDeviceActionProgress(){
   if(deviceActionProgressTimer){
@@ -658,7 +705,7 @@ function getFreshnessInfo(device){
   const evidence = lastReachable || lastSeen || firstSeen;
   const evidenceSource = lastReachable ? 'last_reachable' : (lastSeen ? 'last_seen' : (firstSeen ? 'first_seen' : ''));
 
-  let label = String((device && device.freshness_label) || '').trim().toLowerCase();
+  let label = normalizeFreshnessLabel(device && device.freshness_label);
   if(!label){
     if(!evidence){
       label = 'unknown';
@@ -707,9 +754,9 @@ function renderTable(){
   const filterFreshness = document.getElementById('filter-freshness').value;
   tbody.innerHTML = '';
 
-  let filtered = deviceList;
+  let filtered = deviceList.slice();
   if(filterVlan){
-    filtered = deviceList.filter(d => (d.vlan || '') === filterVlan);
+    filtered = filtered.filter(d => (d.vlan || '') === filterVlan);
   }
   if(filterFreshness === 'active'){
     filtered = filtered.filter(d => getFreshnessInfo(d).label !== 'stale');
@@ -945,6 +992,15 @@ window.validateDevice = validateDevice;
 window.validateAllDevices = validateAllDevices;
 window.runSystemValidation = runSystemValidation;
 
+restoreFilterState();
+document.getElementById('filter-vlan').addEventListener('change', () => {
+  saveFilterState();
+  renderTable();
+});
+document.getElementById('filter-freshness').addEventListener('change', () => {
+  saveFilterState();
+  renderTable();
+});
 renderTable();
 </script>
 {% endblock %}
