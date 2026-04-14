@@ -156,7 +156,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
     <div id="system-results" style="overflow-x:auto;"></div>
       <div id="connectivity-panel" style="margin-top:14px;">
         <div style="font-weight:600;margin-bottom:8px;">Connectivity Matrix</div>
-        <div id="connectivity-summary" style="margin-bottom:10px;color:#d1d5db;">Run System Validation to view connectivity matrix results.</div>
+        <div id="connectivity-summary" style="margin-bottom:10px;color:#d1d5db;">Run AV Network Validation Profile to view connectivity matrix results.</div>
         <div id="connectivity-note" style="margin-bottom:10px;"></div>
         <div id="connectivity-results" style="overflow-x:auto;"></div>
       </div>
@@ -380,7 +380,7 @@ function renderSystemResults(){
 
   if(!systemResults.length){
     summary.innerHTML = "<b>⚠ No system validation results yet</b>";
-    container.innerHTML = "<div style=\"color:#6b7280\">Run System Validation to view AV system checks.</div>";
+    container.innerHTML = "<div style=\"color:#6b7280\">Run AV Network Validation Profile to view AV system checks.</div>";
     return;
   }
 
