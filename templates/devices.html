@@ -157,6 +157,18 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
       <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af"><strong>Profile Basis:</strong> Discovered devices • Saved device types • System relationships</div>
     </div>
     <div style="margin-bottom:6px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af">Validation Profile Results</div>
+    <div style="margin-bottom:6px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af">Validation Categories</div>
+    <div style="margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap">
+      <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#1f2937;color:#d1d5db;border:1px solid #374151">Role Validation</span>
+      <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#1f2937;color:#d1d5db;border:1px solid #374151">System Relationship Validation</span>
+      <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#1f2937;color:#d1d5db;border:1px solid #374151">Connectivity Validation</span>
+    </div>
+    <div style="margin-bottom:10px;padding:8px 10px;border:1px solid #374151;border-radius:8px;background:#111827;color:#d1d5db">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af">Profile Breakdown</div>
+      <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af">Roles checked across discovered and assigned device types.</div>
+      <div style="font-size:11px;line-height:1.4;color:#9ca3af">Relationships reviewed across inferred and explicit systems.</div>
+      <div style="font-size:11px;line-height:1.4;color:#9ca3af">Connectivity reviewed against current reachable evidence.</div>
+    </div>
     <div id="system-summary" style="margin-bottom:10px;"></div>
     <div id="system-results" style="overflow-x:auto;"></div>
       <div id="connectivity-panel" style="margin-top:14px;">
@@ -385,7 +397,7 @@ function renderSystemResults(){
 
   if(!systemResults.length){
     summary.innerHTML = "<b>⚠ No validation profile results yet</b>";
-    container.innerHTML = "<div style=\"color:#6b7280\">Run AV Network Validation Profile to view AV system checks.</div>";
+    container.innerHTML = "<div style=\"color:#6b7280\">Run AV Network Validation Profile to evaluate device roles, system relationships, and connectivity expectations. Results will appear below as profile-based validation findings.</div>";
     return;
   }
 
