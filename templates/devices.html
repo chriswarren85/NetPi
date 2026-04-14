@@ -337,9 +337,9 @@ async function runSystemValidation(){
   try {
     if(button){
       button.disabled = true;
-      button.textContent = 'Running...';
+      button.textContent = 'Running AV Network Validation Profile...';
     }
-    startDeviceActionProgress('Running system validation');
+    startDeviceActionProgress('Running AV Network Validation Profile');
     const res = await fetch("/tools/api/validate_systems", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -432,11 +432,11 @@ function renderSystemResults(){
   container.innerHTML = html;
 
   if(fail > 0){
-    summary.innerHTML = "<b>⚠ System likely misconfigured</b>";
+    summary.innerHTML = "<b>⚠ Profile outcome: issues detected</b>";
   } else if(pass > 0 && skipped === 0){
-    summary.innerHTML = "<b>✔ System looks healthy</b>";
+    summary.innerHTML = "<b>✔ Profile outcome: validation checks passed</b>";
   } else {
-    summary.innerHTML = "<b>⚠ Incomplete system detected</b>";
+    summary.innerHTML = "<b>⚠ Profile outcome: incomplete validation coverage</b>";
   }
 }
 
