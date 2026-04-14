@@ -143,7 +143,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
   <div class="panel-header">
     <span>System Checks</span>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" id="run-system-validation-btn" onclick="runSystemValidation()">🔗 Run System Validation</button>
+      <button class="btn btn-primary" id="run-system-validation-btn" onclick="runSystemValidation()">🔗 Run AV Network Validation Profile</button>
     </div>
   </div>
   <div class="panel-body">
@@ -367,7 +367,7 @@ async function runSystemValidation(){
   } finally {
     if(button){
       button.disabled = false;
-      button.textContent = '🔗 Run System Validation';
+      button.textContent = '🔗 Run AV Network Validation Profile';
     }
   }
 }
