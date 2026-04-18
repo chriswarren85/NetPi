@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% block title %}- Validation{% endblock %}
+{% block content %}
+<div class="page-title">Validation</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Structured validation review (demo skeleton data)</div>
+
+<div class="panel">
+  <div class="panel-header">Validation Mode</div>
+  <div class="panel-body">
+    <div id="validation-mode-tabs" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="setValidationMode('Live', this)">Live</button>
+      <button class="btn" onclick="setValidationMode('Logical', this)">Logical</button>
+      <button class="btn" onclick="setValidationMode('Restricted', this)">Restricted</button>
+    </div>
+    <div id="validation-mode-help" style="margin-top:10px;font-size:12px;color:#9ca3af">
+      Live = direct observed checks | Logical = expectation-based analysis | Restricted = limited validation context
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:#6b7280">Demo note: mode counts and rows on this page are static preview data for structure and workflow.</div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Pass</div>
+    <div class="card-value" id="validation-pass" style="color:#4ade80">9</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Warn</div>
+    <div class="card-value" id="validation-warn" style="color:#fbbf24">4</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Fail</div>
+    <div class="card-value" id="validation-fail" style="color:#f87171">2</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Unknown</div>
+    <div class="card-value" id="validation-unknown" style="color:#9ca3af">3</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Validation Views</div>
+  <div class="panel-body">
+    <div id="validation-view-tabs" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="setValidationView('By System', this)">By System</button>
+      <button class="btn" onclick="setValidationView('By Flow', this)">By Flow</button>
+      <button class="btn" onclick="setValidationView('By Port', this)">By Port</button>
+      <button class="btn" onclick="setValidationView('By Device', this)">By Device</button>
+      <button class="btn" onclick="setValidationView('By VLAN', this)">By VLAN</button>
+    </div>
+    <div id="validation-view-note" style="margin-top:10px;font-size:12px;color:#9ca3af">Demo view: By System.</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Validation Results</span>
+    <span style="font-size:11px;color:#9ca3af">Click a row to expand detail</span>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead>
+        <tr>
+          <th>Target</th>
+          <th>Expected Requirement</th>
+          <th>Result State</th>
+          <th>Method Used</th>
+          <th>Confidence</th>
+          <th>Recommended Action</th>
+        </tr>
+      </thead>
+      <tbody id="validation-results-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const validationRows = [
+  {
+    target: 'CP4-RoomA -> DSP-StageLeft',
+    expected_requirement: 'HTTPS control API on TCP/443',
+    result_state: 'Pass',
+    method_used: 'Live probe',
+    confidence: 'High',
+    recommended_action: 'No action',
+    why_required: 'Control commands require secure management channel between processor and DSP.',
+    derived_from: 'Requirement map: control processor to DSP management path.',
+    notes: 'Observed endpoint accepted connection and response pattern matched expected service.',
+    scope: 'system_a / vlan_av_control',
+    views: ['By System', 'By Flow', 'By Port', 'By Device']
+  },
+  {
+    target: 'TSC-Lobby -> CP4-RoomA',
+    expected_requirement: 'Touchpanel control channel on TCP/41794',
+    result_state: 'Warn',
+    method_used: 'Logical mapping',
+    confidence: 'Medium',
+    recommended_action: 'Verify touchpanel session configuration and ACL path',
+    why_required: 'UI endpoint must maintain control session to processor for command and status sync.',
+    derived_from: 'Touchpanel role mapping and expected control-plane requirement.',
+    notes: 'Endpoint mapping present but direct live verification not confirmed in this demo mode.',
+    scope: 'system_a / vlan_av_control',
+    views: ['By System', 'By Flow', 'By Device']
+  },
+  {
+    target: 'QSYS-Core-01 -> NV21-Lecture',
+    expected_requirement: 'Media/control management over HTTPS 443',
+    result_state: 'Warn',
+    method_used: 'Logical + partial probe',
+    confidence: 'Medium',
+    recommended_action: 'Validate endpoint stream profile and control path assignment',
+    why_required: 'Core and NV endpoint require coordinated control and transport setup.',
+    derived_from: 'Q-SYS core to NV endpoint requirement set.',
+    notes: 'Path resolved logically; one service check unresolved in demo data.',
+    scope: 'system_b / vlan_av_video',
+    views: ['By System', 'By Flow', 'By VLAN']
+  },
+  {
+    target: 'Admin-WS-01 -> DNS-01',
+    expected_requirement: 'DNS service on UDP/TCP 53',
+    result_state: 'Unknown',
+    method_used: 'Restricted context',
+    confidence: 'Low',
+    recommended_action: 'Validate upstream DNS reachability from admin VLAN',
+    why_required: 'Commissioning and diagnostics workflows depend on reliable name resolution.',
+    derived_from: 'Infrastructure service dependency baseline.',
+    notes: 'Restricted mode limits direct network probes in this demo view.',
+    scope: 'infra_services / vlan_admin',
+    views: ['By VLAN', 'By Port', 'By Device']
+  },
+  {
+    target: 'TP-Boardroom -> CP4-Boardroom',
+    expected_requirement: 'Control session for touchpanel responsiveness',
+    result_state: 'Fail',
+    method_used: 'Live probe',
+    confidence: 'High',
+    recommended_action: 'Check firewall policy and processor control listener status',
+    why_required: 'Touchpanel cannot operate without active control channel to processor.',
+    derived_from: 'Device role relationship and required control endpoint mapping.',
+    notes: 'Probe failed on expected control port; path appears blocked in this demo scenario.',
+    scope: 'system_c / vlan_av_control',
+    views: ['By System', 'By Flow', 'By Device']
+  },
+  {
+    target: 'All managed devices -> NTP-01',
+    expected_requirement: 'NTP sync on UDP 123',
+    result_state: 'Pass',
+    method_used: 'Logical baseline',
+    confidence: 'Medium',
+    recommended_action: 'No action',
+    why_required: 'Consistent time supports log correlation and operational diagnostics.',
+    derived_from: 'Baseline infrastructure requirement set.',
+    notes: 'Demo aggregate validation row for service dependency perspective.',
+    scope: 'infra_services / cross_vlan',
+    views: ['By VLAN', 'By Port', 'By Flow']
+  }
+];
+
+const modeCounts = {
+  Live: {pass: 9, warn: 3, fail: 2, unknown: 1},
+  Logical: {pass: 7, warn: 5, fail: 1, unknown: 2},
+  Restricted: {pass: 4, warn: 4, fail: 1, unknown: 6}
+};
+
+let activeValidationMode = 'Live';
+let activeValidationView = 'By System';
+let expandedValidationIndex = -1;
+
+function setValidationMode(mode, btn){
+  activeValidationMode = mode;
+  const modeRoot = document.getElementById('validation-mode-tabs');
+  if(modeRoot){
+    modeRoot.querySelectorAll('button').forEach(node => {
+      if(node === btn) node.classList.add('btn-primary');
+      else node.classList.remove('btn-primary');
+    });
+  }
+  const help = document.getElementById('validation-mode-help');
+  if(help){
+    help.textContent = 'Live = direct observed checks | Logical = expectation-based analysis | Restricted = limited validation context';
+  }
+  updateModeCards();
+}
+
+function setValidationView(view, btn){
+  activeValidationView = view;
+  expandedValidationIndex = -1;
+  const viewRoot = document.getElementById('validation-view-tabs');
+  if(viewRoot){
+    viewRoot.querySelectorAll('button').forEach(node => {
+      if(node === btn) node.classList.add('btn-primary');
+      else node.classList.remove('btn-primary');
+    });
+  }
+  const note = document.getElementById('validation-view-note');
+  if(note){
+    note.textContent = 'Demo view: ' + view + '.';
+  }
+  renderValidationRows();
+}
+
+function updateModeCards(){
+  const counts = modeCounts[activeValidationMode] || modeCounts.Live;
+  const passEl = document.getElementById('validation-pass');
+  const warnEl = document.getElementById('validation-warn');
+  const failEl = document.getElementById('validation-fail');
+  const unknownEl = document.getElementById('validation-unknown');
+  if(passEl) passEl.textContent = String(counts.pass);
+  if(warnEl) warnEl.textContent = String(counts.warn);
+  if(failEl) failEl.textContent = String(counts.fail);
+  if(unknownEl) unknownEl.textContent = String(counts.unknown);
+}
+
+function renderValidationRows(){
+  const tbody = document.getElementById('validation-results-table');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+
+  const visibleRows = validationRows.filter(row => Array.isArray(row.views) && row.views.includes(activeValidationView));
+  if(!visibleRows.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No demo validation rows for this view.</td></tr>';
+    return;
+  }
+
+  visibleRows.forEach((row, index) => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    const rowGlyph = expandedValidationIndex === index ? 'v ' : '> ';
+    const stateTone = row.result_state === 'Pass'
+      ? '<span class="badge badge-green">Pass</span>'
+      : (row.result_state === 'Warn'
+        ? '<span class="badge badge-amber">Warn</span>'
+        : (row.result_state === 'Fail'
+          ? '<span class="badge badge-red">Fail</span>'
+          : '<span class="badge badge-blue">Unknown</span>'));
+    tr.innerHTML =
+      '<td>' + escapeHtml(rowGlyph + row.target) + '</td>' +
+      '<td>' + escapeHtml(row.expected_requirement) + '</td>' +
+      '<td>' + stateTone + '</td>' +
+      '<td>' + escapeHtml(row.method_used) + '</td>' +
+      '<td>' + escapeHtml(row.confidence) + '</td>' +
+      '<td>' + escapeHtml(row.recommended_action) + '</td>';
+    tr.addEventListener('click', (event) => {
+      if(event.target && event.target.closest && event.target.closest('button, a, input, select, textarea, label')){
+        return;
+      }
+      expandedValidationIndex = (expandedValidationIndex === index) ? -1 : index;
+      renderValidationRows();
+    });
+    tbody.appendChild(tr);
+
+    if(expandedValidationIndex === index){
+      const detailTr = document.createElement('tr');
+      detailTr.innerHTML =
+        '<td colspan="6" style="padding:0;border-top:none;">'
+        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
+        + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Validation Explanation</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why required</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.why_required) + '</div></div>'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Derived from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.derived_from) + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.confidence) + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Scope</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.scope) + '</div></div>'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.notes) + '</div></div>'
+        + '</div>'
+        + '</div>'
+        + '</td>';
+      tbody.appendChild(detailTr);
+    }
+  });
+}
+
+function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+updateModeCards();
+renderValidationRows();
+</script>
+{% endblock %}

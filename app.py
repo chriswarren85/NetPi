@@ -2466,6 +2466,10 @@ def intake():
 def requirements():
     return render_template('requirements.html', s=load_settings())
 
+@app.route('/tools/validation')
+def validation():
+    return render_template('validation.html', s=load_settings())
+
 
 @app.route('/tools/settings', methods=['GET', 'POST'])
 def settings():
