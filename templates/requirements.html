@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% block title %}- Requirements{% endblock %}
+{% block content %}
+<div class="page-title">Requirements</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Demo requirements view (structure-first, static data)</div>
+
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Unique Ports</div>
+    <div class="card-value" id="req-unique-ports">8</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Flows</div>
+    <div class="card-value" id="req-flows">12</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Unresolved Mappings</div>
+    <div class="card-value" id="req-unresolved" style="color:#fbbf24">3</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Confidence</div>
+    <div class="card-value" id="req-confidence">Medium</div>
+    <div class="card-sub">Demo metric</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Requirement Views</div>
+  <div class="panel-body" style="padding-bottom:10px">
+    <div id="requirements-tabs" style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" data-tab="By Device" onclick="setRequirementTab('By Device', this)">By Device</button>
+      <button class="btn" data-tab="By System" onclick="setRequirementTab('By System', this)">By System</button>
+      <button class="btn" data-tab="By VLAN" onclick="setRequirementTab('By VLAN', this)">By VLAN</button>
+      <button class="btn" data-tab="By Protocol" onclick="setRequirementTab('By Protocol', this)">By Protocol</button>
+      <button class="btn" data-tab="By Service" onclick="setRequirementTab('By Service', this)">By Service</button>
+    </div>
+    <div id="requirements-view-note" style="margin-top:10px;font-size:12px;color:#9ca3af">
+      Demo tab view: By Device. This screen shows fake requirement records to establish operator workflow structure.
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Requirement Rows</span>
+    <span style="font-size:11px;color:#9ca3af">Click a row to expand explanation</span>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead>
+        <tr>
+          <th>Source Device</th>
+          <th>Destination Device</th>
+          <th>Protocol</th>
+          <th>Port</th>
+          <th>Direction</th>
+          <th>Purpose</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody id="requirements-table"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const requirementRows = [
+  {
+    source: 'CP4-RoomA',
+    destination: 'DSP-StageLeft',
+    protocol: 'HTTPS',
+    port: '443',
+    direction: 'source -> destination',
+    purpose: 'Control API',
+    why_required: 'Control processor must send authenticated control commands to DSP endpoints.',
+    derived_from: 'Device role pairing (Processor -> DSP) and staged control-path expectation.',
+    confidence: 'High',
+    notes: 'Demo row: backend generation not yet wired.',
+    tabs: ['By Device', 'By System', 'By Protocol', 'By Service']
+  },
+  {
+    source: 'TSC-Lobby',
+    destination: 'CP4-RoomA',
+    protocol: 'TCP',
+    port: '41794',
+    direction: 'source -> destination',
+    purpose: 'Touchpanel control channel',
+    why_required: 'Touchpanel requires persistent control session to processor for UI events and status sync.',
+    derived_from: 'Touchpanel/control endpoint relationship in staged system model.',
+    confidence: 'Medium',
+    notes: 'Port value is representative for demo structure only.',
+    tabs: ['By Device', 'By System', 'By Protocol']
+  },
+  {
+    source: 'QSYS-Core-01',
+    destination: 'NV21-Lecture',
+    protocol: 'HTTPS',
+    port: '443',
+    direction: 'source -> destination',
+    purpose: 'AV stream/control management',
+    why_required: 'Core and NV endpoint require management/control plane communication.',
+    derived_from: 'Q-SYS core to endpoint topology intent in staged requirements view.',
+    confidence: 'Medium',
+    notes: 'Demo row: flow specifics to be generated in later stages.',
+    tabs: ['By Device', 'By System', 'By Protocol', 'By VLAN']
+  },
+  {
+    source: 'Admin-WS-01',
+    destination: 'SW-Core-01',
+    protocol: 'DNS',
+    port: '53',
+    direction: 'source -> destination',
+    purpose: 'Name resolution',
+    why_required: 'Operator workstation needs DNS for device host resolution during commissioning.',
+    derived_from: 'Service dependency baseline for commissioning operations.',
+    confidence: 'Low',
+    notes: 'Infrastructure service dependency example for demo layer.',
+    tabs: ['By Service', 'By VLAN', 'By Protocol']
+  },
+  {
+    source: 'All Managed Devices',
+    destination: 'NTP-Server-01',
+    protocol: 'NTP',
+    port: '123',
+    direction: 'source -> destination',
+    purpose: 'Time synchronization',
+    why_required: 'Consistent device time is required for logs, diagnostics, and event correlation.',
+    derived_from: 'Baseline infrastructure requirement for managed AV networks.',
+    confidence: 'Medium',
+    notes: 'Demo aggregate row to represent common service requirement.',
+    tabs: ['By Service', 'By VLAN', 'By Protocol', 'By System']
+  }
+];
+
+let activeRequirementTab = 'By Device';
+let expandedRequirementIndex = -1;
+
+function setRequirementTab(tabName, btn){
+  activeRequirementTab = tabName;
+  expandedRequirementIndex = -1;
+  const note = document.getElementById('requirements-view-note');
+  if(note){
+    note.textContent = 'Demo tab view: ' + tabName + '. This screen shows fake requirement records to establish operator workflow structure.';
+  }
+  const tabRoot = document.getElementById('requirements-tabs');
+  if(tabRoot){
+    tabRoot.querySelectorAll('button').forEach(node => {
+      if(node === btn){
+        node.classList.add('btn-primary');
+      } else {
+        node.classList.remove('btn-primary');
+      }
+    });
+  }
+  renderRequirementRows();
+}
+
+function renderRequirementRows(){
+  const tbody = document.getElementById('requirements-table');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+
+  const visibleRows = requirementRows.filter(row => Array.isArray(row.tabs) && row.tabs.includes(activeRequirementTab));
+  if(!visibleRows.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">No demo rows for this tab yet.</td></tr>';
+    return;
+  }
+
+  visibleRows.forEach((row, index) => {
+    const tr = document.createElement('tr');
+    const icon = expandedRequirementIndex === index ? '▾ ' : '▸ ';
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td>' + escapeHtml(icon + row.source) + '</td>' +
+      '<td>' + escapeHtml(row.destination) + '</td>' +
+      '<td>' + escapeHtml(row.protocol) + '</td>' +
+      '<td style="font-family:monospace">' + escapeHtml(row.port) + '</td>' +
+      '<td>' + escapeHtml(row.direction) + '</td>' +
+      '<td>' + escapeHtml(row.purpose) + '</td>' +
+      '<td>' + escapeHtml(row.confidence) + '</td>';
+    tr.addEventListener('click', (event) => {
+      if(event.target && event.target.closest && event.target.closest('button, a, input, select, textarea, label')){
+        return;
+      }
+      expandedRequirementIndex = (expandedRequirementIndex === index) ? -1 : index;
+      renderRequirementRows();
+    });
+    tbody.appendChild(tr);
+
+    if(expandedRequirementIndex === index){
+      const detailTr = document.createElement('tr');
+      detailTr.innerHTML =
+        '<td colspan="7" style="padding:0;border-top:none;">'
+        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
+        + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Requirement Explanation</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why required</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.why_required) + '</div></div>'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Derived from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.derived_from) + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.confidence) + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.notes) + '</div></div>'
+        + '</div>'
+        + '</div>'
+        + '</td>';
+      tbody.appendChild(detailTr);
+    }
+  });
+}
+
+function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+renderRequirementRows();
+</script>
+{% endblock %}
