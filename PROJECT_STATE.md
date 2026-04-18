@@ -87,3 +87,13 @@
   - Added config-driven type-to-port/service mapping in `configs/type_requirements.json` with alias normalization and graceful unmapped handling
   - Preserved existing endpoint response shapes and existing UI/backend behavior
 
+### Last Update
+- Feature: W6.2 Requirements screen live wiring and requirements awareness badge integration
+- Files modified:
+  - templates/requirements.html
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Wired Requirements page to live `POST /tools/api/generate_requirements` and removed fake static requirement rows from normal rendering
+  - Added loading/empty/error states, live summary cards, per-device derivation visibility (`effective_type`, `source_type`, `derived_from`), and safe unmapped device rendering
+  - Added lightweight requirements state cache in localStorage (`netpi.requirements.state.v1`) shared across pages so Devices intelligence drawer now shows real requirements availability (`Available`/`Missing`/`Unknown`) from live generation data

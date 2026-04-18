@@ -2,28 +2,28 @@
 {% block title %}- Requirements{% endblock %}
 {% block content %}
 <div class="page-title">Requirements</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Demo requirements view (structure-first, static data)</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Generated per-device network requirements from live inventory intelligence</div>
 
 <div class="cards">
   <div class="card">
-    <div class="card-label">Unique Ports</div>
-    <div class="card-value" id="req-unique-ports">8</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-label">Mapped Devices</div>
+    <div class="card-value" id="req-mapped">0</div>
+    <div class="card-sub">Requirement templates applied</div>
   </div>
   <div class="card">
-    <div class="card-label">Flows</div>
-    <div class="card-value" id="req-flows">12</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-label">Unmapped Devices</div>
+    <div class="card-value" id="req-unresolved" style="color:#fbbf24">0</div>
+    <div class="card-sub">No template configured yet</div>
   </div>
   <div class="card">
-    <div class="card-label">Unresolved Mappings</div>
-    <div class="card-value" id="req-unresolved" style="color:#fbbf24">3</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-label">Types Seen</div>
+    <div class="card-value" id="req-types-seen">0</div>
+    <div class="card-sub">Unique effective types in generation run</div>
   </div>
   <div class="card">
-    <div class="card-label">Confidence</div>
-    <div class="card-value" id="req-confidence">Medium</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-label">Requirement Rows</div>
+    <div class="card-value" id="req-rows">0</div>
+    <div class="card-sub">Expanded protocol/port rows</div>
   </div>
 </div>
 
@@ -38,7 +38,7 @@
       <button class="btn" data-tab="By Service" onclick="setRequirementTab('By Service', this)">By Service</button>
     </div>
     <div id="requirements-view-note" style="margin-top:10px;font-size:12px;color:#9ca3af">
-      Demo tab view: By Device. This screen shows fake requirement records to establish operator workflow structure.
+      Loading generated requirement rows from live backend.
     </div>
   </div>
 </div>
@@ -46,18 +46,18 @@
 <div class="panel">
   <div class="panel-header">
     <span>Requirement Rows</span>
-    <span style="font-size:11px;color:#9ca3af">Click a row to expand explanation</span>
+    <span style="font-size:11px;color:#9ca3af">Click a row to expand derivation context</span>
   </div>
   <div class="panel-body" style="padding:0">
     <table>
       <thead>
         <tr>
-          <th>Source Device</th>
-          <th>Destination Device</th>
+          <th>Device</th>
+          <th>IP</th>
           <th>Protocol</th>
           <th>Port</th>
-          <th>Direction</th>
-          <th>Purpose</th>
+          <th>Service / Purpose</th>
+          <th>Derived From</th>
           <th>Confidence</th>
         </tr>
       </thead>
@@ -66,74 +66,21 @@
   </div>
 </div>
 
+<div class="panel">
+  <div class="panel-header">Unmapped Devices</div>
+  <div class="panel-body">
+    <div id="requirements-unmapped" style="font-size:12px;color:#9ca3af">No generation results yet.</div>
+  </div>
+</div>
+
 <script>
-const requirementRows = [
-  {
-    source: 'CP4-RoomA',
-    destination: 'DSP-StageLeft',
-    protocol: 'HTTPS',
-    port: '443',
-    direction: 'source -> destination',
-    purpose: 'Control API',
-    why_required: 'Control processor must send authenticated control commands to DSP endpoints.',
-    derived_from: 'Device role pairing (Processor -> DSP) and staged control-path expectation.',
-    confidence: 'High',
-    notes: 'Demo row: backend generation not yet wired.',
-    tabs: ['By Device', 'By System', 'By Protocol', 'By Service']
-  },
-  {
-    source: 'TSC-Lobby',
-    destination: 'CP4-RoomA',
-    protocol: 'TCP',
-    port: '41794',
-    direction: 'source -> destination',
-    purpose: 'Touchpanel control channel',
-    why_required: 'Touchpanel requires persistent control session to processor for UI events and status sync.',
-    derived_from: 'Touchpanel/control endpoint relationship in staged system model.',
-    confidence: 'Medium',
-    notes: 'Port value is representative for demo structure only.',
-    tabs: ['By Device', 'By System', 'By Protocol']
-  },
-  {
-    source: 'QSYS-Core-01',
-    destination: 'NV21-Lecture',
-    protocol: 'HTTPS',
-    port: '443',
-    direction: 'source -> destination',
-    purpose: 'AV stream/control management',
-    why_required: 'Core and NV endpoint require management/control plane communication.',
-    derived_from: 'Q-SYS core to endpoint topology intent in staged requirements view.',
-    confidence: 'Medium',
-    notes: 'Demo row: flow specifics to be generated in later stages.',
-    tabs: ['By Device', 'By System', 'By Protocol', 'By VLAN']
-  },
-  {
-    source: 'Admin-WS-01',
-    destination: 'SW-Core-01',
-    protocol: 'DNS',
-    port: '53',
-    direction: 'source -> destination',
-    purpose: 'Name resolution',
-    why_required: 'Operator workstation needs DNS for device host resolution during commissioning.',
-    derived_from: 'Service dependency baseline for commissioning operations.',
-    confidence: 'Low',
-    notes: 'Infrastructure service dependency example for demo layer.',
-    tabs: ['By Service', 'By VLAN', 'By Protocol']
-  },
-  {
-    source: 'All Managed Devices',
-    destination: 'NTP-Server-01',
-    protocol: 'NTP',
-    port: '123',
-    direction: 'source -> destination',
-    purpose: 'Time synchronization',
-    why_required: 'Consistent device time is required for logs, diagnostics, and event correlation.',
-    derived_from: 'Baseline infrastructure requirement for managed AV networks.',
-    confidence: 'Medium',
-    notes: 'Demo aggregate row to represent common service requirement.',
-    tabs: ['By Service', 'By VLAN', 'By Protocol', 'By System']
-  }
-];
+const REQUIREMENTS_STATE_KEY = 'netpi.requirements.state.v1';
+let requirementRows = [];
+let requirementDevices = [];
+let unmappedDevices = [];
+let requirementsSummary = { mapped: 0, unmapped: 0, types_seen: 0 };
+let requirementsLoadState = 'loading'; // loading | ready | empty | error
+let requirementsErrorMessage = '';
 
 let activeRequirementTab = 'By Device';
 let expandedRequirementIndex = -1;
@@ -141,10 +88,6 @@ let expandedRequirementIndex = -1;
 function setRequirementTab(tabName, btn){
   activeRequirementTab = tabName;
   expandedRequirementIndex = -1;
-  const note = document.getElementById('requirements-view-note');
-  if(note){
-    note.textContent = 'Demo tab view: ' + tabName + '. This screen shows fake requirement records to establish operator workflow structure.';
-  }
   const tabRoot = document.getElementById('requirements-tabs');
   if(tabRoot){
     tabRoot.querySelectorAll('button').forEach(node => {
@@ -155,7 +98,238 @@ function setRequirementTab(tabName, btn){
       }
     });
   }
+  updateRequirementsViewNote();
   renderRequirementRows();
+}
+
+function confidenceLabelFromScore(score){
+  const n = Number(score);
+  if(!Number.isFinite(n)) return 'Unknown';
+  if(n >= 80) return 'High (' + n + ')';
+  if(n >= 55) return 'Medium (' + n + ')';
+  if(n > 0) return 'Low (' + n + ')';
+  return 'Unknown';
+}
+
+function deriveRowTabs(row){
+  const tabs = ['By Device'];
+  const protocol = String(row.protocol || '').trim();
+  const service = String(row.service || '').trim();
+  if(protocol && protocol !== '-') tabs.push('By Protocol');
+  if(service) tabs.push('By Service');
+  tabs.push('By System');
+  tabs.push('By VLAN');
+  return tabs;
+}
+
+function updateSummaryCards(){
+  const mappedEl = document.getElementById('req-mapped');
+  const unresolvedEl = document.getElementById('req-unresolved');
+  const typesSeenEl = document.getElementById('req-types-seen');
+  const rowsEl = document.getElementById('req-rows');
+  if(mappedEl) mappedEl.textContent = String(requirementsSummary.mapped || 0);
+  if(unresolvedEl) unresolvedEl.textContent = String(requirementsSummary.unmapped || 0);
+  if(typesSeenEl) typesSeenEl.textContent = String(requirementsSummary.types_seen || 0);
+  if(rowsEl) rowsEl.textContent = String(requirementRows.length || 0);
+}
+
+function updateRequirementsViewNote(){
+  const note = document.getElementById('requirements-view-note');
+  if(!note) return;
+  if(requirementsLoadState === 'loading'){
+    note.textContent = 'Loading generated requirements for ' + activeRequirementTab + ' view...';
+    return;
+  }
+  if(requirementsLoadState === 'error'){
+    note.textContent = 'Unable to load generated requirements. Showing error state only (no fake data fallback).';
+    return;
+  }
+  if(requirementsLoadState === 'empty'){
+    note.textContent = 'No requirements generated for current inventory scope.';
+    return;
+  }
+  note.textContent = 'Live generated requirements view: ' + activeRequirementTab + '. Derived using effective type resolution and requirement template mapping.';
+}
+
+function renderUnmappedDevices(){
+  const el = document.getElementById('requirements-unmapped');
+  if(!el) return;
+
+  if(requirementsLoadState === 'loading'){
+    el.textContent = 'Loading unmapped device status...';
+    return;
+  }
+  if(requirementsLoadState === 'error'){
+    el.innerHTML = '<div style="padding:8px 10px;border-radius:8px;background:#3b0d0d;border:1px solid #7f1d1d;color:#fecaca;">Failed to load requirement generation results: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</div>';
+    return;
+  }
+  if(!unmappedDevices.length){
+    el.innerHTML = '<div style="padding:8px 10px;border-radius:8px;background:#052e16;border:1px solid #166534;color:#bbf7d0;">All visible devices currently map to a requirement template.</div>';
+    return;
+  }
+
+  let html = '<div style="margin-bottom:8px;color:#fcd34d">Some devices do not yet have a mapped requirement template.</div>';
+  html += '<table><thead><tr><th>Device</th><th>IP</th><th>Type</th><th>Status</th></tr></thead><tbody>';
+  unmappedDevices.forEach(item => {
+    html += '<tr>'
+      + '<td>' + escapeHtml(item.name || '(unnamed)') + '</td>'
+      + '<td style="font-family:monospace">' + escapeHtml(item.ip || '-') + '</td>'
+      + '<td>' + escapeHtml(item.effective_type || item.type || 'unknown') + '</td>'
+      + '<td style="color:#fbbf24">No mapped requirement template yet</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function buildRequirementRowsFromResults(results){
+  const deviceRows = [];
+  const expandedRows = [];
+  (Array.isArray(results) ? results : []).forEach(item => {
+    const ports = Array.isArray(item.required_ports) ? item.required_ports : [];
+    const services = Array.isArray(item.required_services) ? item.required_services : [];
+    const notes = Array.isArray(item.notes) ? item.notes : [];
+    const baseRow = {
+      device_id: item.device_id || '',
+      name: item.name || '(unnamed device)',
+      ip: item.ip || '',
+      effective_type: item.effective_type || 'unknown',
+      source_type: item.source_type || '',
+      confidence_score: item.confidence_score,
+      derived_from: item.derived_from || '',
+      required_services: services,
+      notes: notes
+    };
+    deviceRows.push(baseRow);
+
+    if(!ports.length){
+      expandedRows.push(Object.assign({}, baseRow, {
+        protocol: '-',
+        port: '-',
+        service: 'No required port entries',
+        purpose: services.length ? services.join(', ') : 'No mapped requirement profile',
+        confidence_label: confidenceLabelFromScore(item.confidence_score),
+        tabs: ['By Device', 'By System', 'By VLAN']
+      }));
+      return;
+    }
+
+    ports.forEach(portEntry => {
+      const protocol = String((portEntry && portEntry.protocol) || '').toUpperCase();
+      const port = (portEntry && (portEntry.port !== undefined && portEntry.port !== null))
+        ? String(portEntry.port)
+        : '-';
+      const service = String((portEntry && portEntry.service) || '').trim();
+      const purpose = services.length ? services.join(', ') : (service || 'network-service');
+      const row = Object.assign({}, baseRow, {
+        protocol: protocol || 'TCP',
+        port,
+        service: service || 'unspecified-service',
+        purpose,
+        required: !!(portEntry && portEntry.required),
+        confidence_label: confidenceLabelFromScore(item.confidence_score)
+      });
+      row.tabs = deriveRowTabs(row);
+      expandedRows.push(row);
+    });
+  });
+  requirementDevices = deviceRows;
+  requirementRows = expandedRows;
+}
+
+function persistRequirementsStateForDevices(results, unmapped){
+  const byIp = {};
+  (Array.isArray(results) ? results : []).forEach(item => {
+    const ip = String(item.ip || '').trim();
+    if(!ip) return;
+    const ports = Array.isArray(item.required_ports) ? item.required_ports : [];
+    const services = Array.isArray(item.required_services) ? item.required_services : [];
+    byIp[ip] = {
+      mapped: ports.length > 0 || services.length > 0,
+      effective_type: item.effective_type || '',
+      source_type: item.source_type || '',
+      derived_from: item.derived_from || '',
+      confidence_score: item.confidence_score
+    };
+  });
+  (Array.isArray(unmapped) ? unmapped : []).forEach(item => {
+    const ip = String(item.ip || '').trim();
+    if(!ip) return;
+    if(!byIp[ip]) byIp[ip] = {};
+    byIp[ip].mapped = false;
+    if(item.type && !byIp[ip].effective_type){
+      byIp[ip].effective_type = String(item.type);
+    }
+  });
+  try {
+    localStorage.setItem(REQUIREMENTS_STATE_KEY, JSON.stringify({
+      updated_at: new Date().toISOString(),
+      summary: requirementsSummary,
+      by_ip: byIp
+    }));
+  } catch (e) {
+    // Ignore storage failure; page still renders from live response.
+  }
+}
+
+async function loadGeneratedRequirements(){
+  requirementsLoadState = 'loading';
+  requirementsErrorMessage = '';
+  updateRequirementsViewNote();
+  renderUnmappedDevices();
+  renderRequirementRows();
+
+  try {
+    const res = await fetch('/tools/api/generate_requirements', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if(!res.ok || !data || !data.ok){
+      throw new Error((data && data.error) || ('HTTP ' + res.status));
+    }
+
+    const summary = (data.summary && typeof data.summary === 'object') ? data.summary : {};
+    requirementsSummary = {
+      mapped: Number(summary.mapped || 0),
+      unmapped: Number(summary.unmapped || 0),
+      types_seen: Number(summary.types_seen || 0)
+    };
+
+    const results = Array.isArray(data.results) ? data.results : [];
+    const unmapped = Array.isArray(data.unmapped) ? data.unmapped : [];
+
+    buildRequirementRowsFromResults(results);
+    unmappedDevices = unmapped.map(entry => {
+      const hit = results.find(r => String(r.device_id || '') === String(entry.device_id || ''));
+      return {
+        device_id: entry.device_id || '',
+        type: entry.type || '',
+        name: (hit && hit.name) || '',
+        ip: (hit && hit.ip) || '',
+        effective_type: (hit && hit.effective_type) || (entry.type || '')
+      };
+    });
+
+    requirementsLoadState = results.length ? 'ready' : 'empty';
+    updateSummaryCards();
+    updateRequirementsViewNote();
+    renderUnmappedDevices();
+    renderRequirementRows();
+    persistRequirementsStateForDevices(results, unmappedDevices);
+  } catch (error) {
+    requirementsLoadState = 'error';
+    requirementsErrorMessage = String((error && error.message) || error || 'Unknown error');
+    requirementRows = [];
+    requirementDevices = [];
+    unmappedDevices = [];
+    requirementsSummary = { mapped: 0, unmapped: 0, types_seen: 0 };
+    updateSummaryCards();
+    updateRequirementsViewNote();
+    renderUnmappedDevices();
+    renderRequirementRows();
+  }
 }
 
 function renderRequirementRows(){
@@ -163,24 +337,37 @@ function renderRequirementRows(){
   if(!tbody) return;
   tbody.innerHTML = '';
 
+  if(requirementsLoadState === 'loading'){
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#9ca3af;text-align:center;padding:1rem">Loading generated requirements...</td></tr>';
+    return;
+  }
+
+  if(requirementsLoadState === 'error'){
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#fecaca;text-align:center;padding:1rem">Requirements endpoint failed: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</td></tr>';
+    return;
+  }
+
   const visibleRows = requirementRows.filter(row => Array.isArray(row.tabs) && row.tabs.includes(activeRequirementTab));
   if(!visibleRows.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">No demo rows for this tab yet.</td></tr>';
+    const msg = requirementsLoadState === 'empty'
+      ? 'No requirements generated yet for current inventory.'
+      : 'No generated requirement rows in this view.';
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">' + escapeHtml(msg) + '</td></tr>';
     return;
   }
 
   visibleRows.forEach((row, index) => {
     const tr = document.createElement('tr');
-    const icon = expandedRequirementIndex === index ? '▾ ' : '▸ ';
+    const icon = expandedRequirementIndex === index ? 'v ' : '> ';
     tr.style.cursor = 'pointer';
     tr.innerHTML =
-      '<td>' + escapeHtml(icon + row.source) + '</td>' +
-      '<td>' + escapeHtml(row.destination) + '</td>' +
+      '<td>' + escapeHtml(icon + (row.name || '(unnamed device)')) + '</td>' +
+      '<td style="font-family:monospace">' + escapeHtml(row.ip || '-') + '</td>' +
       '<td>' + escapeHtml(row.protocol) + '</td>' +
       '<td style="font-family:monospace">' + escapeHtml(row.port) + '</td>' +
-      '<td>' + escapeHtml(row.direction) + '</td>' +
-      '<td>' + escapeHtml(row.purpose) + '</td>' +
-      '<td>' + escapeHtml(row.confidence) + '</td>';
+      '<td>' + escapeHtml(row.service || row.purpose || '-') + '</td>' +
+      '<td>' + escapeHtml(row.derived_from || '-') + '</td>' +
+      '<td>' + escapeHtml(row.confidence_label || 'Unknown') + '</td>';
     tr.addEventListener('click', (event) => {
       if(event.target && event.target.closest && event.target.closest('button, a, input, select, textarea, label')){
         return;
@@ -197,10 +384,12 @@ function renderRequirementRows(){
         + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
         + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Requirement Explanation</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
-        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why required</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.why_required) + '</div></div>'
-        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Derived from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.derived_from) + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.confidence) + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.notes) + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.effective_type || 'unknown') + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">source_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.source_type || '-') + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">derived_from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.derived_from || '-') + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence_score</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(String(row.confidence_score ?? '-')) + '</div></div>'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">required services</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.required_services) && row.required_services.length ? row.required_services.join(', ') : '-') + '</div></div>'
+        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.notes) && row.notes.length ? row.notes.join(' | ') : '-') + '</div></div>'
         + '</div>'
         + '</div>'
         + '</td>';
@@ -214,10 +403,14 @@ function escapeHtml(str){
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
 
+updateSummaryCards();
+updateRequirementsViewNote();
 renderRequirementRows();
+renderUnmappedDevices();
+loadGeneratedRequirements();
 </script>
 {% endblock %}

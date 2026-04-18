@@ -214,6 +214,7 @@ let pastedPreview = [];
 
 const FILTER_STATE_KEY = 'netpi.devices.filterState.v1';
 const VALIDATION_STATE_KEY = 'netpi.devices.validationState.v1';
+const REQUIREMENTS_STATE_KEY = 'netpi.requirements.state.v1';
 const ROLE_MAP = {
   'crestron': 'Processor',
   'crestron-control': 'Processor',
@@ -259,6 +260,7 @@ const ROLE_MAP = {
   'grandma': 'Network Service'
 };
 let validationResults = loadValidationState();
+let requirementsState = loadRequirementsState();
 
 let systemResults = [];
 let connectivityResults = [];
@@ -331,6 +333,105 @@ function saveValidationState(){
     localStorage.setItem(VALIDATION_STATE_KEY, JSON.stringify(validationResults || {}));
   } catch (e) {
     // Ignore storage failures; runtime state still works.
+  }
+}
+
+function loadRequirementsState(){
+  try {
+    const raw = localStorage.getItem(REQUIREMENTS_STATE_KEY);
+    if(!raw) return { by_ip: {}, summary: {}, updated_at: '' };
+    const parsed = JSON.parse(raw);
+    if(!parsed || typeof parsed !== 'object'){
+      return { by_ip: {}, summary: {}, updated_at: '' };
+    }
+    return {
+      by_ip: (parsed.by_ip && typeof parsed.by_ip === 'object') ? parsed.by_ip : {},
+      summary: (parsed.summary && typeof parsed.summary === 'object') ? parsed.summary : {},
+      updated_at: String(parsed.updated_at || '')
+    };
+  } catch (e) {
+    return { by_ip: {}, summary: {}, updated_at: '' };
+  }
+}
+
+function saveRequirementsState(nextState){
+  const normalized = (nextState && typeof nextState === 'object') ? nextState : { by_ip: {}, summary: {}, updated_at: '' };
+  requirementsState = {
+    by_ip: (normalized.by_ip && typeof normalized.by_ip === 'object') ? normalized.by_ip : {},
+    summary: (normalized.summary && typeof normalized.summary === 'object') ? normalized.summary : {},
+    updated_at: String(normalized.updated_at || '')
+  };
+  try {
+    localStorage.setItem(REQUIREMENTS_STATE_KEY, JSON.stringify(requirementsState));
+  } catch (e) {
+    // Ignore storage failures.
+  }
+}
+
+function getDeviceRequirementsState(device, validation){
+  const ip = String((device && device.ip) || '').trim();
+  const byIp = (requirementsState && requirementsState.by_ip && typeof requirementsState.by_ip === 'object')
+    ? requirementsState.by_ip
+    : {};
+  const entry = byIp[ip] && typeof byIp[ip] === 'object' ? byIp[ip] : null;
+  if(entry){
+    const mapped = !!entry.mapped;
+    return {
+      state: mapped ? 'available' : 'missing',
+      effective_type: String(entry.effective_type || ''),
+      source_type: String(entry.source_type || ''),
+      derived_from: String(entry.derived_from || ''),
+      confidence_score: entry.confidence_score
+    };
+  }
+
+  const resolvedEffectiveType = normalizeTypeValue(
+    (validation && validation.effective_type)
+    || (device && device._resolved_type)
+    || (device && device.effective_type)
+  );
+  if(resolvedEffectiveType){
+    return { state: 'unknown', effective_type: resolvedEffectiveType, source_type: '', derived_from: '', confidence_score: '' };
+  }
+  return { state: 'unknown', effective_type: '', source_type: '', derived_from: '', confidence_score: '' };
+}
+
+async function refreshRequirementsStateFromEndpoint(){
+  try {
+    const res = await fetch('/tools/api/generate_requirements', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ devices: deviceList })
+    });
+    const data = await res.json();
+    if(!res.ok || !data || !data.ok){
+      return;
+    }
+
+    const byIp = {};
+    const results = Array.isArray(data.results) ? data.results : [];
+    results.forEach(item => {
+      const ip = String(item.ip || '').trim();
+      if(!ip) return;
+      const requiredPorts = Array.isArray(item.required_ports) ? item.required_ports : [];
+      const requiredServices = Array.isArray(item.required_services) ? item.required_services : [];
+      byIp[ip] = {
+        mapped: requiredPorts.length > 0 || requiredServices.length > 0,
+        effective_type: item.effective_type || '',
+        source_type: item.source_type || '',
+        derived_from: item.derived_from || '',
+        confidence_score: item.confidence_score
+      };
+    });
+
+    saveRequirementsState({
+      by_ip: byIp,
+      summary: (data.summary && typeof data.summary === 'object') ? data.summary : {},
+      updated_at: new Date().toISOString()
+    });
+    renderTable();
+  } catch (e) {
+    // Keep cached requirements state when refresh fails.
   }
 }
 
@@ -627,6 +728,7 @@ async function validateDevice(ip){
 
     if(data.ok){
       rememberValidationResult(ip, data.result);
+      refreshRequirementsStateFromEndpoint();
       activeDeviceActions[ip] = {
         startedAt: Date.now(),
         status: 'success',
@@ -677,6 +779,7 @@ async function validateAllDevices(){
       data.results.forEach(r => {
         rememberValidationResult(r.ip, r);
       });
+      refreshRequirementsStateFromEndpoint();
       finishDeviceActionProgress('Validate All completed for ' + (data.count || 0) + ' device(s).', 'success');
       alert('Validated ' + (data.count || 0) + ' devices');
       renderTable();
@@ -992,6 +1095,7 @@ function addDevice(){
 
   deviceList.push({name, ip, type, vlan: '', notes});
   renderTable();
+  refreshRequirementsStateFromEndpoint();
 
   document.getElementById('new-name').value = '';
   document.getElementById('new-ip').value = '';
@@ -1003,6 +1107,7 @@ function removeDevice(ip){
   delete validationResults[ip];
   saveValidationState();
   renderTable();
+  refreshRequirementsStateFromEndpoint();
 }
 
 function getFreshnessInfo(device){
@@ -1415,10 +1520,15 @@ function renderTable(){
         );
         const effectiveType = resolvedEffectiveType || '—';
         const deviceRole = getRoleFromEffectiveType(resolvedEffectiveType);
-        const requirementsState = resolvedEffectiveType ? 'available' : 'unknown';
-        const requirementsBadgeHtml = requirementsState === 'available'
+        const requirementsInfo = getDeviceRequirementsState(d, r);
+        const requirementsMode = requirementsInfo.state || 'unknown';
+        const requirementsBadgeHtml = requirementsMode === 'available'
           ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#052e16;color:#bbf7d0;border:1px solid #166534">Available</span>'
-          : '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1f2937;color:#d1d5db;border:1px solid #4b5563">Unknown</span>';
+          : (requirementsMode === 'missing'
+            ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#3f2a06;color:#fde68a;border:1px solid #92400e">Missing</span>'
+            : '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1f2937;color:#d1d5db;border:1px solid #4b5563">Unknown</span>');
+        const requirementsProfileType = String(requirementsInfo.effective_type || '').trim() || '-';
+        const requirementsDerivedFrom = String(requirementsInfo.derived_from || '').trim() || '-';
         const missingMetadata = getMissingMetadataInfo(d);
         const metadataGapHtml = missingMetadata.count > 0
           ? '<div style="margin-bottom:8px;padding:6px 8px;border-radius:6px;background:#3f2a06;color:#fde68a;font-size:11px;line-height:1.35;">⚠ ' + escapeHtml(String(missingMetadata.count)) + ' fields incomplete'
@@ -1481,6 +1591,8 @@ function renderTable(){
           + '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Requirements</div>' + requirementsBadgeHtml + '</div>'
           + metadataGapHtml
           + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 16px;">'
+          + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">requirements type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(requirementsProfileType) + '</div></div>'
+          + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">requirements derived_from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(requirementsDerivedFrom) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(effectiveType) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Role</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(deviceRole) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">suggested_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(suggestedType) + '</div></div>'
@@ -1615,6 +1727,7 @@ function addPastedToList(){
   });
 
   renderTable();
+  refreshRequirementsStateFromEndpoint();
   alert('Added ' + added + ' devices to list. Click Save changes to write them to devices.json.');
 }
 
@@ -1636,6 +1749,7 @@ function saveDevices(){
       if(Array.isArray(d.devices)){
         deviceList = d.devices;
         renderTable();
+        refreshRequirementsStateFromEndpoint();
       }
       document.getElementById('success').style.display = 'block';
       setTimeout(() => document.getElementById('success').style.display = 'none', 3000);
@@ -1657,5 +1771,6 @@ document.getElementById('filter-freshness').addEventListener('change', () => {
   renderTable();
 });
 renderTable();
+refreshRequirementsStateFromEndpoint();
 </script>
 {% endblock %}
