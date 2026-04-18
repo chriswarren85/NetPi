@@ -814,6 +814,24 @@ function getRoleFromEffectiveType(effectiveType){
   return ROLE_MAP[key] || 'Unknown';
 }
 
+function getMissingMetadataInfo(device){
+  const macValue = String((device && (device.mac || device.mac_address)) || '').trim();
+  const serialValue = String((device && (device.serial || device.serial_number)) || '').trim();
+  const vlanValue = String((device && device.vlan) || '').trim();
+  const zoneValue = String((device && (device.zone || device.room)) || '').trim();
+
+  const missingFields = [];
+  if(!macValue) missingFields.push('MAC');
+  if(!serialValue) missingFields.push('serial');
+  if(!vlanValue) missingFields.push('VLAN');
+  if(!zoneValue) missingFields.push('zone/room');
+
+  return {
+    count: missingFields.length,
+    fields: missingFields
+  };
+}
+
 function deriveConfidenceState(device, validation, freshnessLabel){
   if(String(freshnessLabel || '').toLowerCase() === 'stale'){
     return 'stale';
@@ -1401,6 +1419,12 @@ function renderTable(){
         const requirementsBadgeHtml = requirementsState === 'available'
           ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#052e16;color:#bbf7d0;border:1px solid #166534">Available</span>'
           : '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1f2937;color:#d1d5db;border:1px solid #4b5563">Unknown</span>';
+        const missingMetadata = getMissingMetadataInfo(d);
+        const metadataGapHtml = missingMetadata.count > 0
+          ? '<div style="margin-bottom:8px;padding:6px 8px;border-radius:6px;background:#3f2a06;color:#fde68a;font-size:11px;line-height:1.35;">⚠ ' + escapeHtml(String(missingMetadata.count)) + ' fields incomplete'
+            + '<div style="margin-top:2px;font-size:10px;color:#fcd34d;">Missing: ' + escapeHtml(missingMetadata.fields.join(', ')) + '</div>'
+            + '</div>'
+          : '';
         const suggestedType = normalizeTypeValue(
           (r && r.suggested_type)
           || (suggestionObj && suggestionObj.suggested_type)
@@ -1455,6 +1479,7 @@ function renderTable(){
           + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Device Intelligence</div>'
           + '<div style="margin-bottom:8px">' + buildConfidenceBadgeHtml(confidenceState) + '</div>'
           + '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Requirements</div>' + requirementsBadgeHtml + '</div>'
+          + metadataGapHtml
           + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 16px;">'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(effectiveType) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Role</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(deviceRole) + '</div></div>'
