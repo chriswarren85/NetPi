@@ -214,6 +214,50 @@ let pastedPreview = [];
 
 const FILTER_STATE_KEY = 'netpi.devices.filterState.v1';
 const VALIDATION_STATE_KEY = 'netpi.devices.validationState.v1';
+const ROLE_MAP = {
+  'crestron': 'Processor',
+  'crestron-control': 'Processor',
+  'crestron-processor': 'Processor',
+  'crestron-control-processor': 'Processor',
+  'crestron-uc': 'Processor',
+  'crestron-uc-engine': 'Processor',
+  'uc-engine': 'Processor',
+  'uc_engine': 'Processor',
+  'qsys': 'DSP',
+  'qsys-core': 'DSP',
+  'biamp': 'DSP',
+  'biamp-tesira': 'DSP',
+  'dante': 'Audio Endpoint',
+  'dante-device': 'Audio Endpoint',
+  'audio-device': 'Audio Endpoint',
+  'qsys-nv': 'Video Endpoint',
+  'qsys-nv21': 'Video Endpoint',
+  'qsys-nv32': 'Video Endpoint',
+  'qsys-nv-endpoint': 'Video Endpoint',
+  'video-wall-processor': 'Video Endpoint',
+  'barco': 'Video Endpoint',
+  'barco-device': 'Video Endpoint',
+  'barco-ctrl-server': 'Video Endpoint',
+  'barco-encoder': 'Video Endpoint',
+  'barco-decoder': 'Video Endpoint',
+  'barco-ctrl': 'Video Endpoint',
+  'barco_ctrl': 'Video Endpoint',
+  'novastar': 'Video Endpoint',
+  'qsys-touchpanel': 'Control Endpoint',
+  'crestron-touchpanel': 'Control Endpoint',
+  'touchpanel': 'Control Endpoint',
+  'tp1070': 'Control Endpoint',
+  'display': 'Display',
+  'projector': 'Display',
+  'web-device': 'Network Service',
+  'linux-web-device': 'Network Service',
+  'apache-web-device': 'Network Service',
+  'network-device': 'Network Service',
+  'firewall': 'Network Service',
+  'artnet': 'Network Service',
+  'sacn': 'Network Service',
+  'grandma': 'Network Service'
+};
 let validationResults = loadValidationState();
 
 let systemResults = [];
@@ -760,6 +804,14 @@ function normalizeTypeValue(value){
     return '';
   }
   return text;
+}
+
+function getRoleFromEffectiveType(effectiveType){
+  const key = String(effectiveType || '').trim().toLowerCase().replace(/_/g, '-');
+  if(!key){
+    return 'Unknown';
+  }
+  return ROLE_MAP[key] || 'Unknown';
 }
 
 function deriveConfidenceState(device, validation, freshnessLabel){
@@ -1344,6 +1396,7 @@ function renderTable(){
           || (d && d.effective_type)
         );
         const effectiveType = resolvedEffectiveType || '—';
+        const deviceRole = getRoleFromEffectiveType(resolvedEffectiveType);
         const requirementsState = resolvedEffectiveType ? 'available' : 'unknown';
         const requirementsBadgeHtml = requirementsState === 'available'
           ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#052e16;color:#bbf7d0;border:1px solid #166534">Available</span>'
@@ -1404,6 +1457,7 @@ function renderTable(){
           + '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Requirements</div>' + requirementsBadgeHtml + '</div>'
           + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 16px;">'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(effectiveType) + '</div></div>'
+          + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Role</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(deviceRole) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">suggested_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(suggestedType) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(confidenceValue) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">open ports</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">' + escapeHtml(openPorts) + '</div></div>'
