@@ -2458,6 +2458,10 @@ def diagnostics():
 def devices():
     return render_template('devices.html', s=load_settings(), devices=_devices_with_freshness_view(load_devices()))
 
+@app.route('/tools/intake')
+def intake():
+    return render_template('intake.html', s=load_settings())
+
 
 @app.route('/tools/settings', methods=['GET', 'POST'])
 def settings():

@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+{% block title %}- Device Intake{% endblock %}
+{% block content %}
+<div class="page-title">Device Intake</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Raw capture and staging before promotion to the master device list</div>
+
+<div style="display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:12px;align-items:start">
+  <div class="panel">
+    <div class="panel-header">Intake Actions</div>
+    <div class="panel-body">
+      <div style="margin-bottom:12px;font-size:12px;line-height:1.45;color:#9ca3af">
+        Capture raw devices here first. Discovery, suggestions, and normalization cues in this stage are provisional.
+      </div>
+      <div style="display:grid;gap:8px">
+        <button class="btn btn-primary" onclick="runIntakeStub('Discover')">Discover</button>
+        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Find candidate devices on target subnets for intake review.</div>
+
+        <button class="btn" onclick="runIntakeStub('Paste')">Paste</button>
+        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Paste spreadsheet-style rows into intake staging.</div>
+
+        <button class="btn" onclick="runIntakeStub('Add Manual')">Add Manual</button>
+        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Create an intake row directly when discovery is not available.</div>
+
+        <button class="btn" onclick="runIntakeStub('Fingerprint')">Fingerprint</button>
+        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Run provisional identity checks on staged candidates.</div>
+
+        <button class="btn" onclick="runIntakeStub('Bulk Normalize')">Bulk Normalize</button>
+        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Apply staging-level normalization before later promotion.</div>
+      </div>
+      <div id="intake-status" style="display:none;margin-top:12px;padding:8px 10px;border-radius:6px;background:#111827;border:1px solid #374151;color:#d1d5db;font-size:12px"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">
+      <span>Intake Results (Staging)</span>
+      <span style="font-size:11px;color:#9ca3af">Demo skeleton data</span>
+    </div>
+    <div class="panel-body" style="padding:0">
+      <table>
+        <thead>
+          <tr>
+            <th>Name / Host</th>
+            <th>IP</th>
+            <th>Suggested Type</th>
+            <th>Confidence</th>
+            <th>VLAN Inference</th>
+            <th>Reachability</th>
+            <th>Source</th>
+            <th>Add To List</th>
+          </tr>
+        </thead>
+        <tbody id="intake-results"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const intakeCandidates = [
+  {name: 'CP4-RoomA', ip: '10.110.50.21', suggested_type: 'crestron_control', confidence: 'medium', vlan_inference: 'AV_Control', reachability: 'reachable', source: 'Discover'},
+  {name: 'DSP-StageLeft', ip: '10.110.50.34', suggested_type: 'biamp-tesira', confidence: 'high', vlan_inference: 'AV_Control', reachability: 'reachable', source: 'Paste'},
+  {name: 'TSC-Lobby', ip: '10.110.50.57', suggested_type: 'qsys-touchpanel', confidence: 'medium', vlan_inference: 'AV_Control', reachability: 'unknown', source: 'Add Manual'},
+  {name: 'VideoWall-A', ip: '10.110.60.12', suggested_type: 'video-wall-processor', confidence: 'low', vlan_inference: 'AV_Video', reachability: 'reachable', source: 'Discover'}
+];
+
+function renderIntakeResults(){
+  const tbody = document.getElementById('intake-results');
+  if(!tbody) return;
+  tbody.innerHTML = '';
+
+  intakeCandidates.forEach((row, index) => {
+    const tr = document.createElement('tr');
+    const reachTone = row.reachability === 'reachable'
+      ? '<span class="badge badge-green">Reachable</span>'
+      : '<span class="badge badge-amber">Unknown</span>';
+    tr.innerHTML =
+      '<td>' + escapeHtml(row.name) + '</td>' +
+      '<td style="font-family:monospace">' + escapeHtml(row.ip) + '</td>' +
+      '<td>' + escapeHtml(row.suggested_type) + '</td>' +
+      '<td>' + escapeHtml(row.confidence) + '</td>' +
+      '<td>' + escapeHtml(row.vlan_inference) + '</td>' +
+      '<td>' + reachTone + '</td>' +
+      '<td style="color:#9ca3af">' + escapeHtml(row.source) + '</td>' +
+      '<td><button class="btn" onclick="stageAddToList(' + index + ')">Add to list</button></td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function runIntakeStub(action){
+  const status = document.getElementById('intake-status');
+  if(!status) return;
+  status.style.display = 'block';
+  status.textContent = action + ' is shown as a W5.0 intake skeleton action. Live intake orchestration is not wired from this page yet.';
+}
+
+function stageAddToList(index){
+  const status = document.getElementById('intake-status');
+  if(!status) return;
+  const row = intakeCandidates[index] || {};
+  status.style.display = 'block';
+  status.textContent = (row.name || 'Candidate') + ' is staged in the intake demo queue. Add-to-list persistence is not wired in W5.0.';
+}
+
+function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+renderIntakeResults();
+</script>
+{% endblock %}
