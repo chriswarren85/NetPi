@@ -154,7 +154,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
       <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af"><strong>Profile Scope:</strong> Device roles • System relationships • Connectivity expectations</div>
       <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af"><strong>Validation Focus:</strong> Role alignment • System links • Connectivity results</div>
       <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af"><strong>Profile Output:</strong> System checks • Connectivity matrix • Validation summary</div>
-      <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af"><strong>Profile Basis:</strong> Discovered devices • Saved device types • System relationships</div>
+      <div style="margin-top:4px;font-size:11px;line-height:1.4;color:#9ca3af"><strong>Profile Basis:</strong> Current device list • Known/inferred system relationships • Reachable service evidence</div>
     </div>
     <div style="margin-bottom:6px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af">Validation Profile Results</div>
     <div style="margin-bottom:6px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af">Validation Categories</div>
@@ -397,7 +397,7 @@ function renderSystemResults(){
 
   if(!systemResults.length){
     summary.innerHTML = "<b>⚠ No validation profile results yet</b>";
-    container.innerHTML = "<div style=\"color:#6b7280\">Run AV Network Validation Profile to evaluate device roles, system relationships, and connectivity expectations. Results will appear below as profile-based validation findings.</div>";
+    container.innerHTML = "<div style=\"color:#6b7280\">Run AV Network Validation Profile to evaluate device roles, known/inferred system relationships, and observed connectivity evidence. Profile outcomes will appear below.</div>";
     return;
   }
 
@@ -443,12 +443,14 @@ function renderSystemResults(){
   html += "</tbody></table>";
   container.innerHTML = html;
 
+  const evaluatedChecks = systemResults.length;
+  const evidenceContext = 'based on current device, system, and connectivity evidence';
   if(fail > 0){
-    summary.innerHTML = "<b>⚠ Profile outcome: issues detected</b>";
+    summary.innerHTML = "<b>⚠ Profile outcome (" + evidenceContext + "): issues detected across " + evaluatedChecks + " check(s)</b>";
   } else if(pass > 0 && skipped === 0){
-    summary.innerHTML = "<b>✔ Profile outcome: validation checks passed</b>";
+    summary.innerHTML = "<b>✔ Profile outcome (" + evidenceContext + "): " + evaluatedChecks + " check(s) evaluated with no issues detected</b>";
   } else {
-    summary.innerHTML = "<b>⚠ Profile outcome: incomplete validation coverage</b>";
+    summary.innerHTML = "<b>⚠ Profile outcome (" + evidenceContext + "): " + evaluatedChecks + " check(s) evaluated with partial coverage</b>";
   }
 }
 
