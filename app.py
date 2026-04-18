@@ -2470,6 +2470,10 @@ def requirements():
 def validation():
     return render_template('validation.html', s=load_settings())
 
+@app.route('/tools/firewall')
+def firewall():
+    return render_template('firewall.html', s=load_settings())
+
 
 @app.route('/tools/settings', methods=['GET', 'POST'])
 def settings():

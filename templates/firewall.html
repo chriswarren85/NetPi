@@ -1,0 +1,323 @@
+{% extends 'base.html' %}
+{% block title %}- Firewall Plan{% endblock %}
+{% block content %}
+<div class="page-title">Firewall Plan</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - IT-facing allow-rule plan (demo skeleton data)</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Filter Rules</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="applyFirewallFilters()">Apply</button>
+      <button class="btn" onclick="resetFirewallFilters()">Reset</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+      <div>
+        <label for="fw-source-vlan">Source VLAN</label>
+        <select id="fw-source-vlan" onchange="applyFirewallFilters()">
+          <option value="">All</option>
+          <option value="AV_Control">AV_Control</option>
+          <option value="AV_Video">AV_Video</option>
+          <option value="Admin">Admin</option>
+          <option value="Infrastructure">Infrastructure</option>
+        </select>
+      </div>
+      <div>
+        <label for="fw-destination-vlan">Destination VLAN</label>
+        <select id="fw-destination-vlan" onchange="applyFirewallFilters()">
+          <option value="">All</option>
+          <option value="AV_Control">AV_Control</option>
+          <option value="AV_Video">AV_Video</option>
+          <option value="Admin">Admin</option>
+          <option value="Infrastructure">Infrastructure</option>
+        </select>
+      </div>
+      <div>
+        <label for="fw-system">System</label>
+        <select id="fw-system" onchange="applyFirewallFilters()">
+          <option value="">All</option>
+          <option value="Boardroom A">Boardroom A</option>
+          <option value="Lecture Hall">Lecture Hall</option>
+          <option value="Campus Services">Campus Services</option>
+        </select>
+      </div>
+      <div>
+        <label for="fw-vendor">Vendor</label>
+        <select id="fw-vendor" onchange="applyFirewallFilters()">
+          <option value="">All</option>
+          <option value="Crestron">Crestron</option>
+          <option value="Q-SYS">Q-SYS</option>
+          <option value="Biamp">Biamp</option>
+          <option value="Multi-vendor">Multi-vendor</option>
+        </select>
+      </div>
+      <div>
+        <label for="fw-criticality">Criticality</label>
+        <select id="fw-criticality" onchange="applyFirewallFilters()">
+          <option value="">All</option>
+          <option value="Essential">Essential</option>
+          <option value="Recommended">Recommended</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:8px;font-size:11px;color:#6b7280">
+      Demo note: filters and rule rows are static preview data to shape the firewall handoff workflow.
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Deliverable Exports</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="stubFirewallExport('CSV')">Export CSV</button>
+      <button class="btn" onclick="stubFirewallExport('JSON')">Export JSON</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div style="font-size:12px;color:#9ca3af">Exports are stubbed in this demo stage; no file generation is implemented yet.</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Minimum Required</span>
+    <span class="badge badge-red" id="fw-min-count">0 rules</span>
+  </div>
+  <div class="panel-body" style="padding:0;overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Destination</th>
+          <th>Port</th>
+          <th>Protocol</th>
+          <th>Direction</th>
+          <th>Purpose</th>
+          <th>Business Justification</th>
+          <th>AV Justification</th>
+          <th>Confidence</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="fw-min-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Recommended</span>
+    <span class="badge badge-amber" id="fw-rec-count">0 rules</span>
+  </div>
+  <div class="panel-body" style="padding:0;overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Destination</th>
+          <th>Port</th>
+          <th>Protocol</th>
+          <th>Direction</th>
+          <th>Purpose</th>
+          <th>Business Justification</th>
+          <th>AV Justification</th>
+          <th>Confidence</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="fw-rec-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const firewallMinimumRules = [
+  {
+    source: 'AV_Control (CP4-Boardroom)',
+    destination: 'AV_Control (DSP-01)',
+    source_vlan: 'AV_Control',
+    destination_vlan: 'AV_Control',
+    system: 'Boardroom A',
+    vendor: 'Crestron',
+    criticality: 'Essential',
+    port: '443',
+    protocol: 'TCP',
+    direction: 'Outbound',
+    purpose: 'Control API',
+    business_justification: 'Required for scheduled room automation control.',
+    av_justification: 'Processor must reach DSP control API for command and status.',
+    confidence: 'High',
+    notes: 'Core control path; block causes automation loss.'
+  },
+  {
+    source: 'AV_Control (TP-Boardroom)',
+    destination: 'AV_Control (CP4-Boardroom)',
+    source_vlan: 'AV_Control',
+    destination_vlan: 'AV_Control',
+    system: 'Boardroom A',
+    vendor: 'Crestron',
+    criticality: 'Essential',
+    port: '41794',
+    protocol: 'TCP',
+    direction: 'Outbound',
+    purpose: 'Touchpanel control session',
+    business_justification: 'Maintains operator UI control in the room.',
+    av_justification: 'Touchpanel requires processor session for AV actions.',
+    confidence: 'High',
+    notes: 'Align with local ACL/firewall policy.'
+  },
+  {
+    source: 'AV_Video (QSYS-Core-01)',
+    destination: 'AV_Video (NV21-Lecture)',
+    source_vlan: 'AV_Video',
+    destination_vlan: 'AV_Video',
+    system: 'Lecture Hall',
+    vendor: 'Q-SYS',
+    criticality: 'Essential',
+    port: '443',
+    protocol: 'TCP',
+    direction: 'Outbound',
+    purpose: 'Management/control link',
+    business_justification: 'Required for scheduled lecture signal routing.',
+    av_justification: 'Q-SYS core manages NV endpoint configuration and state.',
+    confidence: 'Medium',
+    notes: 'Baseline secure management flow.'
+  }
+];
+
+const firewallRecommendedRules = [
+  {
+    source: 'Admin (Admin-WS-01)',
+    destination: 'AV_Video (Encoder-01)',
+    source_vlan: 'Admin',
+    destination_vlan: 'AV_Video',
+    system: 'Lecture Hall',
+    vendor: 'Multi-vendor',
+    criticality: 'Recommended',
+    port: '443',
+    protocol: 'TCP',
+    direction: 'Outbound',
+    purpose: 'Web UI administration',
+    business_justification: 'Improves support and troubleshooting speed.',
+    av_justification: 'Enables secure access to device management interfaces.',
+    confidence: 'Medium',
+    notes: 'Restrict to admin subnet and named support hosts.'
+  },
+  {
+    source: 'AV_Control (All managed devices)',
+    destination: 'Infrastructure (DNS-01)',
+    source_vlan: 'AV_Control',
+    destination_vlan: 'Infrastructure',
+    system: 'Campus Services',
+    vendor: 'Multi-vendor',
+    criticality: 'Recommended',
+    port: '53',
+    protocol: 'UDP/TCP',
+    direction: 'Outbound',
+    purpose: 'Name resolution',
+    business_justification: 'Stabilizes service reachability for support workflows.',
+    av_justification: 'Device services and integrations often depend on DNS.',
+    confidence: 'Medium',
+    notes: 'Applies to managed services and diagnostics.'
+  },
+  {
+    source: 'AV_Control (All managed devices)',
+    destination: 'Infrastructure (NTP-01)',
+    source_vlan: 'AV_Control',
+    destination_vlan: 'Infrastructure',
+    system: 'Campus Services',
+    vendor: 'Multi-vendor',
+    criticality: 'Recommended',
+    port: '123',
+    protocol: 'UDP',
+    direction: 'Outbound',
+    purpose: 'Time sync',
+    business_justification: 'Supports accurate logging and incident correlation.',
+    av_justification: 'AV event timelines and troubleshooting need consistent time.',
+    confidence: 'Medium',
+    notes: 'Use approved enterprise time source.'
+  }
+];
+
+function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getFilters(){
+  return {
+    source_vlan: document.getElementById('fw-source-vlan')?.value || '',
+    destination_vlan: document.getElementById('fw-destination-vlan')?.value || '',
+    system: document.getElementById('fw-system')?.value || '',
+    vendor: document.getElementById('fw-vendor')?.value || '',
+    criticality: document.getElementById('fw-criticality')?.value || ''
+  };
+}
+
+function matchesFilters(rule, filters){
+  if(filters.source_vlan && rule.source_vlan !== filters.source_vlan) return false;
+  if(filters.destination_vlan && rule.destination_vlan !== filters.destination_vlan) return false;
+  if(filters.system && rule.system !== filters.system) return false;
+  if(filters.vendor && rule.vendor !== filters.vendor) return false;
+  if(filters.criticality && rule.criticality !== filters.criticality) return false;
+  return true;
+}
+
+function renderFirewallRows(id, rows){
+  const tbody = document.getElementById(id);
+  if(!tbody) return;
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#6b7280;text-align:center;padding:1rem">No demo rules for selected filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(rule => (
+    '<tr>'
+    + '<td>' + escapeHtml(rule.source) + '</td>'
+    + '<td>' + escapeHtml(rule.destination) + '</td>'
+    + '<td>' + escapeHtml(rule.port) + '</td>'
+    + '<td>' + escapeHtml(rule.protocol) + '</td>'
+    + '<td>' + escapeHtml(rule.direction) + '</td>'
+    + '<td>' + escapeHtml(rule.purpose) + '</td>'
+    + '<td>' + escapeHtml(rule.business_justification) + '</td>'
+    + '<td>' + escapeHtml(rule.av_justification) + '</td>'
+    + '<td>' + escapeHtml(rule.confidence) + '</td>'
+    + '<td>' + escapeHtml(rule.notes) + '</td>'
+    + '</tr>'
+  )).join('');
+}
+
+function applyFirewallFilters(){
+  const filters = getFilters();
+  const minimum = firewallMinimumRules.filter(rule => matchesFilters(rule, filters));
+  const recommended = firewallRecommendedRules.filter(rule => matchesFilters(rule, filters));
+  renderFirewallRows('fw-min-rows', minimum);
+  renderFirewallRows('fw-rec-rows', recommended);
+  const minCount = document.getElementById('fw-min-count');
+  const recCount = document.getElementById('fw-rec-count');
+  if(minCount) minCount.textContent = minimum.length + (minimum.length === 1 ? ' rule' : ' rules');
+  if(recCount) recCount.textContent = recommended.length + (recommended.length === 1 ? ' rule' : ' rules');
+}
+
+function resetFirewallFilters(){
+  const ids = ['fw-source-vlan', 'fw-destination-vlan', 'fw-system', 'fw-vendor', 'fw-criticality'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  applyFirewallFilters();
+}
+
+function stubFirewallExport(fmt){
+  window.alert('Demo only: Export ' + fmt + ' is a stub in this skeleton page. No file is generated yet.');
+}
+
+applyFirewallFilters();
+</script>
+{% endblock %}
