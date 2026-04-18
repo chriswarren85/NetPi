@@ -107,3 +107,13 @@
   - Added new POST `/tools/api/generate_flows` endpoint that derives device-to-device flow rows from runtime-enriched inventory using `run_system_validation(...)`, connectivity validation outputs, and runtime system-group membership
   - Added lightweight `checks/flows.py` helpers for relationship-to-flow expansion, category normalization, confidence scoring, flow id construction, and safe unmapped relationship capture
   - Endpoint returns stable `ok/count/summary/results/unmapped_relationships` shape with per-flow source/destination/protocol/port/purpose/derived_from/system_id fields and keeps ambiguous or skipped relationships in unmapped output without failing
+### Last Update
+- Feature: W6.4 system requirements aggregation endpoint
+- Files modified:
+  - app.py
+  - checks/system_requirements.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added new POST `/tools/api/system_requirements` endpoint that aggregates W6.3 flow rows into system-level intent grouped by category (`control`, `media`, `service`, `management`, `unknown`)
+  - Added lightweight `checks/system_requirements.py` helpers to merge flow rows by system/category/source-destination/protocol/direction/purpose, roll up ports, and preserve derivation traceability
+  - Endpoint preserves safe handling for unresolved inputs by returning non-fatal `ungrouped_flows` and supports optional direct `flows` payload for test/debug scenarios

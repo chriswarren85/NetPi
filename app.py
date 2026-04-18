@@ -32,6 +32,7 @@ from checks.flows import (
     generate_flows_from_system_results,
     generate_flows_from_connectivity_results,
 )
+from checks.system_requirements import aggregate_flows_by_system
 from checks.requirements import (
     load_requirements_config,
     generate_device_requirements,
@@ -4959,6 +4960,130 @@ def api_generate_flows():
             "summary": summary,
             "results": results,
             "unmapped_relationships": unmapped_relationships,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/system_requirements", methods=["POST"])
+def api_system_requirements():
+    try:
+        payload = request.get_json(silent=True) or {}
+        vlan = str(payload.get("vlan") or "").strip()
+
+        direct_flows = payload.get("flows")
+        if isinstance(direct_flows, list):
+            ip_to_device = {}
+            for flow in direct_flows:
+                if not isinstance(flow, dict):
+                    continue
+                src_ip = str(flow.get("src_ip") or "").strip()
+                dst_ip = str(flow.get("dst_ip") or "").strip()
+                if src_ip and src_ip not in ip_to_device:
+                    ip_to_device[src_ip] = {
+                        "name": flow.get("src_device") or "",
+                        "type": flow.get("src_type") or "",
+                        "vlan": flow.get("src_vlan") or "",
+                    }
+                if dst_ip and dst_ip not in ip_to_device:
+                    ip_to_device[dst_ip] = {
+                        "name": flow.get("dst_device") or "",
+                        "type": flow.get("dst_type") or "",
+                        "vlan": flow.get("dst_vlan") or "",
+                    }
+
+            aggregated = aggregate_flows_by_system(direct_flows, ip_to_device=ip_to_device)
+            return jsonify({
+                "ok": True,
+                "count": len(aggregated.get("results") or []),
+                "summary": aggregated.get("summary") or {},
+                "results": aggregated.get("results") or [],
+                "ungrouped_flows": aggregated.get("ungrouped_flows") or [],
+            })
+
+        devices = payload.get("devices")
+        explicit_devices = isinstance(devices, list) and bool(devices)
+        if not explicit_devices:
+            devices = load_devices()
+
+        if vlan:
+            devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
+
+        enriched_devices = [enrich_device_runtime(device) for device in devices]
+        validations_by_ip = {}
+        ip_to_device = {}
+        for item in enriched_devices:
+            validation_result = dict(item.get("_validation_result") or {})
+            ip = str(validation_result.get("ip") or item.get("ip") or "").strip()
+            if not ip:
+                continue
+            validations_by_ip[ip] = validation_result
+            ip_to_device[ip] = {
+                "name": item.get("name") or "",
+                "type": item.get("effective_type") or item.get("_resolved_type") or item.get("type") or "",
+                "vlan": item.get("vlan") or "",
+            }
+
+        system_results = run_system_validation(enriched_devices, validations_by_ip)
+        connectivity_results = []
+        try:
+            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+        except Exception:
+            connectivity_results = []
+
+        system_groups = build_runtime_system_groups(enriched_devices)
+        ip_to_system_id = {}
+        for group in (system_groups or []):
+            group_id = str(group.get("system_id") or "").strip()
+            for device in (group.get("devices") or []):
+                ip = str(device.get("ip") or "").strip()
+                if ip and group_id:
+                    ip_to_system_id[ip] = group_id
+
+        system_flow_pack = generate_flows_from_system_results(
+            system_results,
+            ip_to_system_id=ip_to_system_id,
+            ip_to_device=ip_to_device,
+        )
+        connectivity_flow_pack = generate_flows_from_connectivity_results(
+            connectivity_results,
+            ip_to_system_id=ip_to_system_id,
+            ip_to_device=ip_to_device,
+        )
+
+        deduped_flows = {}
+        for flow in (system_flow_pack.get("flows") or []) + (connectivity_flow_pack.get("flows") or []):
+            if not isinstance(flow, dict):
+                continue
+            flow_id = str(flow.get("flow_id") or "").strip()
+            if not flow_id:
+                continue
+
+            existing = deduped_flows.get(flow_id)
+            if not existing:
+                deduped_flows[flow_id] = flow
+                continue
+
+            existing_confidence = int(existing.get("confidence") or 0)
+            next_confidence = int(flow.get("confidence") or 0)
+            if next_confidence > existing_confidence:
+                deduped_flows[flow_id] = flow
+
+        flows = list(deduped_flows.values())
+        aggregated = aggregate_flows_by_system(flows, ip_to_device=ip_to_device)
+        ungrouped = list(aggregated.get("ungrouped_flows") or [])
+        ungrouped.extend((system_flow_pack.get("unmapped") or []))
+        ungrouped.extend((connectivity_flow_pack.get("unmapped") or []))
+
+        return jsonify({
+            "ok": True,
+            "count": len(aggregated.get("results") or []),
+            "summary": aggregated.get("summary") or {},
+            "results": aggregated.get("results") or [],
+            "ungrouped_flows": ungrouped,
         })
     except Exception as e:
         return jsonify({
