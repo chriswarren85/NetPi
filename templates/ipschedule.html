@@ -1,0 +1,198 @@
+{% extends 'base.html' %}
+{% block title %}- IP Schedule{% endblock %}
+{% block content %}
+<div class="page-title">IP Schedule</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Handover schedule preview (demo skeleton data)</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>IP Schedule Actions</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="stubExportIpSchedule()">Export IP Schedule</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div style="font-size:12px;color:#9ca3af">
+      Demo note: rows, last-seen values, metadata completeness flags, and export actions are static preview content.
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Client Handover Field Set</div>
+  <div class="panel-body" style="padding:0;overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Hostname</th>
+          <th>IP</th>
+          <th>MAC</th>
+          <th>Serial</th>
+          <th>VLAN</th>
+          <th>Gateway</th>
+          <th>DNS</th>
+          <th>Vendor</th>
+          <th>Model</th>
+          <th>Type</th>
+          <th>Room / Zone</th>
+          <th>DHCP / Reserved / Static</th>
+          <th>Last Seen</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="ip-schedule-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const ipScheduleRows = [
+  {
+    name: 'CP-Boardroom-01',
+    hostname: 'cp4-boardroom',
+    ip: '10.110.50.21',
+    mac: '00:10:7f:2a:31:90',
+    serial: 'CP4-AX-88231',
+    vlan: 'AV_Control',
+    gateway: '10.110.50.1',
+    dns: '10.110.10.10, 10.110.10.11',
+    vendor: 'Crestron',
+    model: 'CP4',
+    type: 'crestron_control',
+    zone: 'Boardroom A',
+    addressing: 'Reserved',
+    last_seen: '2026-04-17 15:22',
+    notes: 'Primary room controller for automation and routing.',
+    manual_override: true
+  },
+  {
+    name: 'DSP-Main-01',
+    hostname: 'dsp-main-01',
+    ip: '10.110.50.32',
+    mac: '3c:2c:30:88:aa:12',
+    serial: '',
+    vlan: 'AV_Control',
+    gateway: '10.110.50.1',
+    dns: '10.110.10.10, 10.110.10.11',
+    vendor: 'Q-SYS',
+    model: 'Core 110f',
+    type: 'qsys-core',
+    zone: 'Main Hall',
+    addressing: 'Static',
+    last_seen: '2026-04-17 15:19',
+    notes: 'Serial pending from rack photo verification.',
+    manual_override: false
+  },
+  {
+    name: 'NV-21-Lecture',
+    hostname: 'nv21-lecture',
+    ip: '10.110.60.44',
+    mac: '',
+    serial: 'NV21-71129',
+    vlan: 'AV_Video',
+    gateway: '10.110.60.1',
+    dns: '10.110.10.10, 10.110.10.11',
+    vendor: 'Q-SYS',
+    model: 'NV-21-HU',
+    type: 'qsys-nv21',
+    zone: 'Lecture Hall',
+    addressing: 'Reserved',
+    last_seen: '2026-04-17 15:10',
+    notes: 'MAC capture missing in current demo inventory.',
+    manual_override: false
+  },
+  {
+    name: 'BARCO-CTRL-01',
+    hostname: 'barco-ctrl-01',
+    ip: '10.110.60.52',
+    mac: '84:2b:2b:11:82:44',
+    serial: 'BARCO-R9867',
+    vlan: '',
+    gateway: '10.110.60.1',
+    dns: '10.110.10.10, 10.110.10.11',
+    vendor: 'Barco',
+    model: 'ClickShare CX',
+    type: 'video-endpoint',
+    zone: '',
+    addressing: 'DHCP',
+    last_seen: '2026-04-16 19:43',
+    notes: 'VLAN and zone pending final commissioning assignment.',
+    manual_override: true
+  },
+  {
+    name: 'TP-Lobby-01',
+    hostname: 'tp-lobby-01',
+    ip: '10.110.50.46',
+    mac: '00:1d:ec:20:ab:fe',
+    serial: '',
+    vlan: '',
+    gateway: '10.110.50.1',
+    dns: '10.110.10.10, 10.110.10.11',
+    vendor: 'Crestron',
+    model: 'TSW-1070',
+    type: 'crestron-touchpanel',
+    zone: 'Lobby',
+    addressing: 'Reserved',
+    last_seen: '2026-04-17 14:58',
+    notes: 'Installer entered type manually; serial and VLAN need confirmation.',
+    manual_override: true
+  }
+];
+
+function escapeHtml(str){
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function cell(value, opts){
+  const required = opts && opts.required;
+  const isMissing = required && !String(value || '').trim();
+  const style = isMissing
+    ? 'background:#3f2a16;color:#fde68a;'
+    : '';
+  const text = String(value || '').trim() || '-';
+  return '<td style="' + style + '">' + escapeHtml(text) + '</td>';
+}
+
+function marker(manual){
+  return manual
+    ? ' <span class="badge badge-blue">Manual</span>'
+    : '';
+}
+
+function renderIpSchedule(){
+  const tbody = document.getElementById('ip-schedule-rows');
+  if(!tbody) return;
+  tbody.innerHTML = ipScheduleRows.map(row => (
+    '<tr>'
+    + cell(row.name)
+    + cell(row.hostname)
+    + cell(row.ip)
+    + cell(row.mac, {required: true})
+    + cell(row.serial, {required: true})
+    + cell(row.vlan, {required: true})
+    + cell(row.gateway)
+    + cell(row.dns)
+    + cell(row.vendor)
+    + cell(row.model)
+    + '<td>' + escapeHtml(String(row.type || '-')) + marker(row.manual_override) + '</td>'
+    + cell(row.zone)
+    + '<td>' + escapeHtml(String(row.addressing || '-')) + marker(row.manual_override) + '</td>'
+    + cell(row.last_seen)
+    + '<td>' + escapeHtml(String(row.notes || '-')) + marker(row.manual_override) + '</td>'
+    + '</tr>'
+  )).join('');
+}
+
+function stubExportIpSchedule(){
+  window.alert('Demo only: IP Schedule export is a stub in this skeleton page. No file is generated yet.');
+}
+
+renderIpSchedule();
+</script>
+{% endblock %}

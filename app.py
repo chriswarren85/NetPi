@@ -2478,6 +2478,10 @@ def firewall():
 def recommendations():
     return render_template('recommendations.html', s=load_settings())
 
+@app.route('/tools/ipschedule')
+def ipschedule():
+    return render_template('ipschedule.html', s=load_settings())
+
 
 @app.route('/tools/settings', methods=['GET', 'POST'])
 def settings():
