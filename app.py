@@ -28,6 +28,10 @@ from checks.validation import (
     run_connectivity_validation,
     summarize_connectivity_results,
 )
+from checks.flows import (
+    generate_flows_from_system_results,
+    generate_flows_from_connectivity_results,
+)
 from checks.requirements import (
     load_requirements_config,
     generate_device_requirements,
@@ -4849,6 +4853,112 @@ def api_validate_systems():
             "connectivity_summary": connectivity_summary,
             "connectivity_note": connectivity_note,
             "detected_systems": detected,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/generate_flows", methods=["POST"])
+def api_generate_flows():
+    try:
+        payload = request.get_json(silent=True) or {}
+        vlan = str(payload.get("vlan") or "").strip()
+        devices = payload.get("devices")
+        explicit_devices = isinstance(devices, list) and bool(devices)
+
+        if not explicit_devices:
+            devices = load_devices()
+
+        if vlan:
+            devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
+
+        enriched_devices = [enrich_device_runtime(device) for device in devices]
+        validations_by_ip = {}
+        ip_to_device = {}
+        for item in enriched_devices:
+            validation_result = dict(item.get("_validation_result") or {})
+            ip = str(validation_result.get("ip") or item.get("ip") or "").strip()
+            if ip:
+                validations_by_ip[ip] = validation_result
+                ip_to_device[ip] = {
+                    "name": item.get("name") or "",
+                    "type": item.get("effective_type") or item.get("_resolved_type") or item.get("type") or "",
+                }
+
+        system_results = run_system_validation(enriched_devices, validations_by_ip)
+        connectivity_results = []
+        try:
+            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+        except Exception:
+            connectivity_results = []
+
+        system_groups = build_runtime_system_groups(enriched_devices)
+        ip_to_system_id = {}
+        for group in (system_groups or []):
+            group_id = str(group.get("system_id") or "").strip()
+            for device in (group.get("devices") or []):
+                ip = str(device.get("ip") or "").strip()
+                if ip and group_id:
+                    ip_to_system_id[ip] = group_id
+
+        system_flow_pack = generate_flows_from_system_results(
+            system_results,
+            ip_to_system_id=ip_to_system_id,
+            ip_to_device=ip_to_device,
+        )
+        connectivity_flow_pack = generate_flows_from_connectivity_results(
+            connectivity_results,
+            ip_to_system_id=ip_to_system_id,
+            ip_to_device=ip_to_device,
+        )
+
+        deduped_flows = {}
+        for flow in (system_flow_pack.get("flows") or []) + (connectivity_flow_pack.get("flows") or []):
+            if not isinstance(flow, dict):
+                continue
+            flow_id = str(flow.get("flow_id") or "").strip()
+            if not flow_id:
+                continue
+
+            existing = deduped_flows.get(flow_id)
+            if not existing:
+                deduped_flows[flow_id] = flow
+                continue
+
+            existing_confidence = int(existing.get("confidence") or 0)
+            next_confidence = int(flow.get("confidence") or 0)
+            if next_confidence > existing_confidence:
+                deduped_flows[flow_id] = flow
+
+        results = list(deduped_flows.values())
+        unmapped_relationships = (system_flow_pack.get("unmapped") or []) + (connectivity_flow_pack.get("unmapped") or [])
+
+        relationship_types = set()
+        relationship_types.update(system_flow_pack.get("relationship_types") or set())
+        relationship_types.update(connectivity_flow_pack.get("relationship_types") or set())
+
+        systems_seen = set()
+        for row in results:
+            system_id = str(row.get("system_id") or "").strip()
+            if system_id:
+                systems_seen.add(system_id)
+
+        summary = {
+            "flows": len(results),
+            "systems_seen": len(systems_seen),
+            "relationship_types": len(relationship_types),
+            "derived_from": ["system_results", "connectivity"],
+        }
+
+        return jsonify({
+            "ok": True,
+            "count": len(results),
+            "summary": summary,
+            "results": results,
+            "unmapped_relationships": unmapped_relationships,
         })
     except Exception as e:
         return jsonify({

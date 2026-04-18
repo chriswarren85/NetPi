@@ -97,3 +97,13 @@
   - Wired Requirements page to live `POST /tools/api/generate_requirements` and removed fake static requirement rows from normal rendering
   - Added loading/empty/error states, live summary cards, per-device derivation visibility (`effective_type`, `source_type`, `derived_from`), and safe unmapped device rendering
   - Added lightweight requirements state cache in localStorage (`netpi.requirements.state.v1`) shared across pages so Devices intelligence drawer now shows real requirements availability (`Available`/`Missing`/`Unknown`) from live generation data
+### Last Update
+- Feature: W6.3 flow mapping endpoint from system validation relationships
+- Files modified:
+  - app.py
+  - checks/flows.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added new POST `/tools/api/generate_flows` endpoint that derives device-to-device flow rows from runtime-enriched inventory using `run_system_validation(...)`, connectivity validation outputs, and runtime system-group membership
+  - Added lightweight `checks/flows.py` helpers for relationship-to-flow expansion, category normalization, confidence scoring, flow id construction, and safe unmapped relationship capture
+  - Endpoint returns stable `ok/count/summary/results/unmapped_relationships` shape with per-flow source/destination/protocol/port/purpose/derived_from/system_id fields and keeps ambiguous or skipped relationships in unmapped output without failing
