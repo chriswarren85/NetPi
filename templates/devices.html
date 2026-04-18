@@ -762,7 +762,84 @@ function normalizeTypeValue(value){
   return text;
 }
 
-function buildTypeCellHtml(device, validation){
+function deriveConfidenceState(device, validation, freshnessLabel){
+  if(String(freshnessLabel || '').toLowerCase() === 'stale'){
+    return 'stale';
+  }
+
+  const suggestionObj = (validation && validation.type_suggestion && typeof validation.type_suggestion === 'object')
+    ? validation.type_suggestion
+    : ((device && device.type_suggestion && typeof device.type_suggestion === 'object') ? device.type_suggestion : null);
+  const savedType = normalizeTypeValue(device && device.type);
+  const savedTypeLower = savedType.toLowerCase();
+  const suggestedType = normalizeTypeValue(
+    (validation && validation.suggested_type)
+    || (suggestionObj && suggestionObj.suggested_type)
+    || (device && device.suggested_type)
+  );
+  const effectiveType = normalizeTypeValue(
+    (validation && validation.effective_type)
+    || (device && device._resolved_type)
+    || (device && device.effective_type)
+  );
+  const observedType = normalizeTypeValue(
+    (validation && validation.observed_platform && validation.observed_platform.platform)
+    || (validation && validation.fingerprint && validation.fingerprint.platform)
+  );
+  const confidenceLabel = String(
+    (validation && validation.confidence_label)
+    || (suggestionObj && suggestionObj.confidence_label)
+    || ''
+  ).trim().toLowerCase();
+  const rawConfidenceScore = (validation && validation.confidence_score);
+  const fallbackConfidenceScore = (suggestionObj && suggestionObj.confidence_score);
+  const numericConfidence = Number(
+    rawConfidenceScore !== undefined && rawConfidenceScore !== null && rawConfidenceScore !== ''
+      ? rawConfidenceScore
+      : fallbackConfidenceScore
+  );
+
+  const strongConfidence = confidenceLabel === 'high'
+    || confidenceLabel === 'strong'
+    || confidenceLabel === 'confirmed'
+    || (Number.isFinite(numericConfidence) && numericConfidence >= 80);
+  const runtimeMatch = effectiveType && observedType && (effectiveType.toLowerCase() === observedType.toLowerCase());
+  if(effectiveType && (strongConfidence || runtimeMatch)){
+    return 'confirmed';
+  }
+
+  const hasRuntimeSignal = !!(
+    effectiveType
+    || suggestedType
+    || observedType
+    || confidenceLabel
+    || (Number.isFinite(numericConfidence) && numericConfidence > 0)
+    || suggestionObj
+  );
+  if(hasRuntimeSignal){
+    return 'inferred';
+  }
+
+  if(savedType && savedTypeLower !== 'generic'){
+    return 'user_entered';
+  }
+
+  return 'unknown';
+}
+
+function buildConfidenceBadgeHtml(state){
+  const badgeStyles = {
+    confirmed: { label: 'Confirmed', bg: '#052e16', color: '#bbf7d0', border: '#166534' },
+    inferred: { label: 'Inferred', bg: '#172554', color: '#bfdbfe', border: '#1d4ed8' },
+    user_entered: { label: 'User-entered', bg: '#3b0764', color: '#e9d5ff', border: '#7e22ce' },
+    stale: { label: 'Stale', bg: '#1f2937', color: '#d1d5db', border: '#4b5563' },
+    unknown: { label: 'Unknown', bg: 'transparent', color: '#fca5a5', border: '#ef4444' }
+  };
+  const style = badgeStyles[state] || badgeStyles.unknown;
+  return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:' + style.bg + ';color:' + style.color + ';border:1px solid ' + style.border + '">' + style.label + '</span>';
+}
+
+function buildTypeCellHtml(device, validation, freshnessLabel){
   const savedType = normalizeTypeValue(device && device.type);
   const savedTypeLower = savedType.toLowerCase();
   const suggestionObj = (validation && validation.type_suggestion && typeof validation.type_suggestion === 'object')
@@ -788,8 +865,11 @@ function buildTypeCellHtml(device, validation){
     || (suggestionObj && suggestionObj.confidence_label)
     || ''
   ).trim();
+  const confidenceState = deriveConfidenceState(device, validation, freshnessLabel);
+  const confidenceBadge = buildConfidenceBadgeHtml(confidenceState);
 
-  let html = '<div style="font-size:12px;line-height:1.4"><strong>Saved:</strong> ' + escapeHtml(savedType || 'not set') + '</div>';
+  let html = '<div style="margin-bottom:4px;">' + confidenceBadge + '</div>';
+  html += '<div style="font-size:12px;line-height:1.4"><strong>Saved:</strong> ' + escapeHtml(savedType || 'not set') + '</div>';
 
   const seenRuntimeTypes = new Set();
   const runtimeLines = [];
@@ -1164,7 +1244,8 @@ function renderTable(){
       const nameCellHtml =
         '<div style="font-weight:500;color:#e5e7eb"><span style="display:inline-block;width:14px;color:#9ca3af">' + escapeHtml(toggleGlyph) + '</span>' + escapeHtml(d.name || '(unnamed device)') + '</div>' +
         (macText ? '<div style="margin-top:2px;font-size:11px;line-height:1.3;color:#6b7280;font-family:monospace">MAC: ' + escapeHtml(macText) + '</div>' : '');
-      const typeCellHtml = buildTypeCellHtml(d, r);
+      const confidenceState = deriveConfidenceState(d, r, freshness.label);
+      const typeCellHtml = buildTypeCellHtml(d, r, freshness.label);
       const freshnessHtml =
         '<div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:' + freshness.tone.background + ';color:' + freshness.tone.color + '">' + escapeHtml(freshness.label) + '</div>' +
         '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280"><strong>Seen:</strong> ' + escapeHtml(freshness.lastSeen || 'Never') + '</div>' +
@@ -1314,6 +1395,7 @@ function renderTable(){
           '<td colspan="8" style="padding:0;border-top:none;">'
           + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
           + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Device Intelligence</div>'
+          + '<div style="margin-bottom:8px">' + buildConfidenceBadgeHtml(confidenceState) + '</div>'
           + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px 16px;">'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(effectiveType) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">suggested_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(suggestedType) + '</div></div>'
