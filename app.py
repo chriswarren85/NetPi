@@ -28,6 +28,10 @@ from checks.validation import (
     run_connectivity_validation,
     summarize_connectivity_results,
 )
+from checks.requirements import (
+    load_requirements_config,
+    generate_device_requirements,
+)
 
 app = Flask(__name__)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
@@ -3435,6 +3439,65 @@ def api_validate_all():
             "count": len(results),
             "results": results,
             "detected_systems": detected,
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/generate_requirements", methods=["POST"])
+def api_generate_requirements():
+    try:
+        payload = request.get_json(silent=True) or {}
+        vlan = str(payload.get("vlan") or "").strip()
+        devices = payload.get("devices")
+        explicit_devices = isinstance(devices, list) and bool(devices)
+
+        if not explicit_devices:
+            devices = load_devices()
+
+        if vlan:
+            devices = [d for d in devices if str(d.get("vlan") or "").strip() == vlan]
+
+        config = load_requirements_config()
+        enriched_devices = [enrich_device_runtime(device) for device in devices]
+
+        results = []
+        unmapped = []
+        mapped_count = 0
+        types_seen = set()
+
+        for device in enriched_devices:
+            requirement_row = generate_device_requirements(device, config)
+            results.append(requirement_row)
+
+            effective_type = str(requirement_row.get("effective_type") or "").strip().lower()
+            if effective_type:
+                types_seen.add(effective_type)
+
+            if requirement_row.get("required_ports"):
+                mapped_count += 1
+            else:
+                unmapped.append({
+                    "device_id": requirement_row.get("device_id") or "",
+                    "type": effective_type or "unknown",
+                })
+
+        summary = {
+            "mapped": mapped_count,
+            "unmapped": len(unmapped),
+            "types_seen": len(types_seen),
+        }
+
+        return jsonify({
+            "ok": True,
+            "count": len(results),
+            "summary": summary,
+            "results": results,
+            "unmapped": unmapped,
         })
 
     except Exception as e:

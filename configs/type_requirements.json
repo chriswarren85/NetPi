@@ -1,0 +1,80 @@
+{
+  "aliases": {
+    "q-sys": "qsys-core",
+    "qsys": "qsys-core",
+    "qsys-nv21": "qsys-nv-endpoint",
+    "qsys-nv32": "qsys-nv-endpoint",
+    "crestron_control": "crestron-processor",
+    "control-processor": "crestron-processor",
+    "crestron_uc": "crestron-uc-engine",
+    "biamp": "biamp-tesira",
+    "tesira": "biamp-tesira",
+    "web-device": "generic-web-device",
+    "linux-web-device": "generic-web-device",
+    "generic": "generic-web-device"
+  },
+  "types": {
+    "qsys-core": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 1710, "service": "qsys-control", "required": true },
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true },
+        { "protocol": "tcp", "port": 80, "service": "http", "required": true }
+      ],
+      "required_services": ["control", "management"],
+      "notes": ["Core DSP/control endpoint requirements baseline."]
+    },
+    "crestron-processor": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 41794, "service": "cip", "required": true },
+        { "protocol": "tcp", "port": 41795, "service": "secure-cip", "required": true },
+        { "protocol": "tcp", "port": 41796, "service": "crestron-service", "required": true },
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true }
+      ],
+      "required_services": ["control", "management"],
+      "notes": ["Control processor baseline for secure session and admin access."]
+    },
+    "crestron-touchpanel": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true },
+        { "protocol": "tcp", "port": 80, "service": "http", "required": false },
+        { "protocol": "tcp", "port": 41795, "service": "secure-cip", "required": true }
+      ],
+      "required_services": ["ui", "management"],
+      "notes": ["Touch panel requirements include secure controller session."]
+    },
+    "crestron-uc-engine": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true },
+        { "protocol": "tcp", "port": 41795, "service": "secure-cip", "required": true }
+      ],
+      "required_services": ["conferencing", "control"],
+      "notes": ["UC engine baseline for secure control and management access."]
+    },
+    "qsys-nv-endpoint": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true },
+        { "protocol": "tcp", "port": 80, "service": "http", "required": false },
+        { "protocol": "tcp", "port": 554, "service": "rtsp", "required": true }
+      ],
+      "required_services": ["av-streaming", "management"],
+      "notes": ["NV endpoint baseline for control and stream session setup."]
+    },
+    "biamp-tesira": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true },
+        { "protocol": "tcp", "port": 80, "service": "http", "required": false },
+        { "protocol": "tcp", "port": 23, "service": "telnet", "required": false }
+      ],
+      "required_services": ["audio-control", "management"],
+      "notes": ["Biamp/Tesira baseline includes optional legacy management ports."]
+    },
+    "generic-web-device": {
+      "required_ports": [
+        { "protocol": "tcp", "port": 443, "service": "https", "required": true },
+        { "protocol": "tcp", "port": 80, "service": "http", "required": false }
+      ],
+      "required_services": ["management"],
+      "notes": ["Fallback baseline for unmanaged web-capable endpoints."]
+    }
+  }
+}
