@@ -101,6 +101,18 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
     </div>
   </div>
   <div class="panel-body" style="padding:0">
+    <div style="padding:10px 12px;border-bottom:1px solid #374151;background:#0f172a">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Master Device Workflow</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="focusAddDevice()">Add</button>
+        <button class="btn" onclick="focusImportDevices()">Import</button>
+        <button class="btn" onclick="showWorkflowStub('discover')">Discover</button>
+        <button class="btn" onclick="validateAllDevices()">Fingerprint</button>
+        <button class="btn" onclick="showWorkflowStub('normalize')">Normalize</button>
+        <button class="btn" disabled style="opacity:.65;cursor:not-allowed">Generate Requirements</button>
+        <button class="btn" disabled style="opacity:.65;cursor:not-allowed">Export</button>
+      </div>
+    </div>
     <table>
       <thead>
         <tr>
@@ -1113,11 +1125,13 @@ function renderTable(){
   }
 
   if(filtered.length === 0){
-    let emptyMessage = 'No matching devices';
+    let emptyMessage = 'No matching devices in the current inventory view';
     if(filterFreshness === 'active'){
       emptyMessage = 'No fresh, aging, or unknown devices match this view';
     } else if(filterFreshness === 'stale'){
       emptyMessage = 'No stale devices match this view';
+    } else if(!filterVlan){
+      emptyMessage = 'No devices in the master inventory yet. Use Add, Import, or Discover to populate this list, then run Fingerprint and Normalize as needed.';
     }
     tbody.innerHTML = '<tr><td colspan="8" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
     return;
@@ -1142,12 +1156,19 @@ function renderTable(){
       const validationSummary = getValidationSummary(r);
       const actionState = activeDeviceActions[d.ip];
       const freshness = getFreshnessInfo(d);
+      const macText = String((d && (d.mac || d.mac_address)) || '').trim();
+      const nameCellHtml =
+        '<div style="font-weight:500;color:#e5e7eb">' + escapeHtml(d.name || '(unnamed device)') + '</div>' +
+        (macText ? '<div style="margin-top:2px;font-size:11px;line-height:1.3;color:#6b7280;font-family:monospace">MAC: ' + escapeHtml(macText) + '</div>' : '');
       const typeCellHtml = buildTypeCellHtml(d, r);
       const freshnessHtml =
         '<div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:' + freshness.tone.background + ';color:' + freshness.tone.color + '">' + escapeHtml(freshness.label) + '</div>' +
         '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280"><strong>Seen:</strong> ' + escapeHtml(freshness.lastSeen || 'Never') + '</div>' +
         '<div style="font-size:11px;line-height:1.4;color:#6b7280"><strong>Reachable:</strong> ' + escapeHtml(freshness.lastReachable || 'Never') + '</div>' +
         '<div style="font-size:11px;line-height:1.4;color:#6b7280"><strong>First:</strong> ' + escapeHtml(freshness.firstSeen || 'Unknown') + '</div>';
+      if(freshness.label === 'stale'){
+        tr.style.opacity = '0.72';
+      }
 
       let validationButtonText = 'Validate';
       let validationButtonDisabled = '';
@@ -1208,8 +1229,8 @@ function renderTable(){
       }
 
       tr.innerHTML =
-        '<td>' + escapeHtml(d.name) + '</td>' +
-        '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
+        '<td>' + nameCellHtml + '</td>' +
+        '<td style="font-family:monospace;font-size:12px;color:#9ca3af">' + escapeHtml(d.ip) + '</td>' +
         '<td>' + typeCellHtml + '</td>' +
         '<td>' + escapeHtml(d.vlan || '') + '</td>' +
         '<td>' + freshnessHtml + '</td>' +
@@ -1220,6 +1241,32 @@ function renderTable(){
       tbody.appendChild(tr);
     });
   });
+}
+
+function focusAddDevice(){
+  const input = document.getElementById('new-name');
+  if(input){
+    input.focus();
+  }
+}
+
+function focusImportDevices(){
+  const input = document.getElementById('pasted-device-text');
+  if(input){
+    input.focus();
+  }
+}
+
+function showWorkflowStub(action){
+  if(action === 'discover'){
+    alert('Discover is available from Diagnostics. Add discovered devices to keep this master inventory current.');
+    return;
+  }
+  if(action === 'normalize'){
+    alert('Normalize is staged for this workflow. Use current type suggestions and Save changes to keep inventory types aligned.');
+    return;
+  }
+  alert('This workflow step is planned for a later stage.');
 }
 
 async function previewPasteDevices(){
