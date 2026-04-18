@@ -2474,6 +2474,10 @@ def validation():
 def firewall():
     return render_template('firewall.html', s=load_settings())
 
+@app.route('/tools/recommendations')
+def recommendations():
+    return render_template('recommendations.html', s=load_settings())
+
 
 @app.route('/tools/settings', methods=['GET', 'POST'])
 def settings():
