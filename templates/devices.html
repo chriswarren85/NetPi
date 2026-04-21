@@ -909,6 +909,43 @@ function normalizeTypeValue(value){
   return text;
 }
 
+function normalizeMacValue(value){
+  const cleaned = String(value || '').replace(/[^0-9A-Fa-f]/g, '');
+  if(cleaned.length !== 12){
+    return '';
+  }
+  const pairs = [];
+  for(let i = 0; i < 12; i += 2){
+    pairs.push(cleaned.slice(i, i + 2).toUpperCase());
+  }
+  return pairs.join(':');
+}
+
+function normalizeMacSourceValue(source, hasMac){
+  const token = String(source || '').trim().toLowerCase();
+  const map = {
+    'arp': 'arp-cache',
+    'arp-cache': 'arp-cache',
+    'snmp': 'snmp-oid',
+    'snmp-oid': 'snmp-oid',
+    'ifphysaddress': 'snmp-oid',
+    'lldp': 'lldp',
+    'cdp': 'lldp',
+    'lldp/cdp': 'lldp',
+    'manual': 'user-entered',
+    'user entered': 'user-entered',
+    'user-entered': 'user-entered',
+    'existing': 'unknown',
+    'unknown': 'unknown'
+  };
+  const canonical = map[token];
+  if(canonical) return canonical;
+  if(!token){
+    return hasMac ? 'unknown' : 'unknown';
+  }
+  return 'unknown';
+}
+
 function getRoleFromEffectiveType(effectiveType){
   const key = String(effectiveType || '').trim().toLowerCase().replace(/_/g, '-');
   if(!key){
@@ -918,7 +955,7 @@ function getRoleFromEffectiveType(effectiveType){
 }
 
 function getMissingMetadataInfo(device){
-  const macValue = String((device && (device.mac || device.mac_address)) || '').trim();
+  const macValue = normalizeMacValue((device && (device.mac || device.mac_address)) || '');
   const serialValue = String((device && (device.serial || device.serial_number)) || '').trim();
   const vlanValue = String((device && device.vlan) || '').trim();
   const zoneValue = String((device && (device.zone || device.room)) || '').trim();
@@ -1415,7 +1452,9 @@ function renderTable(){
       const freshness = getFreshnessInfo(d);
       const isExpanded = !!expandedDeviceRows[deviceIp];
       const toggleGlyph = isExpanded ? '▾' : '▸';
-      const macText = String((d && (d.mac || d.mac_address)) || '').trim();
+      const macRaw = String((d && (d.mac || d.mac_address)) || '').trim();
+      const macNormalized = normalizeMacValue(macRaw);
+      const macText = macNormalized || macRaw;
       const nameCellHtml =
         '<div style="font-weight:500;color:#e5e7eb"><span style="display:inline-block;width:14px;color:#9ca3af">' + escapeHtml(toggleGlyph) + '</span>' + escapeHtml(d.name || '(unnamed device)') + '</div>' +
         (macText ? '<div style="margin-top:2px;font-size:11px;line-height:1.3;color:#6b7280;font-family:monospace">MAC: ' + escapeHtml(macText) + '</div>' : '');
@@ -1573,6 +1612,16 @@ function renderTable(){
         const openPorts = Array.isArray(r && r.open_ports) && (r && r.open_ports).length
           ? (r && r.open_ports).join(', ')
           : '—';
+        const drawerMacValue = normalizeMacValue(
+          (r && (r.mac || r.mac_address))
+          || (d && (d.mac || d.mac_address))
+          || ''
+        );
+        const drawerMacSource = normalizeMacSourceValue(
+          (r && r.mac_source) || (d && d.mac_source),
+          !!drawerMacValue
+        );
+        const drawerMacDisplay = drawerMacValue || '—';
         let reasonText = '—';
         if(suggestionObj && Array.isArray(suggestionObj.suggestion_reasons) && suggestionObj.suggestion_reasons.length){
           reasonText = suggestionObj.suggestion_reasons.join(' | ');
@@ -1617,6 +1666,7 @@ function renderTable(){
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">suggested_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(suggestedType) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(confidenceValue) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">open ports</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">' + escapeHtml(openPorts) + '</div></div>'
+          + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">MAC</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">MAC (' + escapeHtml(drawerMacSource) + '): ' + escapeHtml(drawerMacDisplay) + '</div></div>'
           + '<div style="grid-column:1 / -1">'
           + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
           + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this type?</summary>'

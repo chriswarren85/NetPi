@@ -885,11 +885,21 @@ def normalize_devices_for_save(devices_in, settings=None):
     normalized = []
     for device in devices_in or []:
         if isinstance(device, dict):
-            normalized.append(
-                _normalize_device_freshness(
-                    assign_inferred_vlan(device, settings=settings)
-                )
+            item = _normalize_device_freshness(
+                assign_inferred_vlan(device, settings=settings)
             )
+
+            mac_value = _normalize_mac_value(item.get("mac") or item.get("mac_address"))
+            if mac_value:
+                item["mac"] = mac_value
+                item["mac_address"] = mac_value
+                item["mac_source"] = _canonicalize_mac_source(item.get("mac_source"), has_mac=True)
+            else:
+                item["mac"] = ""
+                item["mac_address"] = None
+                item["mac_source"] = "unknown"
+
+            normalized.append(item)
     return normalized
 
 
@@ -1583,6 +1593,32 @@ def _normalize_mac_value(value):
     if len(raw) != 12:
         return ""
     return ":".join(raw[i:i+2] for i in range(0, 12, 2)).upper()
+
+
+def _canonicalize_mac_source(value, *, has_mac=False):
+    token = str(value or "").strip().lower()
+    mapping = {
+        "arp": "arp-cache",
+        "arp-cache": "arp-cache",
+        "snmp": "snmp-oid",
+        "snmp-oid": "snmp-oid",
+        "ifphysaddress": "snmp-oid",
+        "lldp": "lldp",
+        "cdp": "lldp",
+        "lldp/cdp": "lldp",
+        "manual": "user-entered",
+        "user-entered": "user-entered",
+        "user entered": "user-entered",
+        "entered": "user-entered",
+        "existing": "unknown",
+        "unknown": "unknown",
+    }
+    canonical = mapping.get(token)
+    if canonical:
+        return canonical
+    if not token:
+        return "unknown"
+    return "unknown"
 
 
 def save_devices_file(devices):
@@ -3361,18 +3397,20 @@ def api_validate_device():
 
         existing_mac = _normalize_mac_value(device.get("mac") or device.get("mac_address"))
         resolved_mac = _normalize_mac_value(passive_mac)
+        canonical_passive_source = _canonicalize_mac_source(passive_source, has_mac=bool(resolved_mac))
 
         if resolved_mac:
-            if existing_mac != resolved_mac or str(device.get("mac_source") or "").strip().lower() != passive_source:
+            current_source = _canonicalize_mac_source(device.get("mac_source"), has_mac=bool(existing_mac))
+            if existing_mac != resolved_mac or current_source != canonical_passive_source:
                 device["mac"] = resolved_mac
                 device["mac_address"] = resolved_mac
-                device["mac_source"] = passive_source
+                device["mac_source"] = canonical_passive_source
                 device_changed = True
             result["mac"] = resolved_mac
             result["mac_address"] = resolved_mac
-            result["mac_source"] = passive_source
+            result["mac_source"] = canonical_passive_source
         elif not existing_mac:
-            if device.get("mac_address", "__missing__") is not None or str(device.get("mac_source") or "").strip().lower() != "unknown":
+            if device.get("mac_address", "__missing__") is not None or _canonicalize_mac_source(device.get("mac_source"), has_mac=False) != "unknown":
                 device["mac_address"] = None
                 device["mac_source"] = "unknown"
                 device_changed = True
@@ -3380,9 +3418,13 @@ def api_validate_device():
             result["mac_address"] = None
             result["mac_source"] = "unknown"
         else:
+            existing_source = _canonicalize_mac_source(device.get("mac_source"), has_mac=True)
+            if existing_source != str(device.get("mac_source") or ""):
+                device["mac_source"] = existing_source
+                device_changed = True
             result["mac"] = existing_mac
             result["mac_address"] = existing_mac
-            result["mac_source"] = str(device.get("mac_source") or "existing")
+            result["mac_source"] = existing_source
 
         if isinstance(result.get("evidence"), dict):
             result["evidence"]["mac"] = result.get("mac") or ""
@@ -4130,7 +4172,39 @@ def export_csv():
 @app.route('/tools/api/devices/save', methods=['POST'])
 def api_devices_save():
     devices = request.json.get('devices', [])
-    normalized_devices = normalize_devices_for_save(devices, settings=load_settings())
+    existing_devices = load_devices()
+    existing_by_ip = {str((d or {}).get("ip") or "").strip(): d for d in existing_devices if isinstance(d, dict)}
+
+    patched_devices = []
+    for device in devices or []:
+        if not isinstance(device, dict):
+            continue
+        item = dict(device)
+        ip = str(item.get("ip") or "").strip()
+        existing = existing_by_ip.get(ip) or {}
+
+        incoming_mac = _normalize_mac_value(item.get("mac") or item.get("mac_address"))
+        incoming_source = _canonicalize_mac_source(item.get("mac_source"), has_mac=bool(incoming_mac))
+        existing_mac = _normalize_mac_value(existing.get("mac") or existing.get("mac_address"))
+        existing_source = _canonicalize_mac_source(existing.get("mac_source"), has_mac=bool(existing_mac))
+
+        if incoming_mac:
+            if incoming_source in {"arp-cache", "snmp-oid", "lldp"}:
+                item["mac_source"] = incoming_source
+            elif existing_mac and incoming_mac == existing_mac and existing_source in {"arp-cache", "snmp-oid", "lldp", "user-entered"}:
+                item["mac_source"] = existing_source
+            else:
+                item["mac_source"] = "user-entered"
+            item["mac"] = incoming_mac
+            item["mac_address"] = incoming_mac
+        else:
+            item["mac"] = ""
+            item["mac_address"] = None
+            item["mac_source"] = "unknown"
+
+        patched_devices.append(item)
+
+    normalized_devices = normalize_devices_for_save(patched_devices, settings=load_settings())
     save_devices_file(normalized_devices)
     return jsonify({'success': True, 'devices': normalized_devices})
 

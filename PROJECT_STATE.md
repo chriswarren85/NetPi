@@ -229,3 +229,15 @@
   - Integrated MAC enrichment into `POST /tools/api/validate_device` without changing core validation flow or introducing blocking scan stages
   - Added safe write-back behavior to inventory records (`mac`, additive `mac_address`, `mac_source`) while preventing overwrite of known-good MAC values with blank/invalid results
   - On unresolved lookup with no known MAC, writes `mac_address: null` and `mac_source: "unknown"` and keeps validation success response non-blocking
+### Last Update
+- Feature: W6.07 MAC source attribution in device record
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Aligned canonical `mac_source` contract to `arp-cache`, `snmp-oid`, `lldp`, `user-entered`, and `unknown` with backward-safe normalization of legacy/internal labels
+  - Updated `validate_device` persistence/response handling to normalize source labels while preserving valid existing MAC values and non-blocking enrichment behavior
+  - Added save-path handling so explicit user MAC edits persist with `mac_source: user-entered` when no stronger machine-confirmed source is present
+  - Device detail drawer now shows MAC provenance in-line (for example `MAC (arp-cache): AA:BB:CC:DD:EE:FF`) and missing-metadata MAC checks use normalized MAC validity

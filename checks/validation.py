@@ -688,12 +688,12 @@ def resolve_passive_mac(device, validation_result=None):
     # 1) ARP cache
     mac = _lookup_mac_from_arp_cache(target_ip)
     if mac:
-        return (mac, "arp")
+        return (mac, "arp-cache")
 
     # 2) SNMP ifPhysAddress only if already present in current context.
     mac = _lookup_mac_from_snmp_context(device or {}, validation_result or {})
     if mac:
-        return (mac, "snmp")
+        return (mac, "snmp-oid")
 
     # 3) LLDP/CDP neighbor metadata only if already present in current context.
     mac = _lookup_mac_from_neighbor_context(device or {}, validation_result or {})
