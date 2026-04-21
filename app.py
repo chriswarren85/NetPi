@@ -49,6 +49,7 @@ BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
 DISCOVERY_SUBNET_TIMEOUT_SECONDS = 10
+_SETTINGS_LOAD_LOGGED = False
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -879,16 +880,103 @@ def find_dhcp_lease_file():
     return None
 
 
+def _default_settings():
+    return {
+        "project_name": "",
+        "job_number": "",
+        "client_name": "",
+        "site_location": "",
+        "dns_suffix": ".av",
+        "ntp_server": "",
+        "vlans": [],
+    }
+
+
+def _merge_settings_defaults(raw_settings):
+    defaults = _default_settings()
+    if not isinstance(raw_settings, dict):
+        return defaults
+
+    merged = dict(raw_settings)  # preserve unknown/custom keys
+    for key, default_value in defaults.items():
+        if key not in merged:
+            merged[key] = copy.deepcopy(default_value)
+    if not isinstance(merged.get("vlans"), list):
+        merged["vlans"] = []
+    return merged
+
+
+def _log_settings_load_once(message, level="info"):
+    global _SETTINGS_LOAD_LOGGED
+    if _SETTINGS_LOAD_LOGGED:
+        return
+    if level == "warning":
+        app.logger.warning(message)
+    elif level == "error":
+        app.logger.error(message)
+    else:
+        app.logger.info(message)
+    _SETTINGS_LOAD_LOGGED = True
+
+
 def load_settings():
     if not os.path.exists(SETTINGS_FILE):
-        return {}
-    with open(SETTINGS_FILE) as f:
-        return json.load(f)
+        _log_settings_load_once(f"Using defaults because settings.json missing at {SETTINGS_FILE}")
+        return _merge_settings_defaults({})
+
+    try:
+        with open(SETTINGS_FILE, encoding='utf-8') as f:
+            loaded = json.load(f)
+        _log_settings_load_once(f"Loaded settings from {SETTINGS_FILE}")
+        return _merge_settings_defaults(loaded)
+    except json.JSONDecodeError as exc:
+        _log_settings_load_once(
+            f"Recovered from invalid JSON in {SETTINGS_FILE}: {exc}",
+            level="warning"
+        )
+        return _merge_settings_defaults({})
+    except Exception as exc:
+        _log_settings_load_once(
+            f"Failed loading settings from {SETTINGS_FILE}; using defaults. Error: {exc}",
+            level="error"
+        )
+        return _merge_settings_defaults({})
 
 
 def save_settings(data):
-    with open(SETTINGS_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    settings_dir = os.path.dirname(SETTINGS_FILE) or "."
+    tmp_path = SETTINGS_FILE + ".tmp"
+    payload = _merge_settings_defaults(data or {})
+
+    os.makedirs(settings_dir, exist_ok=True)
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+
+    try:
+        os.replace(tmp_path, SETTINGS_FILE)
+    except PermissionError:
+        # Windows/dev fallback when target file is temporarily locked.
+        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+    # Best-effort directory fsync so rename metadata is durable on Linux.
+    try:
+        dir_fd = os.open(settings_dir, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except Exception:
+        pass
 
 
 def infer_vlan_from_ip(ip, settings=None):
@@ -2670,10 +2758,13 @@ def settings():
         ends   = request.form.getlist('vlan_dhcp_end[]')
         notes  = request.form.getlist('vlan_notes[]')
 
+        existing_vlans = s.get("vlans") if isinstance(s.get("vlans"), list) else []
         for i in range(len(names)):
             dt_raw = request.form.get(f'device_types_{i}[]', '')
             dt = [x.strip() for x in dt_raw.split(',') if x.strip()]
-            vlans.append({
+            existing_vlan = existing_vlans[i] if i < len(existing_vlans) and isinstance(existing_vlans[i], dict) else {}
+            vlan_row = dict(existing_vlan)  # preserve unknown/custom VLAN keys
+            vlan_row.update({
                 'id': i + 1,
                 'name': names[i],
                 'vlan_id': tags[i],
@@ -2684,10 +2775,18 @@ def settings():
                 'device_types': dt,
                 'notes': notes[i]
             })
+            vlans.append(vlan_row)
 
         s['vlans'] = vlans
         save_settings(s)
         saved = True
+
+        if request.accept_mimetypes.best == 'application/json':
+            return jsonify({
+                "success": True,
+                "saved_to": SETTINGS_FILE,
+                "timestamp": utc_now_iso(),
+            })
 
     return render_template('settings.html', s=s, saved=saved)
 

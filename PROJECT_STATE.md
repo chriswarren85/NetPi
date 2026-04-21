@@ -255,3 +255,14 @@
   - Added a dedicated MAC column to Devices table plus conflict badge, while preserving existing detail-drawer provenance display
   - Diagnostics discovered-host state is now cached and restored so results remain visible until a new discovery run replaces them
   - Verified subnet/gateway fallbacks already default to `192.168.1.0/24` and `192.168.1.1` when settings do not provide explicit values
+
+### Last Update
+- Feature: Settings persistence hardening across restart/reboot
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Hardened settings writes with temp-file flush/fsync plus replace to reduce partial-write/corruption risk during restart/crash windows
+  - Added resilient settings load behavior with additive defaults, invalid-JSON recovery fallback, and one-time startup log messages for load source/recovery path
+  - Preserved unknown/custom top-level settings keys and unknown per-VLAN keys during settings form saves to avoid destructive key loss
+  - Added optional JSON save confirmation on POST /tools/settings when client requests application/json (`success`, `saved_to`, `timestamp`) while preserving existing HTML UI behavior
