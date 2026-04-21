@@ -2,19 +2,17 @@
 {% block title %}- IP Schedule{% endblock %}
 {% block content %}
 <div class="page-title">IP Schedule</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Handover schedule preview (demo skeleton data)</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Client handover IP schedule</div>
 
 <div class="panel">
   <div class="panel-header">
     <span>IP Schedule Actions</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="stubExportIpSchedule()">Export IP Schedule</button>
+      <button class="btn btn-primary" onclick="exportIpScheduleCsv()">Export IP Schedule CSV</button>
     </div>
   </div>
   <div class="panel-body">
-    <div style="font-size:12px;color:#9ca3af">
-      Demo note: rows, last-seen values, metadata completeness flags, and export actions are static preview content.
-    </div>
+    <div id="ip-schedule-status" style="font-size:12px;color:#6b7280">Loading IP schedule...</div>
   </div>
 </div>
 
@@ -24,21 +22,24 @@
     <table>
       <thead>
         <tr>
-          <th>Name</th>
+          <th>Device Name</th>
           <th>Hostname</th>
-          <th>IP</th>
-          <th>MAC</th>
-          <th>Serial</th>
-          <th>VLAN</th>
+          <th>IP Address</th>
+          <th>MAC Address</th>
+          <th>VLAN / Zone</th>
+          <th>Subnet</th>
           <th>Gateway</th>
-          <th>DNS</th>
-          <th>Vendor</th>
+          <th>Device Type</th>
+          <th>Effective Type</th>
+          <th>Manufacturer / Vendor</th>
           <th>Model</th>
-          <th>Type</th>
-          <th>Room / Zone</th>
-          <th>DHCP / Reserved / Static</th>
-          <th>Last Seen</th>
+          <th>Serial Number</th>
+          <th>Firmware / Version</th>
+          <th>DHCP / Static</th>
+          <th>Location / Room</th>
           <th>Notes</th>
+          <th>Source / Learned From</th>
+          <th>Last Seen / Reachable</th>
         </tr>
       </thead>
       <tbody id="ip-schedule-rows"></tbody>
@@ -47,98 +48,8 @@
 </div>
 
 <script>
-const ipScheduleRows = [
-  {
-    name: 'CP-Boardroom-01',
-    hostname: 'cp4-boardroom',
-    ip: '10.110.50.21',
-    mac: '00:10:7f:2a:31:90',
-    serial: 'CP4-AX-88231',
-    vlan: 'AV_Control',
-    gateway: '10.110.50.1',
-    dns: '10.110.10.10, 10.110.10.11',
-    vendor: 'Crestron',
-    model: 'CP4',
-    type: 'crestron_control',
-    zone: 'Boardroom A',
-    addressing: 'Reserved',
-    last_seen: '2026-04-17 15:22',
-    notes: 'Primary room controller for automation and routing.',
-    manual_override: true
-  },
-  {
-    name: 'DSP-Main-01',
-    hostname: 'dsp-main-01',
-    ip: '10.110.50.32',
-    mac: '3c:2c:30:88:aa:12',
-    serial: '',
-    vlan: 'AV_Control',
-    gateway: '10.110.50.1',
-    dns: '10.110.10.10, 10.110.10.11',
-    vendor: 'Q-SYS',
-    model: 'Core 110f',
-    type: 'qsys-core',
-    zone: 'Main Hall',
-    addressing: 'Static',
-    last_seen: '2026-04-17 15:19',
-    notes: 'Serial pending from rack photo verification.',
-    manual_override: false
-  },
-  {
-    name: 'NV-21-Lecture',
-    hostname: 'nv21-lecture',
-    ip: '10.110.60.44',
-    mac: '',
-    serial: 'NV21-71129',
-    vlan: 'AV_Video',
-    gateway: '10.110.60.1',
-    dns: '10.110.10.10, 10.110.10.11',
-    vendor: 'Q-SYS',
-    model: 'NV-21-HU',
-    type: 'qsys-nv21',
-    zone: 'Lecture Hall',
-    addressing: 'Reserved',
-    last_seen: '2026-04-17 15:10',
-    notes: 'MAC capture missing in current demo inventory.',
-    manual_override: false
-  },
-  {
-    name: 'BARCO-CTRL-01',
-    hostname: 'barco-ctrl-01',
-    ip: '10.110.60.52',
-    mac: '84:2b:2b:11:82:44',
-    serial: 'BARCO-R9867',
-    vlan: '',
-    gateway: '10.110.60.1',
-    dns: '10.110.10.10, 10.110.10.11',
-    vendor: 'Barco',
-    model: 'ClickShare CX',
-    type: 'video-endpoint',
-    zone: '',
-    addressing: 'DHCP',
-    last_seen: '2026-04-16 19:43',
-    notes: 'VLAN and zone pending final commissioning assignment.',
-    manual_override: true
-  },
-  {
-    name: 'TP-Lobby-01',
-    hostname: 'tp-lobby-01',
-    ip: '10.110.50.46',
-    mac: '00:1d:ec:20:ab:fe',
-    serial: '',
-    vlan: '',
-    gateway: '10.110.50.1',
-    dns: '10.110.10.10, 10.110.10.11',
-    vendor: 'Crestron',
-    model: 'TSW-1070',
-    type: 'crestron-touchpanel',
-    zone: 'Lobby',
-    addressing: 'Reserved',
-    last_seen: '2026-04-17 14:58',
-    notes: 'Installer entered type manually; serial and VLAN need confirmation.',
-    manual_override: true
-  }
-];
+const scheduleSettings = {{ s | tojson }};
+let ipScheduleRows = [];
 
 function escapeHtml(str){
   return String(str || '')
@@ -149,50 +60,237 @@ function escapeHtml(str){
     .replace(/'/g, '&#039;');
 }
 
-function cell(value, opts){
-  const required = opts && opts.required;
-  const isMissing = required && !String(value || '').trim();
-  const style = isMissing
-    ? 'background:#3f2a16;color:#fde68a;'
-    : '';
-  const text = String(value || '').trim() || '-';
-  return '<td style="' + style + '">' + escapeHtml(text) + '</td>';
+function setStatus(message, color){
+  const el = document.getElementById('ip-schedule-status');
+  if(!el) return;
+  el.textContent = message || '';
+  el.style.color = color || '#6b7280';
 }
 
-function marker(manual){
-  return manual
-    ? ' <span class="badge badge-blue">Manual</span>'
-    : '';
+function getVlanMap(){
+  const map = {};
+  const vlans = (scheduleSettings && Array.isArray(scheduleSettings.vlans)) ? scheduleSettings.vlans : [];
+  vlans.forEach(vlan => {
+    if(!vlan || typeof vlan !== 'object') return;
+    const name = String(vlan.name || '').trim();
+    if(!name) return;
+    map[name] = {
+      subnet: String(vlan.subnet || '').trim(),
+      gateway: String(vlan.gateway || '').trim()
+    };
+  });
+  return map;
+}
+
+function coerceAddressing(device){
+  const manual = String(device.addressing || device.ip_assignment || '').trim();
+  if(manual) return manual;
+  const inferred = String(device.ip_mode || '').trim();
+  if(inferred) return inferred;
+  return '';
+}
+
+function detectManualOverride(device, fieldKey){
+  const field = String(fieldKey || '').trim();
+  const overrideFields = device.override_fields;
+  if(Array.isArray(overrideFields) && field && overrideFields.includes(field)) return true;
+  if(overrideFields && typeof overrideFields === 'object' && field && overrideFields[field] === true) return true;
+
+  const fieldSources = device.field_sources;
+  if(fieldSources && typeof fieldSources === 'object' && field){
+    const sourceValue = String(fieldSources[field] || '').trim().toLowerCase();
+    if(sourceValue === 'manual' || sourceValue === 'operator' || sourceValue === 'override'){
+      return true;
+    }
+  }
+
+  if(device.manual_override === true || device.override === true) return true;
+  const notes = String(device.notes || '').toLowerCase();
+  return /manual|override|installer entered|operator entered/.test(notes);
+}
+
+function normalizeScheduleRow(device){
+  const vlanMap = getVlanMap();
+  const vlan = String(device.vlan || '').trim();
+  const vlanInfo = vlan ? (vlanMap[vlan] || {}) : {};
+  const type = String(device.type || '').trim();
+  const effectiveType = String(device.effective_type || device._resolved_type || type).trim();
+  const sourceHint = String(
+    device.source
+    || device.last_source
+    || (device.type_suggestion && device.type_suggestion.source)
+    || (String(device.notes || '').toLowerCase().includes('auto-discovered') ? 'discovery' : '')
+  ).trim();
+
+  return {
+    device_name: String(device.name || '').trim(),
+    hostname: String(device.hostname || '').trim(),
+    ip: String(device.ip || '').trim(),
+    mac: String(device.mac || device.mac_address || '').trim(),
+    vlan_zone: vlan,
+    subnet: String(device.subnet || vlanInfo.subnet || '').trim(),
+    gateway: String(device.gateway || vlanInfo.gateway || '').trim(),
+    device_type: type,
+    effective_type: effectiveType,
+    vendor: String(device.vendor || device.manufacturer || '').trim(),
+    model: String(device.model || '').trim(),
+    serial_number: String(device.serial || device.serial_number || '').trim(),
+    firmware_version: String(device.firmware || device.version || '').trim(),
+    dhcp_static: coerceAddressing(device),
+    location_room: String(device.location || device.room || device.zone || '').trim(),
+    notes: String(device.notes || '').trim(),
+    source_learned_from: sourceHint,
+    last_seen_reachable: String(device.last_reachable || device.last_seen || '').trim(),
+    _manual: {
+      device_type: detectManualOverride(device, 'type'),
+      effective_type: detectManualOverride(device, 'effective_type'),
+      dhcp_static: detectManualOverride(device, 'ip_assignment'),
+      notes: detectManualOverride(device, 'notes')
+    }
+  };
+}
+
+function manualBadge(active){
+  if(!active) return '';
+  return ' <span class="badge badge-blue" style="font-size:10px;vertical-align:middle">Manual</span>';
+}
+
+function csvCell(value){
+  const text = String(value == null ? '' : value).replace(/"/g, '""');
+  return '"' + text + '"';
+}
+
+function cell(value, opts){
+  const text = String(value || '').trim();
+  const missingState = (opts && opts.missingState) || '';
+  const manual = (opts && opts.manual) || false;
+  let style = '';
+  if(!text && missingState === 'high'){
+    style = 'background:#7f1d1d;color:#fee2e2;';
+  } else if(!text && missingState === 'advisory'){
+    style = 'background:#3f2a16;color:#fde68a;';
+  }
+  const display = text || '-';
+  return '<td style="' + style + '">' + escapeHtml(display) + manualBadge(manual) + '</td>';
 }
 
 function renderIpSchedule(){
   const tbody = document.getElementById('ip-schedule-rows');
   if(!tbody) return;
+  if(!ipScheduleRows.length){
+    tbody.innerHTML = '<tr><td colspan="18" style="color:#6b7280;text-align:center;padding:1rem">No devices available for IP schedule export.</td></tr>';
+    return;
+  }
   tbody.innerHTML = ipScheduleRows.map(row => (
     '<tr>'
-    + cell(row.name)
+    + cell(row.device_name, {missingState: 'high'})
     + cell(row.hostname)
-    + cell(row.ip)
-    + cell(row.mac, {required: true})
-    + cell(row.serial, {required: true})
-    + cell(row.vlan, {required: true})
+    + cell(row.ip, {missingState: 'high'})
+    + cell(row.mac, {missingState: 'high'})
+    + cell(row.vlan_zone, {missingState: 'advisory'})
+    + cell(row.subnet)
     + cell(row.gateway)
-    + cell(row.dns)
+    + cell(row.device_type, {manual: row._manual.device_type})
+    + cell(row.effective_type, {manual: row._manual.effective_type})
     + cell(row.vendor)
-    + cell(row.model)
-    + '<td>' + escapeHtml(String(row.type || '-')) + marker(row.manual_override) + '</td>'
-    + cell(row.zone)
-    + '<td>' + escapeHtml(String(row.addressing || '-')) + marker(row.manual_override) + '</td>'
-    + cell(row.last_seen)
-    + '<td>' + escapeHtml(String(row.notes || '-')) + marker(row.manual_override) + '</td>'
+    + cell(row.model, {missingState: 'advisory'})
+    + cell(row.serial_number, {missingState: 'advisory'})
+    + cell(row.firmware_version)
+    + cell(row.dhcp_static, {manual: row._manual.dhcp_static})
+    + cell(row.location_room)
+    + cell(row.notes, {manual: row._manual.notes})
+    + cell(row.source_learned_from)
+    + cell(row.last_seen_reachable)
     + '</tr>'
   )).join('');
 }
 
-function stubExportIpSchedule(){
-  window.alert('Demo only: IP Schedule export is a stub in this skeleton page. No file is generated yet.');
+function sanitizeFilePart(value){
+  return String(value || '').trim().replace(/[^a-z0-9\-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
 }
 
-renderIpSchedule();
+function exportIpScheduleCsv(){
+  const headers = [
+    'Device Name',
+    'Hostname',
+    'IP Address',
+    'MAC Address',
+    'VLAN / Zone',
+    'Subnet',
+    'Gateway',
+    'Device Type',
+    'Effective Type',
+    'Manufacturer / Vendor',
+    'Model',
+    'Serial Number',
+    'Firmware / Version',
+    'DHCP / Static',
+    'Location / Room',
+    'Notes',
+    'Source / Learned From',
+    'Last Seen / Reachable'
+  ];
+  const lines = [headers.map(csvCell).join(',')];
+  ipScheduleRows.forEach(row => {
+    lines.push([
+      row.device_name,
+      row.hostname,
+      row.ip,
+      row.mac,
+      row.vlan_zone,
+      row.subnet,
+      row.gateway,
+      row.device_type,
+      row.effective_type,
+      row.vendor,
+      row.model,
+      row.serial_number,
+      row.firmware_version,
+      row.dhcp_static,
+      row.location_room,
+      row.notes,
+      row.source_learned_from,
+      row.last_seen_reachable
+    ].map(csvCell).join(','));
+  });
+
+  const projectName = sanitizeFilePart(scheduleSettings && scheduleSettings.project_name);
+  const filename = (projectName || 'netpi') + '-ip-schedule.csv';
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function loadIpSchedule(){
+  setStatus('Loading IP schedule...', '#6b7280');
+  fetch('/tools/api/ipschedule')
+    .then(resp => resp.json())
+    .then(data => {
+      if(!data || data.ok !== true){
+        throw new Error((data && data.error) || 'Failed to load device inventory');
+      }
+      const devices = Array.isArray(data.devices) ? data.devices : [];
+      ipScheduleRows = devices.map(normalizeScheduleRow);
+      renderIpSchedule();
+      if(ipScheduleRows.length){
+        setStatus('Loaded ' + ipScheduleRows.length + ' device row' + (ipScheduleRows.length === 1 ? '' : 's') + ' for IP schedule export.', '#6b7280');
+      } else {
+        setStatus('No devices found. Add devices on the Devices page to build an IP schedule.', '#6b7280');
+      }
+    })
+    .catch(err => {
+      ipScheduleRows = [];
+      renderIpSchedule();
+      setStatus('Unable to load IP schedule: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+    });
+}
+
+loadIpSchedule();
 </script>
 {% endblock %}

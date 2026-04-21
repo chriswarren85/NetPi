@@ -3582,6 +3582,22 @@ def api_project_name():
     return jsonify({'name': name or ''})
 
 
+@app.route("/tools/api/ipschedule", methods=["GET"])
+def api_ipschedule():
+    try:
+        devices = _devices_with_freshness_view(load_devices())
+        return jsonify({
+            "ok": True,
+            "count": len(devices),
+            "devices": devices,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
 @app.route("/tools/api/checks/run", methods=["POST"])
 def api_checks_run():
     s = load_settings()

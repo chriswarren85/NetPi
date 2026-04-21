@@ -138,3 +138,14 @@
   - Live table rendering now uses backend `firewall_plan.rules` with visible per-row `requirement_level` (`min_required` / `recommended`) and split section counts
   - Filter bar is wired to live data for source zone, destination zone, system, and criticality with combined filtering and clean empty states
   - CSV/JSON exports are wired to currently visible filtered rows with deterministic flattened fields for handover output
+### Last Update
+- Feature: W7.2 IP Schedule export wiring
+- Files modified:
+  - app.py
+  - templates/ipschedule.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added additive `GET /tools/api/ipschedule` endpoint that exposes current inventory rows from `load_devices()` with freshness view fields for schedule rendering
+  - Wired `templates/ipschedule.html` to live inventory data and removed static/demo rows and export stubs
+  - Enabled missing metadata highlighting for critical and advisory fields, plus truthful manual override markers when explicit manual signals are present
+  - Enabled deterministic CSV export (`<project>-ip-schedule.csv`) using current visible schedule rows with Excel-safe quoting
