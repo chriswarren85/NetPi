@@ -149,3 +149,13 @@
   - Wired `templates/ipschedule.html` to live inventory data and removed static/demo rows and export stubs
   - Enabled missing metadata highlighting for critical and advisory fields, plus truthful manual override markers when explicit manual signals are present
   - Enabled deterministic CSV export (`<project>-ip-schedule.csv`) using current visible schedule rows with Excel-safe quoting
+### Last Update
+- Feature: W7.3 Validation screen wiring
+- Files modified:
+  - templates/validation.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Wired validation screen to real `POST /tools/api/validate_all` and `POST /tools/api/validate_systems` endpoints and removed static/demo validation rows
+  - Implemented Live / Logical / Restricted modes with distinct data paths (Logical uses system-oriented validation only; Restricted scopes validation using configured VLAN when available)
+  - Populated by-system, by-flow, and by-device tabs from truthful backend response fields with safe empty/error handling
+  - Added deterministic per-row recommended actions derived from status and validation context while preserving existing Devices page validation behavior
