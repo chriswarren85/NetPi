@@ -1582,6 +1582,25 @@ function renderTable(){
             reasonText = suggested.reasons.join(' | ');
           }
         }
+        const typeWhyParts = [];
+        if(suggestedType && suggestedType !== '—'){
+          typeWhyParts.push('Suggested type signal: ' + suggestedType + '.');
+        }
+        if(confidenceValue && confidenceValue !== '—'){
+          typeWhyParts.push('Confidence: ' + confidenceValue + '.');
+        }
+        if(requirementsDerivedFrom && requirementsDerivedFrom !== '-'){
+          typeWhyParts.push('Derived from: ' + requirementsDerivedFrom + '.');
+        }
+        if(evidenceSummary && evidenceSummary !== '—'){
+          typeWhyParts.push(evidenceSummary + '.');
+        }
+        if(reasonText && reasonText !== '—'){
+          typeWhyParts.push('Reason signals: ' + reasonText + '.');
+        }
+        const typeWhyText = typeWhyParts.length
+          ? typeWhyParts.join(' ')
+          : 'Limited evidence available. Type remains based on current inferred role and observed services.';
 
         detailTr.innerHTML =
           '<td colspan="8" style="padding:0;border-top:none;">'
@@ -1598,8 +1617,16 @@ function renderTable(){
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">suggested_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(suggestedType) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(confidenceValue) + '</div></div>'
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">open ports</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">' + escapeHtml(openPorts) + '</div></div>'
-          + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">evidence summary</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(evidenceSummary) + '</div></div>'
-          + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">type suggestion reason</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(reasonText) + '</div></div>'
+          + '<div style="grid-column:1 / -1">'
+          + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
+          + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this type?</summary>'
+          + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4">' + escapeHtml(typeWhyText) + '</div>'
+          + '<div style="margin-top:6px;font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">evidence summary</div>'
+          + '<div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(evidenceSummary) + '</div>'
+          + '<div style="margin-top:6px;font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">type suggestion reason</div>'
+          + '<div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(reasonText) + '</div>'
+          + '</details>'
+          + '</div>'
           + '</div>'
           + '</div>'
           + '</td>';

@@ -109,6 +109,24 @@ function renderAffectedDevices(row){
   )).join('');
 }
 
+function buildRecommendationWhyHtml(card){
+  return (
+    '<details style="margin-top:6px;border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
+    + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this recommendation?</summary>'
+    + '<div style="margin-top:6px;">'
+    + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Finding</div>'
+    + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.finding || 'Limited evidence available.') + '</div>'
+    + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why it matters</div>'
+    + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.why_it_matters || 'Derived from current validation and inventory evidence.') + '</div>'
+    + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Affected devices</div>'
+    + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + renderAffectedDevices(card) + '</div>'
+    + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Evidence source</div>'
+    + '<div style="font-size:12px;color:#93c5fd;">' + renderEvidenceLinks(card) + '</div>'
+    + '</div>'
+    + '</details>'
+  );
+}
+
 function updateSummaryCards(summary){
   const severity = (summary && summary.by_severity) || {};
   const high = Number(severity.high || 0);
@@ -171,16 +189,9 @@ function renderRecommendations(){
         + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title || '') + '</div>'
         + severityBadge(card.severity)
         + '</div>'
-        + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Finding</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.finding || '') + '</div>'
-        + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why it matters</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.why_it_matters || '') + '</div>'
         + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Suggested action</div>'
         + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.suggested_action || '') + '</div>'
-        + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Affected devices</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + renderAffectedDevices(card) + '</div>'
-        + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Evidence source</div>'
-        + '<div style="font-size:12px;color:#93c5fd;">' + renderEvidenceLinks(card) + '</div>'
+        + buildRecommendationWhyHtml(card)
         + '</div>'
       )).join('')
       + '</div>'

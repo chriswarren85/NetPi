@@ -257,6 +257,23 @@ function formatNotes(rule){
   return pieces.join(' | ');
 }
 
+function buildFirewallWhyHtml(rule){
+  const parts = [];
+  if(rule.purpose) parts.push('<strong>Purpose:</strong> ' + escapeHtml(rule.purpose));
+  if(rule.business_justification) parts.push('<strong>Business:</strong> ' + escapeHtml(rule.business_justification));
+  if(rule.av_justification) parts.push('<strong>AV:</strong> ' + escapeHtml(rule.av_justification));
+  if(rule.evidence.length) parts.push('<strong>Evidence:</strong> ' + escapeHtml(rule.evidence.join(' | ')));
+  if(!parts.length){
+    parts.push('Limited evidence available. Rule retained from generated requirements and rule classification.');
+  }
+  return (
+    '<details style="margin-top:6px;border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
+    + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this rule?</summary>'
+    + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4;">' + parts.join('<br>') + '</div>'
+    + '</details>'
+  );
+}
+
 function renderFirewallRows(id, rows){
   const tbody = document.getElementById(id);
   if(!tbody) return;
@@ -276,7 +293,7 @@ function renderFirewallRows(id, rows){
     + '<td>' + escapeHtml(rule.business_justification) + '</td>'
     + '<td>' + escapeHtml(rule.av_justification) + '</td>'
     + '<td>' + escapeHtml(rule.confidence) + '</td>'
-    + '<td>' + escapeHtml(formatNotes(rule)) + '</td>'
+    + '<td>' + escapeHtml(formatNotes(rule)) + buildFirewallWhyHtml(rule) + '</td>'
     + '</tr>'
   )).join('');
 }

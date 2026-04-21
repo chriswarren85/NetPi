@@ -191,3 +191,17 @@
   - Implemented category-first recommendation grouping (`integrity`, `design`, `segmentation`, `DHCP`, `multicast`, `security`, `commissioning_readiness`) with deterministic ordering
   - Added severity badge rendering from backend values and live summary card counts
   - Added evidence source links mapped to relevant existing working screens plus affected-device context rendering
+### Last Update
+- Feature: W8.2 Explain-the-Reason trust layer
+- Files modified:
+  - templates/devices.html
+  - templates/requirements.html
+  - templates/firewall.html
+  - templates/recommendations.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added lightweight, click-safe `Why ...?` explanation toggles across key output screens to expose reasoning without cluttering default views
+  - Devices now exposes concise type-inference rationale in the intelligence drawer using confidence, derived-from context, evidence summary, and suggestion reasons when available
+  - Requirements now includes a derivation explanation block per expanded row to clarify why protocol/port/service requirements were generated
+  - Firewall rows now include `Why this rule?` explanation details based on purpose, business/AV justification, and evidence with truthful limited-evidence fallback
+  - Recommendations cards now keep suggested action visible while moving finding/impact/evidence context into a consistent `Why this recommendation?` details panel

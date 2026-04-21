@@ -122,6 +122,36 @@ function deriveRowTabs(row){
   return tabs;
 }
 
+function buildRequirementWhyText(row){
+  const reasons = [];
+  const effectiveType = String(row.effective_type || '').trim();
+  const derivedFrom = String(row.derived_from || '').trim();
+  const service = String(row.service || row.purpose || '').trim();
+  const protocol = String(row.protocol || '').trim();
+  const port = String(row.port || '').trim();
+  const confidence = Number(row.confidence_score);
+
+  if(effectiveType){
+    reasons.push('Derived from effective type "' + effectiveType + '".');
+  }
+  if(derivedFrom){
+    reasons.push('Mapping basis: ' + derivedFrom + '.');
+  } else {
+    reasons.push('Derived from standard requirement template mapping.');
+  }
+  if(protocol && protocol !== '-' && port && port !== '-'){
+    reasons.push('Includes ' + protocol + '/' + port + (service ? ' for ' + service : '') + '.');
+  } else if(service){
+    reasons.push('Service intent inferred as ' + service + ' without explicit port mapping.');
+  } else {
+    reasons.push('Limited evidence available for port-level requirement mapping.');
+  }
+  if(Number.isFinite(confidence) && confidence < 55){
+    reasons.push('Confidence is lower, so treat as inferred guidance and verify in field.');
+  }
+  return reasons.join(' ');
+}
+
 function updateSummaryCards(){
   const mappedEl = document.getElementById('req-mapped');
   const unresolvedEl = document.getElementById('req-unresolved');
@@ -390,6 +420,12 @@ function renderRequirementRows(){
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence_score</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(String(row.confidence_score ?? '-')) + '</div></div>'
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">required services</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.required_services) && row.required_services.length ? row.required_services.join(', ') : '-') + '</div></div>'
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.notes) && row.notes.length ? row.notes.join(' | ') : '-') + '</div></div>'
+        + '<div style="grid-column:1 / -1;margin-top:2px;">'
+        + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
+        + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this requirement?</summary>'
+        + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4">' + escapeHtml(buildRequirementWhyText(row)) + '</div>'
+        + '</details>'
+        + '</div>'
         + '</div>'
         + '</div>'
         + '</td>';
