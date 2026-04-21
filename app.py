@@ -27,6 +27,7 @@ from checks.validation import (
     run_system_validation,
     run_connectivity_validation,
     summarize_connectivity_results,
+    resolve_passive_mac,
 )
 from checks.flows import (
     generate_flows_from_system_results,
@@ -1575,6 +1576,13 @@ def _validation_confirms_reachability(validation):
             return True
 
     return False
+
+
+def _normalize_mac_value(value):
+    raw = re.sub(r"[^0-9A-Fa-f]", "", str(value or ""))
+    if len(raw) != 12:
+        return ""
+    return ":".join(raw[i:i+2] for i in range(0, 12, 2)).upper()
 
 
 def save_devices_file(devices):
@@ -3334,10 +3342,52 @@ def api_validate_device():
             }), 404
 
         result = run_validation(device)
+        device_changed = False
+
         if _validation_confirms_reachability(result):
             refreshed_device = _mark_device_freshness(device, seen=True, reachable=True)
-            device.clear()
-            device.update(refreshed_device)
+            if refreshed_device != device:
+                device.clear()
+                device.update(refreshed_device)
+                device_changed = True
+
+        # Passive MAC harvest (best-effort, non-blocking): ARP -> SNMP-context -> LLDP/CDP-context.
+        passive_mac = ""
+        passive_source = "unknown"
+        try:
+            passive_mac, passive_source = resolve_passive_mac(device, result)
+        except Exception:
+            passive_mac, passive_source = ("", "unknown")
+
+        existing_mac = _normalize_mac_value(device.get("mac") or device.get("mac_address"))
+        resolved_mac = _normalize_mac_value(passive_mac)
+
+        if resolved_mac:
+            if existing_mac != resolved_mac or str(device.get("mac_source") or "").strip().lower() != passive_source:
+                device["mac"] = resolved_mac
+                device["mac_address"] = resolved_mac
+                device["mac_source"] = passive_source
+                device_changed = True
+            result["mac"] = resolved_mac
+            result["mac_address"] = resolved_mac
+            result["mac_source"] = passive_source
+        elif not existing_mac:
+            if device.get("mac_address", "__missing__") is not None or str(device.get("mac_source") or "").strip().lower() != "unknown":
+                device["mac_address"] = None
+                device["mac_source"] = "unknown"
+                device_changed = True
+            result["mac"] = ""
+            result["mac_address"] = None
+            result["mac_source"] = "unknown"
+        else:
+            result["mac"] = existing_mac
+            result["mac_address"] = existing_mac
+            result["mac_source"] = str(device.get("mac_source") or "existing")
+
+        if isinstance(result.get("evidence"), dict):
+            result["evidence"]["mac"] = result.get("mac") or ""
+
+        if device_changed:
             save_devices_file(devices)
 
         auto_type = decide_auto_promoted_type(device, result)

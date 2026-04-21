@@ -217,3 +217,15 @@
   - Added additive `/tools/report` route that renders the same aggregated report as printable PDF-ready HTML for browser print/save workflows
   - Report output includes `report.summary`, `report.sections`, and `report.html` (full render string) to support both machine-readable and presentation-ready usage
   - Added a Dashboard quick action (`Build Final Report`) linking directly to the live report view
+### Last Update
+- Feature: W6.06 Passive MAC harvest during validation
+- Files modified:
+  - app.py
+  - checks/validation.py
+  - command_helpers.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added passive, best-effort MAC resolution helper flow with lookup priority `ARP cache -> SNMP context (if already present) -> LLDP/CDP context (if already present)`
+  - Integrated MAC enrichment into `POST /tools/api/validate_device` without changing core validation flow or introducing blocking scan stages
+  - Added safe write-back behavior to inventory records (`mac`, additive `mac_address`, `mac_source`) while preventing overwrite of known-good MAC values with blank/invalid results
+  - On unresolved lookup with no known MAC, writes `mac_address: null` and `mac_source: "unknown"` and keeps validation success response non-blocking

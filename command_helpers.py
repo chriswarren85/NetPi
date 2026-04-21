@@ -41,3 +41,17 @@ def build_nmap_host_discovery_command(subnet, output_flag="-oG"):
     if is_windows():
         return command
     return ["sudo"] + command
+
+
+def build_arp_lookup_commands(ip):
+    target = str(ip or "").strip()
+    if not target:
+        return []
+    if is_windows():
+        return [
+            ["arp", "-a", target],
+        ]
+    return [
+        ["ip", "neigh", "show", target],
+        ["arp", "-n", target],
+    ]

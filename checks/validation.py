@@ -3,7 +3,7 @@ import socket
 import time
 import ssl
 import re
-from command_helpers import build_ping_check_command
+from command_helpers import build_ping_check_command, build_arp_lookup_commands
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from checks.connectivity_matrix import get_connectivity_rules, format_ports_for_display
 
@@ -578,6 +578,129 @@ def build_validation_evidence(device, normalized_type, open_ports, service_map, 
         },
         "type": normalized_type,
     }
+
+
+def _normalize_mac_candidate(value):
+    raw = re.sub(r"[^0-9A-Fa-f]", "", str(value or ""))
+    if len(raw) != 12:
+        return ""
+    return ":".join(raw[i:i+2] for i in range(0, 12, 2)).upper()
+
+
+def _extract_mac_from_text(text, target_ip=""):
+    lines = str(text or "").splitlines()
+    ip_hint = str(target_ip or "").strip()
+    mac_regex = re.compile(r"([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})")
+
+    # Prefer lines that mention the target IP to avoid unrelated cache entries.
+    for line in lines:
+        if ip_hint and ip_hint not in line:
+            continue
+        match = mac_regex.search(line)
+        if match:
+            normalized = _normalize_mac_candidate(match.group(1))
+            if normalized:
+                return normalized
+
+    for line in lines:
+        match = mac_regex.search(line)
+        if match:
+            normalized = _normalize_mac_candidate(match.group(1))
+            if normalized:
+                return normalized
+    return ""
+
+
+def _lookup_mac_from_arp_cache(ip):
+    target_ip = str(ip or "").strip()
+    if not target_ip:
+        return ""
+    commands = build_arp_lookup_commands(target_ip)
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=1.5,
+            )
+            combined = "\n".join([result.stdout or "", result.stderr or ""])
+            mac = _extract_mac_from_text(combined, target_ip=target_ip)
+            if mac:
+                return mac
+        except Exception:
+            continue
+    return ""
+
+
+def _lookup_mac_from_snmp_context(device, validation_result):
+    # Opportunistic only: use already-present SNMP context fields if they exist.
+    candidate_paths = [
+        (device, "snmp_mac"),
+        (device, "ifPhysAddress"),
+        (validation_result, "snmp_mac"),
+    ]
+    evidence = (validation_result or {}).get("evidence") if isinstance(validation_result, dict) else {}
+    if isinstance(evidence, dict):
+        candidate_paths.extend([
+            (evidence, "snmp_mac"),
+            (evidence, "ifPhysAddress"),
+        ])
+
+    for parent, key in candidate_paths:
+        if not isinstance(parent, dict):
+            continue
+        mac = _normalize_mac_candidate(parent.get(key))
+        if mac:
+            return mac
+    return ""
+
+
+def _lookup_mac_from_neighbor_context(device, validation_result):
+    # Opportunistic only: use already-present LLDP/CDP context if available.
+    candidate_paths = [
+        (device, "lldp_mac"),
+        (device, "cdp_mac"),
+        (validation_result, "lldp_mac"),
+        (validation_result, "cdp_mac"),
+    ]
+    evidence = (validation_result or {}).get("evidence") if isinstance(validation_result, dict) else {}
+    if isinstance(evidence, dict):
+        candidate_paths.extend([
+            (evidence, "lldp_mac"),
+            (evidence, "cdp_mac"),
+        ])
+
+    for parent, key in candidate_paths:
+        if not isinstance(parent, dict):
+            continue
+        mac = _normalize_mac_candidate(parent.get(key))
+        if mac:
+            return mac
+    return ""
+
+
+def resolve_passive_mac(device, validation_result=None):
+    target_ip = str((device or {}).get("ip") or "").strip()
+    if not target_ip:
+        return ("", "unknown")
+
+    # 1) ARP cache
+    mac = _lookup_mac_from_arp_cache(target_ip)
+    if mac:
+        return (mac, "arp")
+
+    # 2) SNMP ifPhysAddress only if already present in current context.
+    mac = _lookup_mac_from_snmp_context(device or {}, validation_result or {})
+    if mac:
+        return (mac, "snmp")
+
+    # 3) LLDP/CDP neighbor metadata only if already present in current context.
+    mac = _lookup_mac_from_neighbor_context(device or {}, validation_result or {})
+    if mac:
+        return (mac, "lldp")
+
+    return ("", "unknown")
 
 
 def _http_signal_blob(http_details):
