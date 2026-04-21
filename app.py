@@ -5433,12 +5433,517 @@ def _compose_firewall_plan(system_requirement_rows, settings):
     }
 
 
+def _extract_results_from_payload(value, *, nested_key=""):
+    if not isinstance(value, dict):
+        return []
+    if nested_key and isinstance(value.get(nested_key), dict):
+        return list((value.get(nested_key) or {}).get("results") or [])
+    return list(value.get("results") or [])
+
+
+def _build_recommendation_context(payload):
+    payload = payload if isinstance(payload, dict) else {}
+    settings = load_settings()
+    devices = payload.get("devices")
+    explicit_devices = isinstance(devices, list) and bool(devices)
+    if not explicit_devices:
+        devices = load_devices()
+
+    vlan = str(payload.get("vlan") or "").strip()
+    if vlan:
+        devices = [d for d in devices if str(d.get("vlan") or "").strip() == vlan]
+
+    validate_all_payload = payload.get("validate_all")
+    if isinstance(validate_all_payload, dict) and isinstance(validate_all_payload.get("results"), list):
+        validate_all = validate_all_payload
+    else:
+        validation_results = run_validation_for_all(devices)
+        for device, result in zip(devices, validation_results):
+            auto_type = decide_auto_promoted_type(device, result)
+            type_suggestion = build_type_suggestion(device, result)
+            result["type_suggestion"] = type_suggestion
+            result["suggested_type"] = type_suggestion.get("suggested_type") or ""
+            result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion, result)
+            result["confidence_score"] = type_suggestion.get("confidence_score", 0)
+            result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
+            result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
+        validate_all = {
+            "ok": True,
+            "count": len(validation_results),
+            "results": validation_results,
+        }
+
+    validate_systems_payload = payload.get("validate_systems")
+    if isinstance(validate_systems_payload, dict) and isinstance(validate_systems_payload.get("results"), list):
+        validate_systems = validate_systems_payload
+    else:
+        enriched_devices = [enrich_device_runtime(device) for device in devices]
+        validations_by_ip = {}
+        for item in enriched_devices:
+            validation_result = dict(item.get("_validation_result") or {})
+            ip = str(validation_result.get("ip") or item.get("ip") or "").strip()
+            if ip:
+                validations_by_ip[ip] = validation_result
+
+        system_results = run_system_validation(enriched_devices, validations_by_ip)
+        connectivity_results = []
+        try:
+            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+        except Exception:
+            connectivity_results = []
+
+        validate_systems = {
+            "ok": True,
+            "count": len(system_results),
+            "results": system_results,
+            "connectivity": connectivity_results,
+        }
+
+    system_requirements_payload = payload.get("system_requirements")
+    if isinstance(system_requirements_payload, dict) and isinstance(system_requirements_payload.get("results"), list):
+        system_requirements = system_requirements_payload
+    else:
+        system_requirements = _build_system_requirements_payload(payload)
+
+    firewall_payload = payload.get("firewall_plan")
+    if isinstance(firewall_payload, dict):
+        if isinstance(firewall_payload.get("firewall_plan"), dict):
+            firewall_plan = firewall_payload.get("firewall_plan") or {}
+        else:
+            firewall_plan = firewall_payload
+    else:
+        firewall_plan = _compose_firewall_plan(system_requirements.get("results") or [], settings=settings)
+
+    return {
+        "devices": list(devices or []),
+        "validate_all": validate_all,
+        "validate_systems": validate_systems,
+        "system_requirements": system_requirements,
+        "firewall_plan": firewall_plan,
+    }
+
+
+def _recommendation_sort_key(item):
+    severity_order = {"high": 0, "medium": 1, "low": 2, "info": 3}
+    category_order = {
+        "integrity": 0,
+        "design": 1,
+        "segmentation": 2,
+        "DHCP": 3,
+        "multicast": 4,
+        "security": 5,
+        "commissioning_readiness": 6,
+    }
+    return (
+        severity_order.get(str(item.get("severity") or "").strip().lower(), 99),
+        category_order.get(str(item.get("category") or "").strip(), 99),
+        str(item.get("title") or "").strip().lower(),
+    )
+
+
+def _build_recommendations(context):
+    categories = ["integrity", "design", "segmentation", "DHCP", "multicast", "security", "commissioning_readiness"]
+    by_key = {}
+
+    def add_rec(category, severity, title, finding, why_it_matters, suggested_action, evidence_source=None, affected_devices=None):
+        if category not in categories:
+            return
+        severity = str(severity or "info").strip().lower()
+        if severity not in {"high", "medium", "low", "info"}:
+            severity = "info"
+        key = (category, severity, str(title or "").strip().lower())
+        existing = by_key.get(key)
+        if not existing:
+            existing = {
+                "category": category,
+                "severity": severity,
+                "title": str(title or "").strip(),
+                "finding": str(finding or "").strip(),
+                "why_it_matters": str(why_it_matters or "").strip(),
+                "suggested_action": str(suggested_action or "").strip(),
+                "_evidence_source": set(),
+                "_affected_devices": set(),
+            }
+            by_key[key] = existing
+
+        for source in (evidence_source or []):
+            text = str(source or "").strip()
+            if text:
+                existing["_evidence_source"].add(text)
+        for device_name in (affected_devices or []):
+            text = str(device_name or "").strip()
+            if text:
+                existing["_affected_devices"].add(text)
+
+    devices = list(context.get("devices") or [])
+    validate_all_results = _extract_results_from_payload(context.get("validate_all"))
+    validate_systems_results = _extract_results_from_payload(context.get("validate_systems"))
+    connectivity_results = list((context.get("validate_systems") or {}).get("connectivity") or [])
+    system_requirements_results = _extract_results_from_payload(context.get("system_requirements"))
+    firewall_rules = list((context.get("firewall_plan") or {}).get("rules") or [])
+
+    # 8) Missing metadata affecting commissioning readiness
+    missing_mac = []
+    missing_serial = []
+    missing_vlan = []
+    for device in devices:
+        name = str(device.get("name") or device.get("ip") or "Unknown device").strip()
+        if not str(device.get("mac") or device.get("mac_address") or "").strip():
+            missing_mac.append(name)
+        if not str(device.get("serial") or device.get("serial_number") or "").strip():
+            missing_serial.append(name)
+        if not str(device.get("vlan") or "").strip():
+            missing_vlan.append(name)
+
+    if missing_mac:
+        add_rec(
+            "commissioning_readiness",
+            "high",
+            "MAC address gaps are blocking inventory integrity",
+            "One or more devices are missing MAC addresses in project inventory.",
+            "MAC identity is required for reliable handover, reservations, and endpoint traceability.",
+            "Capture MAC addresses for all listed devices and re-run validation and IP schedule export.",
+            evidence_source=["devices.json"],
+            affected_devices=missing_mac,
+        )
+    if missing_serial:
+        add_rec(
+            "commissioning_readiness",
+            "medium",
+            "Serial numbers are incomplete for handover records",
+            "One or more devices are missing serial number metadata.",
+            "Serial data supports warranty, support escalation, and long-term lifecycle tracking.",
+            "Complete serial number fields for affected devices before final handover.",
+            evidence_source=["devices.json"],
+            affected_devices=missing_serial,
+        )
+    if missing_vlan:
+        add_rec(
+            "segmentation",
+            "medium",
+            "VLAN assignment metadata is incomplete",
+            "One or more devices do not have a VLAN/zone assignment in inventory.",
+            "Missing VLAN metadata reduces confidence in segmentation validation and firewall planning outputs.",
+            "Assign VLAN labels to affected devices and regenerate validation and design artifacts.",
+            evidence_source=["devices.json"],
+            affected_devices=missing_vlan,
+        )
+
+    # 7) Low-confidence or weakly classified critical devices
+    weak_type_names = []
+    for row in validate_all_results:
+        name = str(row.get("name") or row.get("ip") or "Unknown device").strip()
+        type_name = str(row.get("type") or "").strip().lower()
+        effective_type = str(row.get("effective_type") or "").strip().lower()
+        confidence_score = int(row.get("confidence_score") or 0)
+        confidence_label = str(row.get("confidence_label") or "").strip().lower()
+        if weak_device_type(type_name) or weak_device_type(effective_type) or confidence_score < 60 or confidence_label in {"low", "none", "unknown"}:
+            weak_type_names.append(name)
+    if weak_type_names:
+        add_rec(
+            "integrity",
+            "medium",
+            "Device type confidence is low for key inventory rows",
+            "Some devices remain weakly classified or low-confidence after validation.",
+            "Weak classification reduces confidence in downstream requirements, flows, and consultant recommendations.",
+            "Review affected device roles on the Devices screen and confirm final type assignments.",
+            evidence_source=["validate_all.results", "devices.json"],
+            affected_devices=weak_type_names,
+        )
+
+    # 1) Dante VLAN isolation + 5) Multicast policy coverage
+    dante_device_names = set()
+    dante_vlans = set()
+    non_dante_by_vlan = {}
+    for device in devices:
+        name = str(device.get("name") or device.get("ip") or "").strip()
+        vlan_name = str(device.get("vlan") or "").strip()
+        dtype = str(device.get("type") or "").strip().lower()
+        if "dante" in dtype:
+            dante_device_names.add(name)
+            if vlan_name:
+                dante_vlans.add(vlan_name)
+        elif vlan_name:
+            non_dante_by_vlan.setdefault(vlan_name, set()).add(name)
+    for row in validate_all_results:
+        ports = [int(p) for p in (row.get("open_ports") or []) if isinstance(p, int)]
+        if any(p in {319, 320, 4440} for p in ports):
+            dante_device_names.add(str(row.get("name") or row.get("ip") or "").strip())
+
+    if dante_device_names:
+        mixed_vlan = any(vlan_name in non_dante_by_vlan for vlan_name in dante_vlans)
+        if mixed_vlan or len(dante_vlans) != 1:
+            add_rec(
+                "segmentation",
+                "high",
+                "Dante devices should be isolated on a dedicated VLAN",
+                "Dante-capable endpoints appear mixed across or within shared VLAN segments.",
+                "Dante relies on predictable multicast behavior and low-latency transport; mixed segmentation increases instability risk.",
+                "Move Dante endpoints to a dedicated VLAN and validate multicast/QoS policy after changes.",
+                evidence_source=["devices.json", "validate_all.results"],
+                affected_devices=sorted(dante_device_names),
+            )
+        add_rec(
+            "multicast",
+            "medium",
+            "Validate multicast controls for Dante-capable endpoints",
+            "Dante-capable devices were detected and require multicast-aware switching policy.",
+            "Missing IGMP/multicast policy validation can cause intermittent AV transport and clock stability issues.",
+            "Confirm IGMP snooping/querier and multicast QoS policy on Dante VLANs.",
+            evidence_source=["validate_all.results", "devices.json"],
+            affected_devices=sorted(dante_device_names),
+        )
+
+    # 2) DHCP reservations (explicit DHCP signal only)
+    dhcp_critical = []
+    critical_tokens = ("crestron", "qsys", "biamp", "dante", "barco")
+    for device in devices:
+        name = str(device.get("name") or device.get("ip") or "").strip()
+        dtype = str(device.get("type") or "").strip().lower()
+        assignment = str(device.get("addressing") or device.get("ip_assignment") or device.get("ip_mode") or "").strip().lower()
+        if any(token in dtype for token in critical_tokens) and assignment in {"dhcp", "dynamic"}:
+            dhcp_critical.append(name)
+    if dhcp_critical:
+        add_rec(
+            "DHCP",
+            "medium",
+            "Critical AV endpoints should use controlled DHCP reservations",
+            "Critical control/media endpoints are marked as dynamic DHCP clients.",
+            "Dynamic addressing for core AV endpoints can break control path assumptions and increase commissioning risk.",
+            "Create DHCP reservations for affected endpoints and confirm stable addressing in inventory.",
+            evidence_source=["devices.json"],
+            affected_devices=dhcp_critical,
+        )
+
+    # 3) VLAN fragmentation / mixed segmentation concerns
+    family_to_vlans = {}
+    for device in devices:
+        dtype = str(device.get("type") or "").strip().lower()
+        vlan_name = str(device.get("vlan") or "").strip()
+        if not vlan_name:
+            continue
+        family = ""
+        if "crestron" in dtype:
+            family = "crestron"
+        elif "qsys" in dtype:
+            family = "qsys"
+        elif "biamp" in dtype:
+            family = "biamp"
+        elif "barco" in dtype:
+            family = "barco"
+        elif "dante" in dtype:
+            family = "dante"
+        if family:
+            family_to_vlans.setdefault(family, set()).add(vlan_name)
+    for family, vlans in family_to_vlans.items():
+        if len(vlans) > 2:
+            family_devices = [
+                str(device.get("name") or device.get("ip") or "").strip()
+                for device in devices
+                if family in str(device.get("type") or "").strip().lower()
+            ]
+            add_rec(
+                "segmentation",
+                "medium",
+                "AV role appears fragmented across multiple VLANs",
+                f"{family.upper()}-related devices appear spread across multiple VLAN segments.",
+                "Over-fragmentation can complicate routing, ACL design, and troubleshooting for commissioning teams.",
+                "Review segmentation intent and consolidate related AV roles where practical.",
+                evidence_source=["devices.json"],
+                affected_devices=family_devices,
+            )
+
+    # 4) Unvalidated control ports + 6) control-system communication concerns
+    control_issue_devices = set()
+    unvalidated_control_devices = set()
+    for row in validate_systems_results:
+        status = str(row.get("status") or "").strip().lower()
+        relationship_type = str(row.get("relationship_type") or "").strip().lower()
+        check_name = str(row.get("system_check") or "").strip().lower()
+        from_device = str(row.get("from_device") or "").strip()
+        to_device = str(row.get("to_device") or "").strip()
+        required_ports = [int(p) for p in (row.get("required_target_ports") or []) if isinstance(p, int)]
+        observed_ports = [int(p) for p in (row.get("observed_target_ports") or []) if isinstance(p, int)]
+        missing_required = [p for p in required_ports if p not in observed_ports]
+
+        is_control_relationship = relationship_type in {"control", "ui"} or "control" in check_name or "touchpanel" in check_name
+        if is_control_relationship and status in {"warn", "fail", "skipped"}:
+            if from_device:
+                control_issue_devices.add(from_device)
+            if to_device:
+                control_issue_devices.add(to_device)
+        if is_control_relationship and missing_required:
+            if from_device:
+                unvalidated_control_devices.add(from_device)
+            if to_device:
+                unvalidated_control_devices.add(to_device)
+
+    if control_issue_devices:
+        add_rec(
+            "design",
+            "high",
+            "Control-system communication relationships require remediation",
+            "One or more control/UI system relationships are unresolved or failing validation.",
+            "Control-path instability directly impacts operator functionality and system coordination during commissioning.",
+            "Review controller-to-endpoint pathing, ACL/firewall policy, and endpoint service readiness for affected relationships.",
+            evidence_source=["validate_systems.results"],
+            affected_devices=sorted(control_issue_devices),
+        )
+    if unvalidated_control_devices:
+        add_rec(
+            "design",
+            "high",
+            "Required control ports are not fully validated",
+            "Expected control ports were not consistently observed on one or more required target relationships.",
+            "Unvalidated control ports can block commissioning completion and create intermittent control failures.",
+            "Verify required target ports are open and routable between intended control endpoints.",
+            evidence_source=["validate_systems.results"],
+            affected_devices=sorted(unvalidated_control_devices),
+        )
+
+    # 5) Barco-specific recommendation template
+    barco_devices = [
+        str(device.get("name") or device.get("ip") or "").strip()
+        for device in devices
+        if "barco" in str(device.get("type") or "").strip().lower()
+        or "barco" in str(device.get("vendor") or "").strip().lower()
+    ]
+    if barco_devices:
+        barco_concern = False
+        for row in validate_systems_results:
+            status = str(row.get("status") or "").strip().lower()
+            names = {
+                str(row.get("from_device") or "").strip(),
+                str(row.get("to_device") or "").strip(),
+            }
+            if names.intersection(set(barco_devices)) and status in {"warn", "fail", "skipped"}:
+                barco_concern = True
+                break
+        add_rec(
+            "design",
+            "medium" if barco_concern else "info",
+            "Barco endpoints require explicit control and addressing review",
+            "Barco endpoints were detected and should be reviewed for stable addressing and validated control pathing.",
+            "Barco collaboration/video platforms are sensitive to inconsistent addressing or unresolved control/service dependencies.",
+            "Confirm DHCP reservation strategy, management access policy, and required service path validation for Barco endpoints.",
+            evidence_source=["devices.json", "validate_systems.results"],
+            affected_devices=barco_devices,
+        )
+
+    # 9) Security-sensitive service exposure
+    sensitive_exposure_devices = []
+    high_risk_devices = []
+    sensitive_ports = {22, 3389, 5900}
+    high_risk_ports = {23}
+    for row in validate_all_results:
+        ports = [int(p) for p in (row.get("open_ports") or []) if isinstance(p, int)]
+        name = str(row.get("name") or row.get("ip") or "").strip()
+        if any(p in sensitive_ports for p in ports):
+            sensitive_exposure_devices.append(name)
+        if any(p in high_risk_ports for p in ports):
+            high_risk_devices.append(name)
+    if sensitive_exposure_devices or high_risk_devices:
+        severity = "high" if high_risk_devices else "medium"
+        affected = sorted(set(sensitive_exposure_devices + high_risk_devices))
+        add_rec(
+            "security",
+            severity,
+            "Review management-service exposure on AV endpoints",
+            "Sensitive management/admin services were observed on one or more endpoints.",
+            "Unnecessary management exposure increases security and change-control risk during production operation.",
+            "Restrict management services to approved administration segments and disable unused legacy access methods.",
+            evidence_source=["validate_all.results"],
+            affected_devices=affected,
+        )
+
+    # Commissioning readiness from unresolved validation concerns
+    unresolved = []
+    for row in validate_all_results:
+        status = str(row.get("overall") or "").strip().lower()
+        if status in {"warn", "fail"}:
+            unresolved.append(str(row.get("name") or row.get("ip") or "").strip())
+    if unresolved:
+        add_rec(
+            "commissioning_readiness",
+            "medium",
+            "Project has unresolved validation findings",
+            "Device-level validation still contains warnings/failures that should be closed before handover.",
+            "Unresolved findings at handover increase post-commissioning support load and reduce operator trust.",
+            "Prioritize failed findings, then resolve warning-level checks and re-run validation before sign-off.",
+            evidence_source=["validate_all.results", "validate_systems.results"],
+            affected_devices=unresolved,
+        )
+
+    normalized = []
+    for item in by_key.values():
+        normalized.append({
+            "id": "",
+            "category": item.get("category") or "commissioning_readiness",
+            "severity": item.get("severity") or "info",
+            "title": item.get("title") or "",
+            "finding": item.get("finding") or "",
+            "why_it_matters": item.get("why_it_matters") or "",
+            "suggested_action": item.get("suggested_action") or "",
+            "evidence_source": sorted(item.get("_evidence_source") or set()),
+            "affected_devices": sorted(item.get("_affected_devices") or set()),
+        })
+
+    normalized.sort(key=_recommendation_sort_key)
+    for idx, row in enumerate(normalized, start=1):
+        row["id"] = f"REC-{idx:03d}"
+
+    by_severity = {"high": 0, "medium": 0, "low": 0, "info": 0}
+    by_category = {
+        "integrity": 0,
+        "design": 0,
+        "segmentation": 0,
+        "DHCP": 0,
+        "multicast": 0,
+        "security": 0,
+        "commissioning_readiness": 0,
+    }
+    for row in normalized:
+        severity = str(row.get("severity") or "").strip().lower()
+        category = str(row.get("category") or "").strip()
+        if severity in by_severity:
+            by_severity[severity] += 1
+        if category in by_category:
+            by_category[category] += 1
+
+    return {
+        "recommendations": normalized,
+        "summary": {
+            "total": len(normalized),
+            "by_severity": by_severity,
+            "by_category": by_category,
+        },
+    }
+
+
 @app.route("/tools/api/system_requirements", methods=["POST"])
 def api_system_requirements():
     try:
         payload = request.get_json(silent=True) or {}
         result = _build_system_requirements_payload(payload)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/recommendations", methods=["POST"])
+def api_recommendations():
+    try:
+        payload = request.get_json(silent=True) or {}
+        context = _build_recommendation_context(payload)
+        result = _build_recommendations(context)
+        return jsonify({
+            "ok": True,
+            "recommendations": result.get("recommendations") or [],
+            "summary": result.get("summary") or {},
+        })
     except Exception as e:
         return jsonify({
             "ok": False,

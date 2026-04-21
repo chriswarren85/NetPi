@@ -171,3 +171,13 @@
   - Wired dashboard summary cards to live app data from existing endpoints (`/tools/api/ipschedule`, `/tools/api/validate_all`, `/tools/api/validate_systems`, `/tools/api/system_requirements`, `/tools/api/generate_firewall_plan`)
   - Added live attention panels for missing metadata, low-confidence device types, and validation/flow concerns using conservative derivation from truthful existing fields
   - Added real quick-action links to Devices, Validation, Firewall Plan, and IP Schedule with partial-failure-safe dashboard rendering
+### Last Update
+- Feature: W8.0 Recommendations engine endpoint
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added new POST `/tools/api/recommendations` endpoint that generates consultant-style recommendation rows from existing validation, system, requirements, firewall, and device evidence paths
+  - Implemented deterministic category/severity mapping, deduplication, stable ordering, and summary grouping (`by_severity`, `by_category`) for UI/report compatibility
+  - Added explicit AV-focused recommendation template coverage for Dante segmentation/multicast, DHCP reservations, VLAN fragmentation, unvalidated control ports, Barco advisory handling, control relationship concerns, low-confidence types, metadata gaps, and security exposure
+  - Endpoint accepts wrapper payload inputs or empty payload fallback and keeps evidence traceability via `evidence_source` and `affected_devices` fields
