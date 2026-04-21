@@ -4968,122 +4968,485 @@ def api_generate_flows():
         }), 500
 
 
-@app.route("/tools/api/system_requirements", methods=["POST"])
-def api_system_requirements():
-    try:
-        payload = request.get_json(silent=True) or {}
-        vlan = str(payload.get("vlan") or "").strip()
+def _build_system_requirements_payload(payload):
+    payload = payload if isinstance(payload, dict) else {}
+    vlan = str(payload.get("vlan") or "").strip()
 
-        direct_flows = payload.get("flows")
-        if isinstance(direct_flows, list):
-            ip_to_device = {}
-            for flow in direct_flows:
-                if not isinstance(flow, dict):
-                    continue
-                src_ip = str(flow.get("src_ip") or "").strip()
-                dst_ip = str(flow.get("dst_ip") or "").strip()
-                if src_ip and src_ip not in ip_to_device:
-                    ip_to_device[src_ip] = {
-                        "name": flow.get("src_device") or "",
-                        "type": flow.get("src_type") or "",
-                        "vlan": flow.get("src_vlan") or "",
-                    }
-                if dst_ip and dst_ip not in ip_to_device:
-                    ip_to_device[dst_ip] = {
-                        "name": flow.get("dst_device") or "",
-                        "type": flow.get("dst_type") or "",
-                        "vlan": flow.get("dst_vlan") or "",
-                    }
-
-            aggregated = aggregate_flows_by_system(direct_flows, ip_to_device=ip_to_device)
-            return jsonify({
-                "ok": True,
-                "count": len(aggregated.get("results") or []),
-                "summary": aggregated.get("summary") or {},
-                "results": aggregated.get("results") or [],
-                "ungrouped_flows": aggregated.get("ungrouped_flows") or [],
-            })
-
-        devices = payload.get("devices")
-        explicit_devices = isinstance(devices, list) and bool(devices)
-        if not explicit_devices:
-            devices = load_devices()
-
-        if vlan:
-            devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
-
-        enriched_devices = [enrich_device_runtime(device) for device in devices]
-        validations_by_ip = {}
+    direct_flows = payload.get("flows")
+    if isinstance(direct_flows, list):
         ip_to_device = {}
-        for item in enriched_devices:
-            validation_result = dict(item.get("_validation_result") or {})
-            ip = str(validation_result.get("ip") or item.get("ip") or "").strip()
-            if not ip:
-                continue
-            validations_by_ip[ip] = validation_result
-            ip_to_device[ip] = {
-                "name": item.get("name") or "",
-                "type": item.get("effective_type") or item.get("_resolved_type") or item.get("type") or "",
-                "vlan": item.get("vlan") or "",
-            }
-
-        system_results = run_system_validation(enriched_devices, validations_by_ip)
-        connectivity_results = []
-        try:
-            connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
-        except Exception:
-            connectivity_results = []
-
-        system_groups = build_runtime_system_groups(enriched_devices)
-        ip_to_system_id = {}
-        for group in (system_groups or []):
-            group_id = str(group.get("system_id") or "").strip()
-            for device in (group.get("devices") or []):
-                ip = str(device.get("ip") or "").strip()
-                if ip and group_id:
-                    ip_to_system_id[ip] = group_id
-
-        system_flow_pack = generate_flows_from_system_results(
-            system_results,
-            ip_to_system_id=ip_to_system_id,
-            ip_to_device=ip_to_device,
-        )
-        connectivity_flow_pack = generate_flows_from_connectivity_results(
-            connectivity_results,
-            ip_to_system_id=ip_to_system_id,
-            ip_to_device=ip_to_device,
-        )
-
-        deduped_flows = {}
-        for flow in (system_flow_pack.get("flows") or []) + (connectivity_flow_pack.get("flows") or []):
+        for flow in direct_flows:
             if not isinstance(flow, dict):
                 continue
-            flow_id = str(flow.get("flow_id") or "").strip()
-            if not flow_id:
-                continue
+            src_ip = str(flow.get("src_ip") or "").strip()
+            dst_ip = str(flow.get("dst_ip") or "").strip()
+            if src_ip and src_ip not in ip_to_device:
+                ip_to_device[src_ip] = {
+                    "name": flow.get("src_device") or "",
+                    "type": flow.get("src_type") or "",
+                    "vlan": flow.get("src_vlan") or "",
+                }
+            if dst_ip and dst_ip not in ip_to_device:
+                ip_to_device[dst_ip] = {
+                    "name": flow.get("dst_device") or "",
+                    "type": flow.get("dst_type") or "",
+                    "vlan": flow.get("dst_vlan") or "",
+                }
 
-            existing = deduped_flows.get(flow_id)
-            if not existing:
-                deduped_flows[flow_id] = flow
-                continue
-
-            existing_confidence = int(existing.get("confidence") or 0)
-            next_confidence = int(flow.get("confidence") or 0)
-            if next_confidence > existing_confidence:
-                deduped_flows[flow_id] = flow
-
-        flows = list(deduped_flows.values())
-        aggregated = aggregate_flows_by_system(flows, ip_to_device=ip_to_device)
-        ungrouped = list(aggregated.get("ungrouped_flows") or [])
-        ungrouped.extend((system_flow_pack.get("unmapped") or []))
-        ungrouped.extend((connectivity_flow_pack.get("unmapped") or []))
-
-        return jsonify({
+        aggregated = aggregate_flows_by_system(direct_flows, ip_to_device=ip_to_device)
+        return {
             "ok": True,
             "count": len(aggregated.get("results") or []),
             "summary": aggregated.get("summary") or {},
             "results": aggregated.get("results") or [],
-            "ungrouped_flows": ungrouped,
+            "ungrouped_flows": aggregated.get("ungrouped_flows") or [],
+        }
+
+    devices = payload.get("devices")
+    explicit_devices = isinstance(devices, list) and bool(devices)
+    if not explicit_devices:
+        devices = load_devices()
+
+    if vlan:
+        devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
+
+    enriched_devices = [enrich_device_runtime(device) for device in devices]
+    validations_by_ip = {}
+    ip_to_device = {}
+    for item in enriched_devices:
+        validation_result = dict(item.get("_validation_result") or {})
+        ip = str(validation_result.get("ip") or item.get("ip") or "").strip()
+        if not ip:
+            continue
+        validations_by_ip[ip] = validation_result
+        ip_to_device[ip] = {
+            "name": item.get("name") or "",
+            "type": item.get("effective_type") or item.get("_resolved_type") or item.get("type") or "",
+            "vlan": item.get("vlan") or "",
+        }
+
+    system_results = run_system_validation(enriched_devices, validations_by_ip)
+    connectivity_results = []
+    try:
+        connectivity_results = run_connectivity_validation(enriched_devices, validations_by_ip)
+    except Exception:
+        connectivity_results = []
+
+    system_groups = build_runtime_system_groups(enriched_devices)
+    ip_to_system_id = {}
+    for group in (system_groups or []):
+        group_id = str(group.get("system_id") or "").strip()
+        for device in (group.get("devices") or []):
+            ip = str(device.get("ip") or "").strip()
+            if ip and group_id:
+                ip_to_system_id[ip] = group_id
+
+    system_flow_pack = generate_flows_from_system_results(
+        system_results,
+        ip_to_system_id=ip_to_system_id,
+        ip_to_device=ip_to_device,
+    )
+    connectivity_flow_pack = generate_flows_from_connectivity_results(
+        connectivity_results,
+        ip_to_system_id=ip_to_system_id,
+        ip_to_device=ip_to_device,
+    )
+
+    deduped_flows = {}
+    for flow in (system_flow_pack.get("flows") or []) + (connectivity_flow_pack.get("flows") or []):
+        if not isinstance(flow, dict):
+            continue
+        flow_id = str(flow.get("flow_id") or "").strip()
+        if not flow_id:
+            continue
+
+        existing = deduped_flows.get(flow_id)
+        if not existing:
+            deduped_flows[flow_id] = flow
+            continue
+
+        existing_confidence = int(existing.get("confidence") or 0)
+        next_confidence = int(flow.get("confidence") or 0)
+        if next_confidence > existing_confidence:
+            deduped_flows[flow_id] = flow
+
+    flows = list(deduped_flows.values())
+    aggregated = aggregate_flows_by_system(flows, ip_to_device=ip_to_device)
+    ungrouped = list(aggregated.get("ungrouped_flows") or [])
+    ungrouped.extend((system_flow_pack.get("unmapped") or []))
+    ungrouped.extend((connectivity_flow_pack.get("unmapped") or []))
+
+    return {
+        "ok": True,
+        "count": len(aggregated.get("results") or []),
+        "summary": aggregated.get("summary") or {},
+        "results": aggregated.get("results") or [],
+        "ungrouped_flows": ungrouped,
+    }
+
+
+def _looks_like_system_requirement_rows(rows):
+    if not isinstance(rows, list):
+        return False
+    if not rows:
+        return True
+    for row in rows:
+        if isinstance(row, dict):
+            return isinstance(row.get("categories"), dict)
+    return False
+
+
+def _normalize_zone_key(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").strip().lower())
+
+
+def _build_vlan_zone_lookup(settings):
+    lookup = {}
+    vlans = (settings or {}).get("vlans") or []
+    for vlan in vlans:
+        if not isinstance(vlan, dict):
+            continue
+        zone_name = str(vlan.get("name") or "").strip()
+        if not zone_name:
+            continue
+
+        aliases = [
+            zone_name,
+            vlan.get("vlan_id"),
+            vlan.get("id"),
+            vlan.get("subnet"),
+        ]
+        for alias in aliases:
+            token = _normalize_zone_key(alias)
+            if token:
+                lookup[token] = zone_name
+    return lookup
+
+
+def _resolve_firewall_zone(zone_hint, endpoint_ip, settings, zone_lookup):
+    zone_hint = str(zone_hint or "").strip()
+    if zone_hint:
+        zone_name = zone_lookup.get(_normalize_zone_key(zone_hint))
+        if zone_name:
+            return zone_name
+        return zone_hint
+
+    inferred_zone = str(infer_vlan_from_ip(endpoint_ip, settings=settings) or "").strip()
+    if inferred_zone:
+        zone_name = zone_lookup.get(_normalize_zone_key(inferred_zone))
+        return zone_name or inferred_zone
+    return ""
+
+
+def _normalize_protocol(value):
+    protocol = str(value or "").strip().upper()
+    if protocol in {"TCP", "UDP", "ICMP"}:
+        return protocol
+    if protocol == "":
+        return "TCP"
+    return protocol
+
+
+def _normalize_direction(value):
+    token = str(value or "").strip().lower()
+    if token in {"src_to_dst", "source_to_destination"}:
+        return "source_to_destination"
+    if token in {"dst_to_src", "destination_to_source"}:
+        return "destination_to_source"
+    return "source_to_destination"
+
+
+def _coerce_confidence(value, category):
+    if isinstance(value, int):
+        return max(0, min(100, value))
+    if isinstance(value, str) and value.isdigit():
+        return max(0, min(100, int(value)))
+    default_map = {
+        "control": 80,
+        "media": 80,
+        "service": 70,
+        "management": 55,
+        "unknown": 45,
+    }
+    return default_map.get(str(category or "").strip().lower(), 50)
+
+
+def _classify_requirement_level(category, confidence, derived_sources, has_port):
+    category = str(category or "").strip().lower()
+    derived = {str(item or "").strip().lower() for item in (derived_sources or []) if str(item or "").strip()}
+    has_direct_system_signal = "validate_systems.results" in derived
+
+    if not has_port:
+        return "recommended"
+    if category in {"control", "media"} and confidence >= 65:
+        return "min_required"
+    if category == "service" and confidence >= 75 and has_direct_system_signal:
+        return "min_required"
+    return "recommended"
+
+
+def _build_business_justification(category, requirement_level):
+    category = str(category or "").strip().lower()
+    if requirement_level == "min_required":
+        if category == "control":
+            return "Required for operator control and coordination between AV subsystems."
+        if category == "media":
+            return "Required for baseline AV media transport between system components."
+        if category == "service":
+            return "Required for essential AV service dependencies used during normal operation."
+    if category == "management":
+        return "Recommended to support monitoring, maintenance, and managed operations."
+    if category == "service":
+        return "Recommended to support advisory service dependencies in this environment."
+    return "Recommended based on observed or inferred AV communication patterns."
+
+
+def _build_av_justification(purpose, relationship_types, derived_sources):
+    purpose_text = str(purpose or "").strip() or "Observed AV communication path."
+    relation_text = ""
+    relations = sorted({str(item or "").strip() for item in (relationship_types or []) if str(item or "").strip()})
+    if relations:
+        relation_text = f" Relationship context: {', '.join(relations)}."
+    source_text = ""
+    sources = sorted({str(item or "").strip() for item in (derived_sources or []) if str(item or "").strip()})
+    if sources:
+        source_text = f" Derived from: {', '.join(sources)}."
+    return f"{purpose_text}.{relation_text}{source_text}".strip()
+
+
+def _compose_firewall_plan(system_requirement_rows, settings):
+    zone_lookup = _build_vlan_zone_lookup(settings or {})
+    merged = {}
+    candidate_count = 0
+
+    category_order = ["control", "media", "service", "management", "unknown"]
+
+    for system in (system_requirement_rows or []):
+        if not isinstance(system, dict):
+            continue
+
+        system_id = str(system.get("system_id") or "").strip()
+        categories = system.get("categories") or {}
+        if not isinstance(categories, dict):
+            continue
+
+        for category in category_order:
+            rows = categories.get(category) or []
+            if not isinstance(rows, list):
+                continue
+
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+
+                devices = row.get("devices") or []
+                src_device = devices[0] if len(devices) > 0 and isinstance(devices[0], dict) else {}
+                dst_device = devices[1] if len(devices) > 1 and isinstance(devices[1], dict) else {}
+
+                src_ip = str(src_device.get("ip") or "").strip()
+                dst_ip = str(dst_device.get("ip") or "").strip()
+                src_name = str(src_device.get("name") or src_ip or "Unknown source").strip()
+                dst_name = str(dst_device.get("name") or dst_ip or "Unknown destination").strip()
+
+                source_zone = _resolve_firewall_zone(
+                    row.get("src_zone_hint") or row.get("src_vlan"),
+                    src_ip,
+                    settings,
+                    zone_lookup,
+                )
+                destination_zone = _resolve_firewall_zone(
+                    row.get("dst_zone_hint") or row.get("dst_vlan"),
+                    dst_ip,
+                    settings,
+                    zone_lookup,
+                )
+
+                if not source_zone and not destination_zone:
+                    source_zone = "Unassigned"
+                    destination_zone = "Unassigned"
+                elif source_zone and not destination_zone:
+                    destination_zone = "Unknown"
+                elif destination_zone and not source_zone:
+                    source_zone = "Unknown"
+
+                protocol = _normalize_protocol(row.get("protocol"))
+                direction = _normalize_direction(row.get("direction"))
+                purpose = str(row.get("purpose") or f"{category} network flow").strip()
+                ports = sorted({int(p) for p in (row.get("ports") or []) if isinstance(p, int)})
+                expanded_ports = ports if ports else [None]
+                confidence = _coerce_confidence(row.get("confidence"), category)
+                derived_sources = row.get("derived_from") or []
+                relationship_types = row.get("contributing_relationship_types") or []
+                requirement_level = _classify_requirement_level(
+                    category,
+                    confidence,
+                    derived_sources,
+                    has_port=bool(ports),
+                )
+
+                business_justification = _build_business_justification(category, requirement_level)
+                av_justification = _build_av_justification(purpose, relationship_types, derived_sources)
+
+                evidence = {"Derived from system requirements aggregation"}
+                for source in (derived_sources or []):
+                    source_text = str(source or "").strip()
+                    if source_text:
+                        evidence.add(f"Source: {source_text}")
+                for flow_id in (row.get("source_flow_ids") or []):
+                    flow_text = str(flow_id or "").strip()
+                    if flow_text:
+                        evidence.add(f"Flow: {flow_text}")
+                for note in (row.get("notes") or []):
+                    note_text = str(note or "").strip()
+                    if note_text:
+                        evidence.add(note_text)
+
+                for port in expanded_ports:
+                    candidate_count += 1
+                    key = (
+                        source_zone,
+                        destination_zone,
+                        direction,
+                        protocol,
+                        port,
+                        str(category or "unknown").strip().lower() or "unknown",
+                    )
+                    existing = merged.get(key)
+                    if not existing:
+                        existing = {
+                            "requirement_level": requirement_level,
+                            "category": str(category or "unknown").strip().lower() or "unknown",
+                            "source_zone": source_zone,
+                            "destination_zone": destination_zone,
+                            "direction": direction,
+                            "protocol": protocol,
+                            "port": port,
+                            "purposes": set(),
+                            "business_justifications": set(),
+                            "av_justifications": set(),
+                            "source_systems": set(),
+                            "source_devices": set(),
+                            "destination_devices": set(),
+                            "evidence": set(),
+                            "confidence_values": [],
+                        }
+                        merged[key] = existing
+
+                    if requirement_level == "min_required":
+                        existing["requirement_level"] = "min_required"
+                    existing["purposes"].add(purpose)
+                    existing["business_justifications"].add(business_justification)
+                    existing["av_justifications"].add(av_justification)
+                    existing["source_devices"].add(src_name)
+                    existing["destination_devices"].add(dst_name)
+                    if system_id:
+                        existing["source_systems"].add(system_id)
+                    existing["evidence"].update(evidence)
+                    existing["confidence_values"].append(confidence)
+
+    rules = []
+    ordered_keys = sorted(
+        merged.keys(),
+        key=lambda item: (
+            0 if merged[item]["requirement_level"] == "min_required" else 1,
+            item[0],
+            item[1],
+            item[3],
+            item[4] if item[4] is not None else -1,
+            item[5],
+        ),
+    )
+
+    for index, key in enumerate(ordered_keys, start=1):
+        row = merged[key]
+        confidence_values = row.get("confidence_values") or []
+        confidence = min(confidence_values) if confidence_values else 0
+        purpose_values = sorted(row.get("purposes") or [])
+        business_values = sorted(row.get("business_justifications") or [])
+        av_values = sorted(row.get("av_justifications") or [])
+        port_value = row.get("port")
+
+        rules.append({
+            "rule_id": f"FW-{index:03d}",
+            "requirement_level": row.get("requirement_level") or "recommended",
+            "category": row.get("category") or "unknown",
+            "source_zone": row.get("source_zone") or "Unknown",
+            "destination_zone": row.get("destination_zone") or "Unknown",
+            "direction": row.get("direction") or "source_to_destination",
+            "protocol": row.get("protocol") or "TCP",
+            "port": port_value,
+            "ports": [port_value] if isinstance(port_value, int) else [],
+            "purpose": "; ".join(purpose_values) if purpose_values else "Network flow",
+            "business_justification": business_values[0] if business_values else "",
+            "av_justification": av_values[0] if av_values else "",
+            "confidence": confidence,
+            "source_systems": sorted(row.get("source_systems") or []),
+            "source_devices": sorted(row.get("source_devices") or []),
+            "destination_devices": sorted(row.get("destination_devices") or []),
+            "evidence": sorted(row.get("evidence") or []),
+        })
+
+    zones = sorted(
+        {
+            str(zone).strip()
+            for rule in rules
+            for zone in (rule.get("source_zone"), rule.get("destination_zone"))
+            if str(zone or "").strip()
+        }
+    )
+    protocols = sorted({str(rule.get("protocol") or "").strip() for rule in rules if str(rule.get("protocol") or "").strip()})
+    categories = sorted({str(rule.get("category") or "").strip() for rule in rules if str(rule.get("category") or "").strip()})
+    min_required_rules = sum(1 for rule in rules if rule.get("requirement_level") == "min_required")
+
+    return {
+        "rules": rules,
+        "summary": {
+            "total_rules": len(rules),
+            "min_required_rules": min_required_rules,
+            "recommended_rules": len(rules) - min_required_rules,
+            "zones": zones,
+            "protocols": protocols,
+            "categories": categories,
+            "duplicates_removed": max(0, candidate_count - len(rules)),
+        },
+    }
+
+
+@app.route("/tools/api/system_requirements", methods=["POST"])
+def api_system_requirements():
+    try:
+        payload = request.get_json(silent=True) or {}
+        result = _build_system_requirements_payload(payload)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/generate_firewall_plan", methods=["POST"])
+def api_generate_firewall_plan():
+    try:
+        payload = request.get_json(silent=True)
+        if isinstance(payload, list):
+            payload = {"results": payload}
+        payload = payload if isinstance(payload, dict) else {}
+
+        wrapper = payload.get("system_requirements")
+        system_rows = []
+        if isinstance(wrapper, dict) and _looks_like_system_requirement_rows(wrapper.get("results")):
+            system_rows = wrapper.get("results") or []
+        elif _looks_like_system_requirement_rows(payload.get("results")):
+            system_rows = payload.get("results") or []
+        else:
+            built = _build_system_requirements_payload(payload)
+            system_rows = built.get("results") or []
+
+        firewall_plan = _compose_firewall_plan(system_rows, settings=load_settings())
+        return jsonify({
+            "ok": True,
+            "firewall_plan": firewall_plan,
         })
     except Exception as e:
         return jsonify({

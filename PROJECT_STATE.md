@@ -117,3 +117,14 @@
   - Added new POST `/tools/api/system_requirements` endpoint that aggregates W6.3 flow rows into system-level intent grouped by category (`control`, `media`, `service`, `management`, `unknown`)
   - Added lightweight `checks/system_requirements.py` helpers to merge flow rows by system/category/source-destination/protocol/direction/purpose, roll up ports, and preserve derivation traceability
   - Endpoint preserves safe handling for unresolved inputs by returning non-fatal `ungrouped_flows` and supports optional direct `flows` payload for test/debug scenarios
+### Last Update
+- Feature: W7.0 firewall plan generation endpoint
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added new POST `/tools/api/generate_firewall_plan` endpoint that transforms system-level requirements into an IT-ready firewall rule table with deterministic ordering and duplicate merging
+  - Firewall rules now include required planning fields (`source_zone`, `destination_zone`, `protocol`, `port/ports`, `direction`, `purpose`, `business_justification`, `av_justification`, `confidence`) plus provenance (`source_systems`, devices, evidence)
+  - Added required split between `min_required` and `recommended` rules and summary totals designed for future CSV/JSON export
+  - Zone mapping uses requirement row VLAN/zone hints first, then settings-driven VLAN inference, with safe `Unknown`/`Unassigned` fallback labels when no trustworthy mapping is available
+  - Confidence uses upstream values when present and conservative category defaults when missing; no persistence schema or existing endpoint shape changes were introduced
