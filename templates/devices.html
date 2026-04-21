@@ -118,6 +118,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
         <tr>
           <th>Name</th>
           <th>IP</th>
+          <th>MAC</th>
           <th>Type</th>
           <th>VLAN</th>
           <th>Freshness</th>
@@ -131,6 +132,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
         <tr>
           <td>{{ d.name }}</td>
           <td style="font-family:monospace">{{ d.ip }}</td>
+          <td style="font-family:monospace">{{ d.mac or d.mac_address or "—" }}</td>
           <td>{{ d.type }}</td>
           <td>{{ d.vlan or "" }}</td>
           <td>
@@ -144,7 +146,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
           <td></td>
         </tr>
         {% else %}
-        <tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — add one above</td></tr>
+        <tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — add one above</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -1426,7 +1428,7 @@ function renderTable(){
     } else if(!filterVlan){
       emptyMessage = 'No devices in the master inventory yet. Use Add, Import, or Discover to populate this list, then run Fingerprint and Normalize as needed.';
     }
-    tbody.innerHTML = '<tr><td colspan="8" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
     return;
   }
 
@@ -1439,7 +1441,7 @@ function renderTable(){
 
   Object.keys(groups).sort().forEach(groupName => {
     const groupRow = document.createElement('tr');
-    groupRow.innerHTML = '<td colspan="8" style="background:#111827;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
+    groupRow.innerHTML = '<td colspan="9" style="background:#111827;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
     tbody.appendChild(groupRow);
 
     groups[groupName].forEach(d => {
@@ -1456,8 +1458,7 @@ function renderTable(){
       const macNormalized = normalizeMacValue(macRaw);
       const macText = macNormalized || macRaw;
       const nameCellHtml =
-        '<div style="font-weight:500;color:#e5e7eb"><span style="display:inline-block;width:14px;color:#9ca3af">' + escapeHtml(toggleGlyph) + '</span>' + escapeHtml(d.name || '(unnamed device)') + '</div>' +
-        (macText ? '<div style="margin-top:2px;font-size:11px;line-height:1.3;color:#6b7280;font-family:monospace">MAC: ' + escapeHtml(macText) + '</div>' : '');
+        '<div style="font-weight:500;color:#e5e7eb"><span style="display:inline-block;width:14px;color:#9ca3af">' + escapeHtml(toggleGlyph) + '</span>' + escapeHtml(d.name || '(unnamed device)') + '</div>';
       const confidenceState = deriveConfidenceState(d, r, freshness.label);
       const typeCellHtml = buildTypeCellHtml(d, r, freshness.label);
       const freshnessHtml =
@@ -1530,6 +1531,7 @@ function renderTable(){
       tr.innerHTML =
         '<td>' + nameCellHtml + '</td>' +
         '<td style="font-family:monospace;font-size:12px;color:#9ca3af">' + escapeHtml(d.ip) + '</td>' +
+        '<td style="font-family:monospace;font-size:12px;color:#d1d5db">' + (macText ? escapeHtml(macText) : '—') + (d.mac_conflict ? '<div style="margin-top:2px;font-size:10px;color:#fca5a5;font-family:inherit">Conflict</div>' : '') + '</td>' +
         '<td>' + typeCellHtml + '</td>' +
         '<td>' + escapeHtml(d.vlan || '') + '</td>' +
         '<td>' + freshnessHtml + '</td>' +
@@ -1652,7 +1654,7 @@ function renderTable(){
           : 'Limited evidence available. Type remains based on current inferred role and observed services.';
 
         detailTr.innerHTML =
-          '<td colspan="8" style="padding:0;border-top:none;">'
+          '<td colspan="9" style="padding:0;border-top:none;">'
           + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
           + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Device Intelligence</div>'
           + '<div style="margin-bottom:8px">' + buildConfidenceBadgeHtml(confidenceState) + '</div>'
@@ -1851,3 +1853,4 @@ renderTable();
 refreshRequirementsStateFromEndpoint();
 </script>
 {% endblock %}
+

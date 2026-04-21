@@ -241,3 +241,17 @@
   - Updated `validate_device` persistence/response handling to normalize source labels while preserving valid existing MAC values and non-blocking enrichment behavior
   - Added save-path handling so explicit user MAC edits persist with `mac_source: user-entered` when no stronger machine-confirmed source is present
   - Device detail drawer now shows MAC provenance in-line (for example `MAC (arp-cache): AA:BB:CC:DD:EE:FF`) and missing-metadata MAC checks use normalized MAC validity
+
+### Last Update
+- Feature: W6.08 MAC conflict detection + cross-workflow MAC persistence
+- Files modified:
+  - app.py
+  - templates/devices.html
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added inventory-wide duplicate MAC detection in the shared save-normalization path and persist `mac_conflict: true` on all records sharing the same normalized MAC (`false` otherwise)
+  - Extended MAC persistence from discovery/scan/add-discovered workflows using canonical source mapping and non-blocking best-effort write-back (`arp-cache` when learned from discovery output)
+  - Added a dedicated MAC column to Devices table plus conflict badge, while preserving existing detail-drawer provenance display
+  - Diagnostics discovered-host state is now cached and restored so results remain visible until a new discovery run replaces them
+  - Verified subnet/gateway fallbacks already default to `192.168.1.0/24` and `192.168.1.1` when settings do not provide explicit values

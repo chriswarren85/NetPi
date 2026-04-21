@@ -542,6 +542,52 @@ def _append_discovery_device(job_id, device):
     return _update_background_job(job_id, mutate_fn=mutate)
 
 
+def _persist_discovery_macs(discovered_devices):
+    if not isinstance(discovered_devices, list) or not discovered_devices:
+        return
+
+    try:
+        devices = load_devices()
+    except Exception:
+        return
+
+    changed = False
+    by_ip = {
+        str((device or {}).get("ip") or "").strip(): device
+        for device in devices
+        if isinstance(device, dict) and str((device or {}).get("ip") or "").strip()
+    }
+
+    for discovered in discovered_devices:
+        if not isinstance(discovered, dict):
+            continue
+        ip = str(discovered.get("ip") or "").strip()
+        if not ip:
+            continue
+        existing_device = by_ip.get(ip)
+        if not isinstance(existing_device, dict):
+            continue
+
+        if _apply_observed_mac(
+            existing_device,
+            discovered.get("mac") or discovered.get("mac_address"),
+            discovered.get("mac_source") or "arp-cache",
+        ):
+            changed = True
+
+        if not (existing_device.get("vendor") or "").strip():
+            vendor_value = str(discovered.get("vendor") or "").strip()
+            if vendor_value:
+                existing_device["vendor"] = vendor_value
+                changed = True
+
+    if changed:
+        try:
+            save_devices_file(devices)
+        except Exception:
+            pass
+
+
 def _parse_discovery_line(line):
     if 'Host:' not in line:
         return None
@@ -613,10 +659,12 @@ def _parse_discovery_line(line):
     except Exception:
         pass
 
+    normalized_mac = _normalize_mac_value(mac)
+
     return {
         "ip": ip,
         "hostname": hostname,
-        "mac": mac,
+        "mac": normalized_mac or "",
         "vendor": vendor,
         "guessed_type": guess_type_from_vendor(vendor),
         "status": "online"
@@ -710,6 +758,7 @@ def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SU
                     message=_discovery_status_message("cancelled", len(devices), subnet),
                     error=""
                 )
+                _persist_discovery_macs(devices)
                 return devices
 
         if _is_known_discovery_assertion_failure(stderr_output):
@@ -718,6 +767,7 @@ def _discover_hosts_for_subnet(subnet, job_id=None, timeout_seconds=DISCOVERY_SU
         if returncode != 0:
             raise RuntimeError(_format_discovery_process_error(stderr_output, returncode))
 
+        _persist_discovery_macs(devices)
         return devices
     finally:
         if job_id:
@@ -900,6 +950,7 @@ def normalize_devices_for_save(devices_in, settings=None):
                 item["mac_source"] = "unknown"
 
             normalized.append(item)
+    _apply_mac_conflict_flags(normalized)
     return normalized
 
 
@@ -1619,6 +1670,62 @@ def _canonicalize_mac_source(value, *, has_mac=False):
     if not token:
         return "unknown"
     return "unknown"
+
+
+def _apply_mac_conflict_flags(devices):
+    mac_to_indices = {}
+
+    for index, device in enumerate(devices or []):
+        if not isinstance(device, dict):
+            continue
+        mac_value = _normalize_mac_value(device.get("mac") or device.get("mac_address"))
+        if not mac_value:
+            continue
+        mac_to_indices.setdefault(mac_value, []).append(index)
+
+    for device in devices or []:
+        if isinstance(device, dict):
+            device["mac_conflict"] = False
+
+    for indices in mac_to_indices.values():
+        if len(indices) < 2:
+            continue
+        for index in indices:
+            if 0 <= index < len(devices) and isinstance(devices[index], dict):
+                devices[index]["mac_conflict"] = True
+
+
+def _apply_observed_mac(device, observed_mac, observed_source):
+    if not isinstance(device, dict):
+        return False
+
+    normalized_observed_mac = _normalize_mac_value(observed_mac)
+    if not normalized_observed_mac:
+        return False
+
+    desired_source = _canonicalize_mac_source(observed_source, has_mac=True)
+    existing_mac = _normalize_mac_value(device.get("mac") or device.get("mac_address"))
+    existing_source = _canonicalize_mac_source(device.get("mac_source"), has_mac=bool(existing_mac))
+    changed = False
+
+    if existing_mac != normalized_observed_mac:
+        device["mac"] = normalized_observed_mac
+        device["mac_address"] = normalized_observed_mac
+        device["mac_source"] = desired_source
+        changed = True
+    else:
+        if existing_source == "unknown" and desired_source != "unknown":
+            device["mac_source"] = desired_source
+            changed = True
+
+        if device.get("mac") != normalized_observed_mac:
+            device["mac"] = normalized_observed_mac
+            changed = True
+        if device.get("mac_address") != normalized_observed_mac:
+            device["mac_address"] = normalized_observed_mac
+            changed = True
+
+    return changed
 
 
 def save_devices_file(devices):
@@ -4044,9 +4151,20 @@ def add_discovered_devices_to_inventory(devices_in):
 
         existing_device = next((existing for existing in devices if existing.get("ip") == ip), None)
         if existing_device is not None:
+            mac_updated = _apply_observed_mac(
+                existing_device,
+                normalized.get("mac") or normalized.get("mac_address"),
+                normalized.get("mac_source") or "arp-cache",
+            )
+            if not (existing_device.get("vendor") or "").strip():
+                vendor_value = (normalized.get("vendor") or "").strip()
+                if vendor_value:
+                    existing_device["vendor"] = vendor_value
+                    mac_updated = True
             refreshed_device = _mark_device_freshness(existing_device, seen=True, reachable=True)
-            existing_device.clear()
-            existing_device.update(refreshed_device)
+            if refreshed_device != existing_device or mac_updated:
+                existing_device.clear()
+                existing_device.update(refreshed_device)
             skipped_existing += 1
             continue
 
@@ -4054,6 +4172,7 @@ def add_discovered_devices_to_inventory(devices_in):
         preferred_name = (normalized.get("name") or normalized.get("hostname") or "").strip()
         vendor = (normalized.get("vendor") or "").strip()
         notes = (normalized.get("notes") or "").strip()
+        normalized_mac = _normalize_mac_value(normalized.get("mac") or normalized.get("mac_address"))
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
         devices.append(_mark_device_freshness({
@@ -4062,7 +4181,9 @@ def add_discovered_devices_to_inventory(devices_in):
             "type": device_type,
             "vlan": (normalized.get("vlan") or "").strip(),
             "notes": notes or (f"Auto-discovered ({vendor})" if vendor else "Auto-discovered"),
-            "mac": (normalized.get("mac") or "").strip(),
+            "mac": normalized_mac or "",
+            "mac_address": normalized_mac or None,
+            "mac_source": "arp-cache" if normalized_mac else "unknown",
             "vendor": vendor
         }, seen=True, reachable=True))
         added += 1
@@ -4093,6 +4214,13 @@ def add_discovered_device():
 
     existing_device = next((d for d in devices if d.get("ip") == ip), None)
     if existing_device is not None:
+        _apply_observed_mac(
+            existing_device,
+            data.get("mac") or data.get("mac_address"),
+            data.get("mac_source") or "arp-cache",
+        )
+        if not (existing_device.get("vendor") or "").strip() and vendor:
+            existing_device["vendor"] = vendor
         refreshed_device = _mark_device_freshness(existing_device, seen=True, reachable=True)
         existing_device.clear()
         existing_device.update(refreshed_device)
@@ -4102,6 +4230,7 @@ def add_discovered_device():
     normalized = assign_inferred_vlan(data, settings=load_settings())
     vlan = (normalized.get("vlan") or "").strip()
     name = generate_device_name(devices, device_type, hostname)
+    normalized_mac = _normalize_mac_value(mac or normalized.get("mac_address"))
 
     devices.append(_mark_device_freshness({
         "name": name,
@@ -4109,7 +4238,9 @@ def add_discovered_device():
         "type": device_type,
         "vlan": vlan,
         "notes": f"Auto-discovered ({vendor})" if vendor else "Auto-discovered",
-        "mac": mac,
+        "mac": normalized_mac or "",
+        "mac_address": normalized_mac or None,
+        "mac_source": "arp-cache" if normalized_mac else "unknown",
         "vendor": vendor
     }, seen=True, reachable=True))
 
@@ -4227,8 +4358,16 @@ def api_scan():
                 p = line.split()
                 ip = p[1]
                 hostname = p[2].strip('()') if len(p) > 2 else ''
-                devices.append({'ip': ip, 'hostname': hostname, 'status': 'online'})
+                mac = ""
+                if "MAC Address:" in line:
+                    try:
+                        mac_part = line.split("MAC Address:", 1)[1].strip()
+                        mac = _normalize_mac_value(mac_part.split(" (", 1)[0].strip())
+                    except Exception:
+                        mac = ""
+                devices.append({'ip': ip, 'hostname': hostname, 'mac': mac, 'status': 'online'})
 
+        _persist_discovery_macs(devices)
         return jsonify({'devices': devices, 'count': len(devices)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

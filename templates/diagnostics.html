@@ -115,6 +115,42 @@ let fingerprintRequests = new Set();
 let fingerprintResults = {};
 let fingerprintFailures = new Set();
 let latestDiscoveryProgressMessage = '';
+const DISCOVERY_CACHE_KEY = 'netpi.discovery.lastResults.v1';
+
+function persistDiscoverySnapshot(){
+  try{
+    const snapshot = {
+      devices: Array.isArray(latestDiscoveredDevices) ? latestDiscoveredDevices : [],
+      subnet: latestDiscoveredSubnet || '',
+      state: latestDiscoveryState || 'idle',
+      message: (document.getElementById('discover-summary') || {}).textContent || '',
+      progress_message: latestDiscoveryProgressMessage || ''
+    };
+    localStorage.setItem(DISCOVERY_CACHE_KEY, JSON.stringify(snapshot));
+  } catch (e) {}
+}
+
+function restoreDiscoverySnapshot(){
+  try{
+    const raw = localStorage.getItem(DISCOVERY_CACHE_KEY);
+    if(!raw){
+      return;
+    }
+    const snapshot = JSON.parse(raw);
+    const devices = Array.isArray(snapshot?.devices) ? snapshot.devices : [];
+    const subnet = String(snapshot?.subnet || '');
+    const state = String(snapshot?.state || 'completed');
+    const message = String(snapshot?.message || '');
+    latestDiscoveryProgressMessage = String(snapshot?.progress_message || '');
+    if(!devices.length && !message){
+      return;
+    }
+    renderDiscoveredHosts(devices, subnet, state);
+    setDiscoveryUiState(state, message || (devices.length
+      ? `Showing ${devices.length} most recently discovered host${devices.length === 1 ? '' : 's'}.`
+      : 'No discovered hosts in the last run.'));
+  } catch (e) {}
+}
 
 function setDiscoveryUiState(state, message){
   latestDiscoveryState = state;
@@ -151,6 +187,8 @@ function setDiscoveryUiState(state, message){
     summary.textContent = '';
     summary.style.display = 'none';
   }
+
+  persistDiscoverySnapshot();
 }
 
 function stopDiscoveryPolling(){
@@ -170,6 +208,9 @@ function resetDiscoverySession(){
   fingerprintResults = {};
   fingerprintFailures = new Set();
   setFingerprintAddedState([], '');
+  try{
+    localStorage.removeItem(DISCOVERY_CACHE_KEY);
+  } catch (e) {}
 }
 
 function escapeHtml(value){
@@ -239,6 +280,7 @@ function renderDiscoveredHosts(devices, subnet, state){
     }
 
     tbody.innerHTML = `<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">${escapeHtml(emptyMessage)}</td></tr>`;
+    persistDiscoverySnapshot();
     return;
   }
 
@@ -277,6 +319,7 @@ function renderDiscoveredHosts(devices, subnet, state){
     tbody.appendChild(tr);
     ensureFingerprint(d.ip, d.vendor || '');
   });
+  persistDiscoverySnapshot();
 }
 
 function setFingerprintAddedState(ips, message){
@@ -712,6 +755,7 @@ function fingerprintHost(ip, vendor){
 function addDiscovered(ip, hostname){
   const vlan = document.getElementById('vlan-select').value;
   const guessEl = document.getElementById('guess-' + ip.replace(/\./g, '-'));
+  const discovered = latestDiscoveredDevices.find(d => String(d.ip || '').trim() === String(ip || '').trim()) || {};
   let guessedType = 'generic';
 
   if(guessEl){
@@ -728,7 +772,10 @@ function addDiscovered(ip, hostname){
       ip: ip,
       hostname: hostname,
       vlan: vlan,
-      type: guessedType
+      type: guessedType,
+      mac: discovered.mac || discovered.mac_address || '',
+      vendor: discovered.vendor || '',
+      mac_source: (discovered.mac || discovered.mac_address) ? 'arp-cache' : 'unknown'
     })
   })
     .then(r => r.json())
@@ -922,5 +969,7 @@ function addSelected(){
       alert('Error adding devices: ' + e);
     });
 }
+
+restoreDiscoverySnapshot();
 </script>
 {% endblock %}
