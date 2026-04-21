@@ -1,143 +1,193 @@
-{% extends 'base.html' %}
-{% block title %}— Report{% endblock %}
-{% block content %}
-<style>
-  .report-wrap { max-width: 1100px; margin: 0 auto; }
-  .report-head { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:20px; }
-  .report-meta { color:#9ca3af; font-size:13px; line-height:1.6; }
-  .report-status {
-    padding: 14px 18px;
-    border-radius: 12px;
-    font-weight: 700;
-    font-size: 20px;
-    text-align: center;
-    min-width: 240px;
-  }
-  .report-status.ok { background:#052e16; color:#86efac; border:1px solid #166534; }
-  .report-status.warn { background:#451a03; color:#fcd34d; border:1px solid #92400e; }
-  .report-status.fail { background:#450a0a; color:#fca5a5; border:1px solid #991b1b; }
-  .report-grid {
-    display:grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap:12px;
-    margin-bottom:20px;
-  }
-  .report-card {
-    background:#111827;
-    border:1px solid #1f2937;
-    border-radius:12px;
-    padding:14px;
-  }
-  .report-card .label { color:#9ca3af; font-size:12px; margin-bottom:6px; }
-  .report-card .value { font-size:24px; font-weight:700; }
-  .report-actions { display:flex; gap:10px; margin-bottom:18px; }
-  .report-table td, .report-table th { vertical-align: top; }
-  @media print {
-    .report-actions, .sidebar, nav, .topbar { display:none !important; }
-    body { background:#fff !important; color:#000 !important; }
-    .panel, .report-card { border:1px solid #ccc !important; box-shadow:none !important; }
-  }
-</style>
-
-<div class="report-wrap">
-  <div class="page-title">Commissioning Report</div>
-  <div class="page-sub">{{ s.project_name or 'No project loaded' }} — {{ s.site_location or '' }}</div>
-
-  <div class="report-actions">
-    <button class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
-    <button class="btn" onclick="window.location.href='/tools/api/checks/download_csv'">⬇ Download CSV</button>
-    <button class="btn" onclick="window.location.href='/tools/diagnostics'">← Back to diagnostics</button>
-  </div>
-
-  <div class="report-head">
-    <div class="report-meta">
-      <div><strong>Project:</strong> {{ s.project_name or '—' }}</div>
-      <div><strong>Job Number:</strong> {{ s.job_number or '—' }}</div>
-      <div><strong>Client:</strong> {{ s.client_name or '—' }}</div>
-      <div><strong>Site:</strong> {{ s.site_location or '—' }}</div>
-      <div><strong>Selected VLAN:</strong> {{ data.selected_vlan or 'Auto' }}</div>
-      <div><strong>Gateway:</strong> {{ data.gateway or '—' }}</div>
-      <div><strong>Subnet:</strong> {{ data.subnet or '—' }}</div>
-      <div><strong>Run Time:</strong> {{ data.timestamp or '—' }}</div>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NetPi Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #111827; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+    .title { font-size: 28px; font-weight: 700; margin: 0; }
+    .sub { color: #4b5563; font-size: 13px; margin-top: 6px; line-height: 1.4; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .btn { display: inline-block; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; text-decoration: none; color: #111827; background: #fff; font-size: 12px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; }
+    .label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .02em; }
+    .value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+    .section { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+    .section h2 { margin: 0 0 8px 0; font-size: 16px; }
+    .muted { color: #6b7280; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+    ul { margin: 8px 0 0 18px; padding: 0; }
+    li { margin-bottom: 4px; }
+    .badge { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+    .ready { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .warn { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .fail { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    @media print {
+      .actions { display: none !important; }
+      body { background: #fff; }
+      .wrap { max-width: none; padding: 10mm; }
+      .section, .card { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+{% if report is defined and report %}
+  {% set proj = report.summary or {} %}
+  {% set sections = report.sections or {} %}
+  {% set readiness = (proj.readiness or 'ready') %}
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1 class="title">Commissioning Report</h1>
+        <div class="sub">
+          <div><strong>Project:</strong> {{ report.project_name or (s.project_name or 'NetPi Project') }}</div>
+          <div><strong>Generated:</strong> {{ report.generated_at or '-' }}</div>
+        </div>
+      </div>
+      <div>
+        <span class="badge {% if readiness == 'action_required' %}fail{% elif readiness == 'ready_with_warnings' %}warn{% else %}ready{% endif %}">
+          {{ readiness|replace('_', ' ') }}
+        </span>
+      </div>
     </div>
 
-    <div class="report-status {{ summary.overall_class }}">
-      {{ summary.overall }}
+    <div class="actions">
+      <a class="btn" href="/tools/dashboard">Back to Dashboard</a>
+      <a class="btn" href="#" onclick="window.print(); return false;">Print / Save PDF</a>
     </div>
-  </div>
 
-  <div class="report-grid">
-    <div class="report-card">
-      <div class="label">Checks Passed</div>
-      <div class="value" style="color:#4ade80">{{ summary.passed }}</div>
+    <div class="summary-grid">
+      <div class="card"><div class="label">Total Devices</div><div class="value">{{ proj.total_devices or 0 }}</div></div>
+      <div class="card"><div class="label">Systems</div><div class="value">{{ proj.systems_count or 0 }}</div></div>
+      <div class="card"><div class="label">Attention Items</div><div class="value">{{ proj.overall_attention_items or 0 }}</div></div>
+      <div class="card"><div class="label">Recommendations</div><div class="value">{{ (sections.recommendations_summary or {}).total or 0 }}</div></div>
     </div>
-    <div class="report-card">
-      <div class="label">Warnings</div>
-      <div class="value" style="color:#fbbf24">{{ summary.warned }}</div>
-    </div>
-    <div class="report-card">
-      <div class="label">Failed</div>
-      <div class="value" style="color:#f87171">{{ summary.failed }}</div>
-    </div>
-    <div class="report-card">
-      <div class="label">Devices Checked</div>
-      <div class="value">{{ data.devices | length }}</div>
-    </div>
-  </div>
 
-  <div class="panel">
-    <div class="panel-header">Network Checks</div>
-    <div class="panel-body" style="padding:0">
-      <table class="report-table">
-        <thead>
-          <tr><th>Check</th><th>Status</th><th>Latency</th><th>Detail</th></tr>
-        </thead>
+    <div class="section">
+      <h2>1. Project Summary / Executive Snapshot</h2>
+      <div class="muted">Live aggregate of current project evidence. Sparse inventories will produce limited section detail.</div>
+    </div>
+
+    <div class="section">
+      <h2>2. Validation Summary</h2>
+      {% set val = sections.validation_summary or {} %}
+      <table>
         <tbody>
-          {% for c in data.base %}
-          <tr>
-            <td>{{ c.name }}</td>
-            <td>{{ c.status|upper }}</td>
-            <td style="font-family:monospace">{{ c.latency_ms if c.latency_ms else '—' }}{% if c.latency_ms %} ms{% endif %}</td>
-            <td><pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">{{ c.detail }}</pre></td>
-          </tr>
-          {% endfor %}
+          <tr><th>Device Validation Rows</th><td>{{ val.count or 0 }}</td></tr>
+          <tr><th>Pass / Warn / Fail / Unknown</th><td>{{ (val.by_status or {}).pass or 0 }} / {{ (val.by_status or {}).warn or 0 }} / {{ (val.by_status or {}).fail or 0 }} / {{ (val.by_status or {}).unknown or 0 }}</td></tr>
+          <tr><th>System Unresolved</th><td>{{ val.system_unresolved or 0 }}</td></tr>
+          <tr><th>Connectivity Concerns</th><td>{{ val.connectivity_concerns or 0 }}</td></tr>
+          <tr><th>Note</th><td>{{ val.connectivity_note or 'No additional connectivity notes.' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>3. Requirements Summary</h2>
+      {% set req = sections.requirements_summary or {} %}
+      <table>
+        <tbody>
+          <tr><th>System Requirement Groups</th><td>{{ req.count or 0 }}</td></tr>
+          <tr><th>Device Requirement Rows</th><td>{{ req.device_requirements_count or 0 }}</td></tr>
+          <tr><th>Unmapped Devices</th><td>{{ req.unmapped_devices or 0 }}</td></tr>
+          <tr><th>Category Breakdown</th><td>control={{ (req.category_breakdown or {}).control or 0 }}, media={{ (req.category_breakdown or {}).media or 0 }}, service={{ (req.category_breakdown or {}).service or 0 }}, management={{ (req.category_breakdown or {}).management or 0 }}, unknown={{ (req.category_breakdown or {}).unknown or 0 }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>4. Firewall Plan Summary</h2>
+      {% set fw = sections.firewall_plan_summary or {} %}
+      <table>
+        <tbody>
+          <tr><th>Total Rules</th><td>{{ fw.total_rules or 0 }}</td></tr>
+          <tr><th>min_required / recommended</th><td>{{ fw.min_required_rules or 0 }} / {{ fw.recommended_rules or 0 }}</td></tr>
+          <tr><th>Zones</th><td>{{ (fw.zones or [])|join(', ') if (fw.zones or []) else 'No generated zone relationships available.' }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>5. IP Schedule Summary</h2>
+      {% set ip = sections.ip_schedule_summary or {} %}
+      <table>
+        <tbody>
+          <tr><th>Total Rows</th><td>{{ ip.count or 0 }}</td></tr>
+          <tr><th>Missing MAC</th><td>{{ ip.missing_mac or 0 }}</td></tr>
+          <tr><th>Missing Serial</th><td>{{ ip.missing_serial or 0 }}</td></tr>
+          <tr><th>Missing VLAN</th><td>{{ ip.missing_vlan or 0 }}</td></tr>
+          <tr><th>Manual Overrides</th><td>{{ ip.manual_overrides or 0 }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section">
+      <h2>6. Recommendations Summary</h2>
+      {% set rec = sections.recommendations_summary or {} %}
+      <table>
+        <tbody>
+          <tr><th>Total Recommendations</th><td>{{ rec.total or 0 }}</td></tr>
+          <tr><th>By Severity</th><td>{% set sev = rec.by_severity or {} %}high={{ sev.high or 0 }}, medium={{ sev.medium or 0 }}, low={{ sev.low or 0 }}, info={{ sev.info or 0 }}</td></tr>
+          <tr><th>By Category</th><td>{% set cat = rec.by_category or {} %}integrity={{ cat.integrity or 0 }}, design={{ cat.design or 0 }}, segmentation={{ cat.segmentation or 0 }}, DHCP={{ cat.DHCP or 0 }}, multicast={{ cat.multicast or 0 }}, security={{ cat.security or 0 }}, commissioning_readiness={{ cat.commissioning_readiness or 0 }}</td></tr>
+        </tbody>
+      </table>
+      {% if rec.top_high_priority %}
+      <ul>
+        {% for item in rec.top_high_priority %}
+        <li>{{ item.id or '-' }} - {{ item.title or 'Untitled recommendation' }} ({{ item.category or 'unknown' }})</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <div class="muted" style="margin-top:8px">No high-severity recommendations currently available.</div>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>7. Outstanding Risks / Attention Items</h2>
+      {% set risks = sections.outstanding_risks or [] %}
+      {% if risks %}
+      <ul>{% for risk in risks %}<li>{{ risk }}</li>{% endfor %}</ul>
+      {% else %}
+      <div class="muted">No outstanding risks captured from current data.</div>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h2>8. Suggested Next Actions</h2>
+      {% set actions = sections.suggested_next_actions or [] %}
+      {% if actions %}
+      <ul>{% for action in actions %}<li>{{ action }}</li>{% endfor %}</ul>
+      {% else %}
+      <div class="muted">No suggested actions were generated from current evidence.</div>
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="wrap">
+    <h1 class="title">Legacy Diagnostics Report</h1>
+    <div class="sub">Generated from historical diagnostics run data.</div>
+    <div class="actions">
+      <a class="btn" href="/tools/diagnostics">Back to Diagnostics</a>
+      <a class="btn" href="#" onclick="window.print(); return false;">Print / Save PDF</a>
+    </div>
+    <div class="section">
+      <h2>Summary</h2>
+      <table>
+        <tbody>
+          <tr><th>Overall</th><td>{{ (summary or {}).overall or '-' }}</td></tr>
+          <tr><th>Passed</th><td>{{ (summary or {}).passed or 0 }}</td></tr>
+          <tr><th>Warned</th><td>{{ (summary or {}).warned or 0 }}</td></tr>
+          <tr><th>Failed</th><td>{{ (summary or {}).failed or 0 }}</td></tr>
+          <tr><th>Run Time</th><td>{{ (data or {}).timestamp or '-' }}</td></tr>
         </tbody>
       </table>
     </div>
   </div>
-
-  <div class="panel">
-    <div class="panel-header">Device Checks</div>
-    <div class="panel-body" style="padding:0">
-      <table class="report-table">
-        <thead>
-          <tr><th>Device</th><th>IP</th><th>Type</th><th>Overall</th><th>Checks</th></tr>
-        </thead>
-        <tbody>
-          {% if data.devices %}
-            {% for d in data.devices %}
-            <tr>
-              <td>{{ d.name }}</td>
-              <td style="font-family:monospace">{{ d.ip }}</td>
-              <td>{{ d.type }}</td>
-              <td>{{ d.overall|upper }}</td>
-              <td>
-                {% for c in d.checks %}
-                  <div style="margin-bottom:8px">
-                    <strong>{{ c.check }}</strong> — {{ c.status|upper }}
-                    {% if c.latency_ms %}<span style="font-family:monospace"> ({{ c.latency_ms }} ms)</span>{% endif %}
-                    <pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:4px 0 0 0">{{ c.detail }}</pre>
-                  </div>
-                {% endfor %}
-              </td>
-            </tr>
-            {% endfor %}
-          {% else %}
-            <tr><td colspan="5" style="text-align:center;color:#6b7280">No devices were checked in this run.</td></tr>
-          {% endif %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-{% endblock %}
+{% endif %}
+</body>
+</html>

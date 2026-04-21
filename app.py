@@ -5920,6 +5920,310 @@ def _build_recommendations(context):
     }
 
 
+def _normalize_validation_status(value):
+    token = str(value or "").strip().lower()
+    if token in {"pass", "ok"}:
+        return "pass"
+    if token in {"warn", "warning", "info"}:
+        return "warn"
+    if token in {"fail", "error"}:
+        return "fail"
+    return "unknown"
+
+
+def _summarize_validation_results(validate_all_payload):
+    summary = {"pass": 0, "warn": 0, "fail": 0, "unknown": 0}
+    rows = _extract_results_from_payload(validate_all_payload)
+    for row in rows:
+        status = _normalize_validation_status((row or {}).get("overall"))
+        if status in summary:
+            summary[status] += 1
+    return summary
+
+
+def _build_requirements_payload_for_report(payload, devices):
+    payload = payload if isinstance(payload, dict) else {}
+    requirements_payload = payload.get("requirements")
+    if isinstance(requirements_payload, dict) and isinstance(requirements_payload.get("results"), list):
+        return requirements_payload
+
+    vlan = str(payload.get("vlan") or "").strip()
+    selected_devices = list(devices or [])
+    if vlan:
+        selected_devices = [d for d in selected_devices if str(d.get("vlan") or "").strip() == vlan]
+
+    config = load_requirements_config()
+    enriched_devices = [enrich_device_runtime(device) for device in selected_devices]
+
+    results = []
+    unmapped = []
+    mapped_count = 0
+    types_seen = set()
+    for device in enriched_devices:
+        requirement_row = generate_device_requirements(device, config)
+        results.append(requirement_row)
+
+        effective_type = str(requirement_row.get("effective_type") or "").strip().lower()
+        if effective_type:
+            types_seen.add(effective_type)
+
+        if requirement_row.get("required_ports"):
+            mapped_count += 1
+        else:
+            unmapped.append({
+                "device_id": requirement_row.get("device_id") or "",
+                "type": effective_type or "unknown",
+            })
+
+    return {
+        "ok": True,
+        "count": len(results),
+        "summary": {
+            "mapped": mapped_count,
+            "unmapped": len(unmapped),
+            "types_seen": len(types_seen),
+        },
+        "results": results,
+        "unmapped": unmapped,
+    }
+
+
+def _build_report_sections(payload, context, requirements, ipschedule, recommendations):
+    settings = load_settings()
+    validate_all = context.get("validate_all") or {}
+    validate_systems = context.get("validate_systems") or {}
+    system_requirements = context.get("system_requirements") or {}
+    firewall_plan = context.get("firewall_plan") or {}
+
+    validate_all_results = _extract_results_from_payload(validate_all)
+    validate_systems_results = _extract_results_from_payload(validate_systems)
+    connectivity_results = list((validate_systems or {}).get("connectivity") or [])
+    requirements_results = _extract_results_from_payload(requirements)
+    system_requirement_rows = _extract_results_from_payload(system_requirements)
+    firewall_rules = list((firewall_plan or {}).get("rules") or [])
+    schedule_rows = list((ipschedule or {}).get("devices") or [])
+    recommendation_rows = list((recommendations or {}).get("recommendations") or [])
+    recommendation_summary = (recommendations or {}).get("summary") or {}
+
+    validation_summary = _summarize_validation_results(validate_all)
+    unresolved_systems = 0
+    for row in validate_systems_results:
+        state = _normalize_validation_status((row or {}).get("status"))
+        if state in {"warn", "fail", "unknown"}:
+            unresolved_systems += 1
+    connectivity_summary = (validate_systems or {}).get("connectivity_summary") or {}
+    connectivity_concerns = int(connectivity_summary.get("fail") or 0) + int(connectivity_summary.get("warn") or 0)
+
+    requirements_category_breakdown = {
+        "control": 0,
+        "media": 0,
+        "service": 0,
+        "management": 0,
+        "unknown": 0,
+    }
+    for system_row in system_requirement_rows:
+        categories = (system_row or {}).get("categories") or {}
+        if not isinstance(categories, dict):
+            continue
+        for key in requirements_category_breakdown:
+            entries = categories.get(key) or []
+            if isinstance(entries, list):
+                requirements_category_breakdown[key] += len(entries)
+
+    firewall_summary = (firewall_plan or {}).get("summary") or {}
+    schedule_missing_mac = 0
+    schedule_missing_serial = 0
+    schedule_missing_vlan = 0
+    schedule_manual_overrides = 0
+    for row in schedule_rows:
+        if not str((row or {}).get("mac") or (row or {}).get("mac_address") or "").strip():
+            schedule_missing_mac += 1
+        if not str((row or {}).get("serial") or (row or {}).get("serial_number") or "").strip():
+            schedule_missing_serial += 1
+        if not str((row or {}).get("vlan") or "").strip():
+            schedule_missing_vlan += 1
+        if (row or {}).get("manual_override") or (row or {}).get("is_manual"):
+            schedule_manual_overrides += 1
+
+    top_high_recommendations = [
+        {
+            "id": row.get("id") or "",
+            "title": row.get("title") or "",
+            "category": row.get("category") or "",
+            "severity": row.get("severity") or "",
+        }
+        for row in recommendation_rows
+        if str((row or {}).get("severity") or "").strip().lower() == "high"
+    ][:5]
+
+    outstanding_risks = []
+    for row in recommendation_rows:
+        severity = str((row or {}).get("severity") or "").strip().lower()
+        if severity == "high":
+            outstanding_risks.append(str((row or {}).get("title") or "High-severity recommendation").strip())
+    if not outstanding_risks and (validation_summary["fail"] > 0 or unresolved_systems > 0):
+        outstanding_risks.append("Validation failures remain unresolved.")
+    if not outstanding_risks:
+        outstanding_risks.append("No critical unresolved risks detected from current evidence.")
+    outstanding_risks = outstanding_risks[:8]
+
+    suggested_next_actions = []
+    for row in recommendation_rows:
+        action = str((row or {}).get("suggested_action") or "").strip()
+        if action and action not in suggested_next_actions:
+            suggested_next_actions.append(action)
+    if not suggested_next_actions:
+        suggested_next_actions = [
+            "Review current validation scope and rerun validation after inventory updates.",
+            "Confirm firewall rules and IP schedule against the latest project state before handover.",
+        ]
+    suggested_next_actions = suggested_next_actions[:8]
+
+    total_devices = len(schedule_rows) if schedule_rows else len(context.get("devices") or [])
+    system_groups = int((validate_systems or {}).get("count") or 0)
+    overall_attention = (
+        validation_summary["fail"]
+        + validation_summary["warn"]
+        + unresolved_systems
+        + connectivity_concerns
+        + int(recommendation_summary.get("total") or 0)
+    )
+    readiness = "ready"
+    if validation_summary["fail"] > 0 or any(
+        str((row or {}).get("severity") or "").strip().lower() == "high" for row in recommendation_rows
+    ):
+        readiness = "action_required"
+    elif validation_summary["warn"] > 0 or unresolved_systems > 0:
+        readiness = "ready_with_warnings"
+
+    return {
+        "project_summary": {
+            "project_name": str(settings.get("project_name") or "NetPi Project").strip() or "NetPi Project",
+            "generated_at": datetime.now().isoformat(),
+            "total_devices": total_devices,
+            "systems_count": system_groups,
+            "overall_attention_items": overall_attention,
+            "readiness": readiness,
+        },
+        "validation_summary": {
+            "count": int((validate_all or {}).get("count") or len(validate_all_results)),
+            "by_status": validation_summary,
+            "system_unresolved": unresolved_systems,
+            "connectivity_concerns": connectivity_concerns,
+            "connectivity_note": str((validate_systems or {}).get("connectivity_note") or "").strip(),
+        },
+        "requirements_summary": {
+            "count": int((system_requirements or {}).get("count") or len(system_requirement_rows)),
+            "device_requirements_count": int((requirements or {}).get("count") or len(requirements_results)),
+            "category_breakdown": requirements_category_breakdown,
+            "unmapped_devices": int(((requirements or {}).get("summary") or {}).get("unmapped") or 0),
+        },
+        "firewall_plan_summary": {
+            "total_rules": int(firewall_summary.get("total_rules") or len(firewall_rules)),
+            "min_required_rules": int(firewall_summary.get("min_required_rules") or 0),
+            "recommended_rules": int(firewall_summary.get("recommended_rules") or 0),
+            "zones": list(firewall_summary.get("zones") or []),
+            "top_rule_pairs": [
+                {
+                    "source_zone": row.get("source_zone") or "Unknown",
+                    "destination_zone": row.get("destination_zone") or "Unknown",
+                    "protocol": row.get("protocol") or "TCP",
+                    "port": row.get("port"),
+                    "requirement_level": row.get("requirement_level") or "recommended",
+                }
+                for row in firewall_rules[:10]
+            ],
+        },
+        "ip_schedule_summary": {
+            "count": int((ipschedule or {}).get("count") or len(schedule_rows)),
+            "missing_mac": schedule_missing_mac,
+            "missing_serial": schedule_missing_serial,
+            "missing_vlan": schedule_missing_vlan,
+            "manual_overrides": schedule_manual_overrides,
+        },
+        "recommendations_summary": {
+            "total": int(recommendation_summary.get("total") or len(recommendation_rows)),
+            "by_severity": recommendation_summary.get("by_severity") or {},
+            "by_category": recommendation_summary.get("by_category") or {},
+            "top_high_priority": top_high_recommendations,
+        },
+        "outstanding_risks": outstanding_risks,
+        "suggested_next_actions": suggested_next_actions,
+    }
+
+
+def _build_report_payload(payload):
+    payload = payload if isinstance(payload, dict) else {}
+    context = _build_recommendation_context(payload)
+    devices = list(context.get("devices") or [])
+    requirements = _build_requirements_payload_for_report(payload, devices)
+
+    ipschedule = payload.get("ipschedule")
+    if not (isinstance(ipschedule, dict) and isinstance(ipschedule.get("devices"), list)):
+        schedule_rows = _devices_with_freshness_view(devices if devices else load_devices())
+        ipschedule = {
+            "ok": True,
+            "count": len(schedule_rows),
+            "devices": schedule_rows,
+        }
+
+    recommendations_payload = payload.get("recommendations")
+    if isinstance(recommendations_payload, dict) and isinstance(recommendations_payload.get("recommendations"), list):
+        recommendations = recommendations_payload
+    else:
+        rec_result = _build_recommendations(context)
+        recommendations = {
+            "ok": True,
+            "recommendations": rec_result.get("recommendations") or [],
+            "summary": rec_result.get("summary") or {},
+        }
+
+    sections = _build_report_sections(payload, context, requirements, ipschedule, recommendations)
+    project_summary = sections.get("project_summary") or {}
+    settings = load_settings()
+
+    report = {
+        "generated_at": project_summary.get("generated_at") or datetime.now().isoformat(),
+        "project_name": project_summary.get("project_name") or str(settings.get("project_name") or "NetPi Project"),
+        "summary": project_summary,
+        "sections": sections,
+    }
+    report["html"] = render_template("report.html", report=report, s=settings)
+    return report
+
+
+@app.route("/tools/report")
+def tools_report():
+    try:
+        payload = {}
+        vlan = str(request.args.get("vlan") or "").strip()
+        if vlan:
+            payload["vlan"] = vlan
+        report = _build_report_payload(payload)
+        return report.get("html") or "", 200, {"Content-Type": "text/html; charset=utf-8"}
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/generate_report", methods=["POST"])
+def api_generate_report():
+    try:
+        payload = request.get_json(silent=True) or {}
+        report = _build_report_payload(payload)
+        return jsonify({
+            "ok": True,
+            "report": report,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
 @app.route("/tools/api/system_requirements", methods=["POST"])
 def api_system_requirements():
     try:

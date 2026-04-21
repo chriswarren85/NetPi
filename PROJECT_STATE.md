@@ -205,3 +205,15 @@
   - Requirements now includes a derivation explanation block per expanded row to clarify why protocol/port/service requirements were generated
   - Firewall rows now include `Why this rule?` explanation details based on purpose, business/AV justification, and evidence with truthful limited-evidence fallback
   - Recommendations cards now keep suggested action visible while moving finding/impact/evidence context into a consistent `Why this recommendation?` details panel
+### Last Update
+- Feature: W8.3 Full report generation
+- Files modified:
+  - app.py
+  - templates/report.html
+  - templates/dashboard.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added additive `POST /tools/api/generate_report` endpoint that aggregates validation, requirements, firewall plan, IP schedule, and recommendations into one structured report payload
+  - Added additive `/tools/report` route that renders the same aggregated report as printable PDF-ready HTML for browser print/save workflows
+  - Report output includes `report.summary`, `report.sections`, and `report.html` (full render string) to support both machine-readable and presentation-ready usage
+  - Added a Dashboard quick action (`Build Final Report`) linking directly to the live report view
