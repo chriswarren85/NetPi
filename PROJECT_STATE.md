@@ -128,3 +128,13 @@
   - Added required split between `min_required` and `recommended` rules and summary totals designed for future CSV/JSON export
   - Zone mapping uses requirement row VLAN/zone hints first, then settings-driven VLAN inference, with safe `Unknown`/`Unassigned` fallback labels when no trustworthy mapping is available
   - Confidence uses upstream values when present and conservative category defaults when missing; no persistence schema or existing endpoint shape changes were introduced
+### Last Update
+- Feature: W7.1 Firewall Plan screen live wiring
+- Files modified:
+  - templates/firewall.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Wired `templates/firewall.html` to live `POST /tools/api/generate_firewall_plan` and removed static/demo rule datasets
+  - Live table rendering now uses backend `firewall_plan.rules` with visible per-row `requirement_level` (`min_required` / `recommended`) and split section counts
+  - Filter bar is wired to live data for source zone, destination zone, system, and criticality with combined filtering and clean empty states
+  - CSV/JSON exports are wired to currently visible filtered rows with deterministic flattened fields for handover output

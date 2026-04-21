@@ -2,7 +2,7 @@
 {% block title %}- Firewall Plan{% endblock %}
 {% block content %}
 <div class="page-title">Firewall Plan</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - IT-facing allow-rule plan (demo skeleton data)</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - IT-facing allow-rule plan</div>
 
 <div class="panel">
   <div class="panel-header">
@@ -15,56 +15,33 @@
   <div class="panel-body">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
       <div>
-        <label for="fw-source-vlan">Source VLAN</label>
+        <label for="fw-source-vlan">Source Zone</label>
         <select id="fw-source-vlan" onchange="applyFirewallFilters()">
           <option value="">All</option>
-          <option value="AV_Control">AV_Control</option>
-          <option value="AV_Video">AV_Video</option>
-          <option value="Admin">Admin</option>
-          <option value="Infrastructure">Infrastructure</option>
         </select>
       </div>
       <div>
-        <label for="fw-destination-vlan">Destination VLAN</label>
+        <label for="fw-destination-vlan">Destination Zone</label>
         <select id="fw-destination-vlan" onchange="applyFirewallFilters()">
           <option value="">All</option>
-          <option value="AV_Control">AV_Control</option>
-          <option value="AV_Video">AV_Video</option>
-          <option value="Admin">Admin</option>
-          <option value="Infrastructure">Infrastructure</option>
         </select>
       </div>
       <div>
         <label for="fw-system">System</label>
         <select id="fw-system" onchange="applyFirewallFilters()">
           <option value="">All</option>
-          <option value="Boardroom A">Boardroom A</option>
-          <option value="Lecture Hall">Lecture Hall</option>
-          <option value="Campus Services">Campus Services</option>
-        </select>
-      </div>
-      <div>
-        <label for="fw-vendor">Vendor</label>
-        <select id="fw-vendor" onchange="applyFirewallFilters()">
-          <option value="">All</option>
-          <option value="Crestron">Crestron</option>
-          <option value="Q-SYS">Q-SYS</option>
-          <option value="Biamp">Biamp</option>
-          <option value="Multi-vendor">Multi-vendor</option>
         </select>
       </div>
       <div>
         <label for="fw-criticality">Criticality</label>
         <select id="fw-criticality" onchange="applyFirewallFilters()">
           <option value="">All</option>
-          <option value="Essential">Essential</option>
-          <option value="Recommended">Recommended</option>
+          <option value="min_required">min_required</option>
+          <option value="recommended">recommended</option>
         </select>
       </div>
     </div>
-    <div style="margin-top:8px;font-size:11px;color:#6b7280">
-      Demo note: filters and rule rows are static preview data to shape the firewall handoff workflow.
-    </div>
+    <div id="fw-status" style="margin-top:8px;font-size:11px;color:#6b7280">Loading firewall plan...</div>
   </div>
 </div>
 
@@ -72,12 +49,12 @@
   <div class="panel-header">
     <span>Deliverable Exports</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="stubFirewallExport('CSV')">Export CSV</button>
-      <button class="btn" onclick="stubFirewallExport('JSON')">Export JSON</button>
+      <button class="btn btn-primary" onclick="exportFirewallCsv()">Export CSV</button>
+      <button class="btn" onclick="exportFirewallJson()">Export JSON</button>
     </div>
   </div>
   <div class="panel-body">
-    <div style="font-size:12px;color:#9ca3af">Exports are stubbed in this demo stage; no file generation is implemented yet.</div>
+    <div style="font-size:12px;color:#9ca3af">Exports use the currently visible filtered firewall rules.</div>
   </div>
 </div>
 
@@ -90,8 +67,9 @@
     <table>
       <thead>
         <tr>
-          <th>Source</th>
-          <th>Destination</th>
+          <th>Rule</th>
+          <th>Source Zone</th>
+          <th>Destination Zone</th>
           <th>Port</th>
           <th>Protocol</th>
           <th>Direction</th>
@@ -116,8 +94,9 @@
     <table>
       <thead>
         <tr>
-          <th>Source</th>
-          <th>Destination</th>
+          <th>Rule</th>
+          <th>Source Zone</th>
+          <th>Destination Zone</th>
           <th>Port</th>
           <th>Protocol</th>
           <th>Direction</th>
@@ -134,113 +113,8 @@
 </div>
 
 <script>
-const firewallMinimumRules = [
-  {
-    source: 'AV_Control (CP4-Boardroom)',
-    destination: 'AV_Control (DSP-01)',
-    source_vlan: 'AV_Control',
-    destination_vlan: 'AV_Control',
-    system: 'Boardroom A',
-    vendor: 'Crestron',
-    criticality: 'Essential',
-    port: '443',
-    protocol: 'TCP',
-    direction: 'Outbound',
-    purpose: 'Control API',
-    business_justification: 'Required for scheduled room automation control.',
-    av_justification: 'Processor must reach DSP control API for command and status.',
-    confidence: 'High',
-    notes: 'Core control path; block causes automation loss.'
-  },
-  {
-    source: 'AV_Control (TP-Boardroom)',
-    destination: 'AV_Control (CP4-Boardroom)',
-    source_vlan: 'AV_Control',
-    destination_vlan: 'AV_Control',
-    system: 'Boardroom A',
-    vendor: 'Crestron',
-    criticality: 'Essential',
-    port: '41794',
-    protocol: 'TCP',
-    direction: 'Outbound',
-    purpose: 'Touchpanel control session',
-    business_justification: 'Maintains operator UI control in the room.',
-    av_justification: 'Touchpanel requires processor session for AV actions.',
-    confidence: 'High',
-    notes: 'Align with local ACL/firewall policy.'
-  },
-  {
-    source: 'AV_Video (QSYS-Core-01)',
-    destination: 'AV_Video (NV21-Lecture)',
-    source_vlan: 'AV_Video',
-    destination_vlan: 'AV_Video',
-    system: 'Lecture Hall',
-    vendor: 'Q-SYS',
-    criticality: 'Essential',
-    port: '443',
-    protocol: 'TCP',
-    direction: 'Outbound',
-    purpose: 'Management/control link',
-    business_justification: 'Required for scheduled lecture signal routing.',
-    av_justification: 'Q-SYS core manages NV endpoint configuration and state.',
-    confidence: 'Medium',
-    notes: 'Baseline secure management flow.'
-  }
-];
-
-const firewallRecommendedRules = [
-  {
-    source: 'Admin (Admin-WS-01)',
-    destination: 'AV_Video (Encoder-01)',
-    source_vlan: 'Admin',
-    destination_vlan: 'AV_Video',
-    system: 'Lecture Hall',
-    vendor: 'Multi-vendor',
-    criticality: 'Recommended',
-    port: '443',
-    protocol: 'TCP',
-    direction: 'Outbound',
-    purpose: 'Web UI administration',
-    business_justification: 'Improves support and troubleshooting speed.',
-    av_justification: 'Enables secure access to device management interfaces.',
-    confidence: 'Medium',
-    notes: 'Restrict to admin subnet and named support hosts.'
-  },
-  {
-    source: 'AV_Control (All managed devices)',
-    destination: 'Infrastructure (DNS-01)',
-    source_vlan: 'AV_Control',
-    destination_vlan: 'Infrastructure',
-    system: 'Campus Services',
-    vendor: 'Multi-vendor',
-    criticality: 'Recommended',
-    port: '53',
-    protocol: 'UDP/TCP',
-    direction: 'Outbound',
-    purpose: 'Name resolution',
-    business_justification: 'Stabilizes service reachability for support workflows.',
-    av_justification: 'Device services and integrations often depend on DNS.',
-    confidence: 'Medium',
-    notes: 'Applies to managed services and diagnostics.'
-  },
-  {
-    source: 'AV_Control (All managed devices)',
-    destination: 'Infrastructure (NTP-01)',
-    source_vlan: 'AV_Control',
-    destination_vlan: 'Infrastructure',
-    system: 'Campus Services',
-    vendor: 'Multi-vendor',
-    criticality: 'Recommended',
-    port: '123',
-    protocol: 'UDP',
-    direction: 'Outbound',
-    purpose: 'Time sync',
-    business_justification: 'Supports accurate logging and incident correlation.',
-    av_justification: 'AV event timelines and troubleshooting need consistent time.',
-    confidence: 'Medium',
-    notes: 'Use approved enterprise time source.'
-  }
-];
+let firewallAllRules = [];
+let firewallFilteredRules = [];
 
 function escapeHtml(str){
   return String(str || '')
@@ -251,62 +125,181 @@ function escapeHtml(str){
     .replace(/'/g, '&#039;');
 }
 
+function normalizeList(value){
+  if(Array.isArray(value)) return value.filter(Boolean).map(v => String(v));
+  if(!value) return [];
+  return [String(value)];
+}
+
+function normalizeRule(rule){
+  const sourceSystems = normalizeList(rule.source_systems);
+  const sourceDevices = normalizeList(rule.source_devices);
+  const destinationDevices = normalizeList(rule.destination_devices);
+  const evidence = normalizeList(rule.evidence);
+  const ports = Array.isArray(rule.ports) ? rule.ports.filter(p => Number.isInteger(p)) : [];
+  const protocol = String(rule.protocol || 'TCP').toUpperCase();
+  const requirementLevel = String(rule.requirement_level || 'recommended').toLowerCase();
+  const port = Number.isInteger(rule.port) ? rule.port : null;
+
+  return {
+    rule_id: String(rule.rule_id || ''),
+    requirement_level: requirementLevel === 'min_required' ? 'min_required' : 'recommended',
+    category: String(rule.category || 'unknown'),
+    source_zone: String(rule.source_zone || 'Unknown'),
+    destination_zone: String(rule.destination_zone || 'Unknown'),
+    direction: String(rule.direction || 'source_to_destination'),
+    protocol: protocol,
+    port: port,
+    ports: ports,
+    purpose: String(rule.purpose || ''),
+    business_justification: String(rule.business_justification || ''),
+    av_justification: String(rule.av_justification || ''),
+    confidence: Number.isInteger(rule.confidence) ? rule.confidence : '',
+    source_systems: sourceSystems,
+    source_devices: sourceDevices,
+    destination_devices: destinationDevices,
+    evidence: evidence
+  };
+}
+
+function setFirewallStatus(message, color){
+  const status = document.getElementById('fw-status');
+  if(!status) return;
+  status.textContent = message || '';
+  status.style.color = color || '#6b7280';
+}
+
+function setFilterOptions(id, values){
+  const select = document.getElementById(id);
+  if(!select) return;
+  const currentValue = select.value || '';
+  const uniqueValues = Array.from(new Set((values || []).filter(Boolean).map(v => String(v)))).sort();
+  select.innerHTML = '<option value="">All</option>' + uniqueValues.map(v => (
+    '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'
+  )).join('');
+  if(uniqueValues.includes(currentValue)) select.value = currentValue;
+}
+
+function loadFirewallPlan(){
+  setFirewallStatus('Loading firewall plan...', '#6b7280');
+  fetch('/tools/api/generate_firewall_plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  })
+    .then(resp => resp.json())
+    .then(data => {
+      if(!data || data.ok !== true){
+        throw new Error((data && data.error) || 'Firewall plan request failed');
+      }
+      const plan = data.firewall_plan || {};
+      const rules = Array.isArray(plan.rules) ? plan.rules : [];
+      firewallAllRules = rules.map(normalizeRule);
+      setFilterOptions('fw-source-vlan', firewallAllRules.map(r => r.source_zone));
+      setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
+      setFilterOptions('fw-system', firewallAllRules.flatMap(r => r.source_systems));
+      applyFirewallFilters();
+      if(firewallAllRules.length){
+        setFirewallStatus('Loaded ' + firewallAllRules.length + ' firewall rule' + (firewallAllRules.length === 1 ? '' : 's') + '.', '#6b7280');
+      } else {
+        setFirewallStatus('No firewall rules generated yet. Add devices and run system validation first.', '#6b7280');
+      }
+    })
+    .catch(err => {
+      firewallAllRules = [];
+      firewallFilteredRules = [];
+      renderFirewallRows('fw-min-rows', []);
+      renderFirewallRows('fw-rec-rows', []);
+      updateRuleCounts([], []);
+      setFirewallStatus('Unable to load firewall plan: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+    });
+}
+
 function getFilters(){
   return {
-    source_vlan: document.getElementById('fw-source-vlan')?.value || '',
-    destination_vlan: document.getElementById('fw-destination-vlan')?.value || '',
+    source_zone: document.getElementById('fw-source-vlan')?.value || '',
+    destination_zone: document.getElementById('fw-destination-vlan')?.value || '',
     system: document.getElementById('fw-system')?.value || '',
-    vendor: document.getElementById('fw-vendor')?.value || '',
     criticality: document.getElementById('fw-criticality')?.value || ''
   };
 }
 
 function matchesFilters(rule, filters){
-  if(filters.source_vlan && rule.source_vlan !== filters.source_vlan) return false;
-  if(filters.destination_vlan && rule.destination_vlan !== filters.destination_vlan) return false;
-  if(filters.system && rule.system !== filters.system) return false;
-  if(filters.vendor && rule.vendor !== filters.vendor) return false;
-  if(filters.criticality && rule.criticality !== filters.criticality) return false;
+  if(filters.source_zone && rule.source_zone !== filters.source_zone) return false;
+  if(filters.destination_zone && rule.destination_zone !== filters.destination_zone) return false;
+  if(filters.system && !rule.source_systems.includes(filters.system)) return false;
+  if(filters.criticality && rule.requirement_level !== filters.criticality) return false;
   return true;
+}
+
+function formatRuleLabel(rule){
+  const levelClass = rule.requirement_level === 'min_required' ? 'badge-red' : 'badge-amber';
+  return (
+    '<div style="display:flex;flex-direction:column;gap:4px">'
+    + '<div>' + escapeHtml(rule.rule_id || 'Unnumbered') + '</div>'
+    + '<div><span class="badge ' + levelClass + '">' + escapeHtml(rule.requirement_level) + '</span></div>'
+    + '</div>'
+  );
+}
+
+function formatPorts(rule){
+  if(Number.isInteger(rule.port)) return String(rule.port);
+  if(rule.ports.length) return rule.ports.join(', ');
+  return '-';
+}
+
+function formatNotes(rule){
+  const pieces = [];
+  if(rule.source_systems.length) pieces.push('Systems: ' + rule.source_systems.join(', '));
+  if(rule.source_devices.length) pieces.push('Src devices: ' + rule.source_devices.join(', '));
+  if(rule.destination_devices.length) pieces.push('Dst devices: ' + rule.destination_devices.join(', '));
+  if(rule.evidence.length) pieces.push('Evidence: ' + rule.evidence.join(' | '));
+  return pieces.join(' | ');
 }
 
 function renderFirewallRows(id, rows){
   const tbody = document.getElementById(id);
   if(!tbody) return;
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#6b7280;text-align:center;padding:1rem">No demo rules for selected filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:1rem">No rules for selected filters.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(rule => (
     '<tr>'
-    + '<td>' + escapeHtml(rule.source) + '</td>'
-    + '<td>' + escapeHtml(rule.destination) + '</td>'
-    + '<td>' + escapeHtml(rule.port) + '</td>'
+    + '<td>' + formatRuleLabel(rule) + '</td>'
+    + '<td>' + escapeHtml(rule.source_zone) + '</td>'
+    + '<td>' + escapeHtml(rule.destination_zone) + '</td>'
+    + '<td>' + escapeHtml(formatPorts(rule)) + '</td>'
     + '<td>' + escapeHtml(rule.protocol) + '</td>'
     + '<td>' + escapeHtml(rule.direction) + '</td>'
     + '<td>' + escapeHtml(rule.purpose) + '</td>'
     + '<td>' + escapeHtml(rule.business_justification) + '</td>'
     + '<td>' + escapeHtml(rule.av_justification) + '</td>'
     + '<td>' + escapeHtml(rule.confidence) + '</td>'
-    + '<td>' + escapeHtml(rule.notes) + '</td>'
+    + '<td>' + escapeHtml(formatNotes(rule)) + '</td>'
     + '</tr>'
   )).join('');
 }
 
-function applyFirewallFilters(){
-  const filters = getFilters();
-  const minimum = firewallMinimumRules.filter(rule => matchesFilters(rule, filters));
-  const recommended = firewallRecommendedRules.filter(rule => matchesFilters(rule, filters));
-  renderFirewallRows('fw-min-rows', minimum);
-  renderFirewallRows('fw-rec-rows', recommended);
+function updateRuleCounts(minimum, recommended){
   const minCount = document.getElementById('fw-min-count');
   const recCount = document.getElementById('fw-rec-count');
   if(minCount) minCount.textContent = minimum.length + (minimum.length === 1 ? ' rule' : ' rules');
   if(recCount) recCount.textContent = recommended.length + (recommended.length === 1 ? ' rule' : ' rules');
 }
 
+function applyFirewallFilters(){
+  const filters = getFilters();
+  firewallFilteredRules = firewallAllRules.filter(rule => matchesFilters(rule, filters));
+  const minimum = firewallFilteredRules.filter(rule => rule.requirement_level === 'min_required');
+  const recommended = firewallFilteredRules.filter(rule => rule.requirement_level === 'recommended');
+  renderFirewallRows('fw-min-rows', minimum);
+  renderFirewallRows('fw-rec-rows', recommended);
+  updateRuleCounts(minimum, recommended);
+}
+
 function resetFirewallFilters(){
-  const ids = ['fw-source-vlan', 'fw-destination-vlan', 'fw-system', 'fw-vendor', 'fw-criticality'];
+  const ids = ['fw-source-vlan', 'fw-destination-vlan', 'fw-system', 'fw-criticality'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if(el) el.value = '';
@@ -314,10 +307,78 @@ function resetFirewallFilters(){
   applyFirewallFilters();
 }
 
-function stubFirewallExport(fmt){
-  window.alert('Demo only: Export ' + fmt + ' is a stub in this skeleton page. No file is generated yet.');
+function csvCell(value){
+  const text = String(value == null ? '' : value).replace(/"/g, '""');
+  return '"' + text + '"';
 }
 
-applyFirewallFilters();
+function downloadText(content, filename, mimeType){
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function exportFirewallCsv(){
+  const rows = firewallFilteredRules.slice();
+  const headers = [
+    'Rule ID',
+    'Requirement Level',
+    'Category',
+    'Source Zone',
+    'Destination Zone',
+    'Direction',
+    'Protocol',
+    'Port',
+    'Ports',
+    'Purpose',
+    'Business Justification',
+    'AV Justification',
+    'Confidence',
+    'Source Systems',
+    'Source Devices',
+    'Destination Devices',
+    'Evidence'
+  ];
+  const lines = [headers.map(csvCell).join(',')];
+  rows.forEach(rule => {
+    lines.push([
+      rule.rule_id,
+      rule.requirement_level,
+      rule.category,
+      rule.source_zone,
+      rule.destination_zone,
+      rule.direction,
+      rule.protocol,
+      Number.isInteger(rule.port) ? rule.port : '',
+      rule.ports.join('|'),
+      rule.purpose,
+      rule.business_justification,
+      rule.av_justification,
+      rule.confidence,
+      rule.source_systems.join('|'),
+      rule.source_devices.join('|'),
+      rule.destination_devices.join('|'),
+      rule.evidence.join('|')
+    ].map(csvCell).join(','));
+  });
+  downloadText(lines.join('\n'), 'firewall_plan.csv', 'text/csv;charset=utf-8');
+}
+
+function exportFirewallJson(){
+  const payload = {
+    exported_at: new Date().toISOString(),
+    rows_exported: firewallFilteredRules.length,
+    rules: firewallFilteredRules
+  };
+  downloadText(JSON.stringify(payload, null, 2), 'firewall_plan.json', 'application/json;charset=utf-8');
+}
+
+loadFirewallPlan();
 </script>
 {% endblock %}
