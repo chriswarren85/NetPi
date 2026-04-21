@@ -2,144 +2,52 @@
 {% block title %}- Recommendations{% endblock %}
 {% block content %}
 <div class="page-title">Recommendations</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Consultant-style advisory guidance (demo skeleton data)</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Consultant-style advisory guidance</div>
 
 <div class="cards">
   <div class="card">
     <div class="card-label">High Severity</div>
     <div class="card-value" id="rec-high-count" style="color:#f87171">0</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
     <div class="card-label">Medium Severity</div>
     <div class="card-value" id="rec-medium-count" style="color:#fbbf24">0</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
     <div class="card-label">Low Severity</div>
     <div class="card-value" id="rec-low-count" style="color:#4ade80">0</div>
-    <div class="card-sub">Demo metric</div>
+    <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
-    <div class="card-label">Readiness</div>
-    <div class="card-value" style="color:#93c5fd">Moderate</div>
-    <div class="card-sub">Demo advisory signal</div>
+    <div class="card-label">Total Recommendations</div>
+    <div class="card-value" id="rec-total-count" style="color:#93c5fd">0</div>
+    <div class="card-sub">Live metric</div>
   </div>
 </div>
 
 <div class="panel">
   <div class="panel-header">Recommendation Groups</div>
   <div class="panel-body">
-    <div style="font-size:12px;color:#9ca3af">
-      Demo note: these recommendations are static preview content to establish advisory structure and triage flow.
-    </div>
+    <div id="rec-status" style="font-size:12px;color:#9ca3af">Loading recommendations...</div>
   </div>
 </div>
 
 <div id="recommendation-sections"></div>
 
 <script>
-const recommendationSections = [
-  {
-    section: 'Integrity Risks',
-    cards: [
-      {
-        title: 'Unresolved device identities before commissioning freeze',
-        severity: 'High',
-        finding: 'Several staged devices still use weak or unresolved type identity labels.',
-        why: 'Ambiguous identities increase handoff friction and can produce unclear control and firewall expectations.',
-        action: 'Normalize unresolved device types before final commissioning sign-off and export steps.',
-        evidence: 'Observed device inventory + operator-entered metadata completeness preview.'
-      }
-    ]
-  },
-  {
-    section: 'Design Concerns',
-    cards: [
-      {
-        title: 'Mixed management and media traffic paths',
-        severity: 'Medium',
-        finding: 'Control and media services appear grouped in overlapping network paths.',
-        why: 'Mixed traffic design can complicate troubleshooting and increase operational coupling between services.',
-        action: 'Document and separate control-plane versus media-plane paths where practical.',
-        evidence: 'Requirements screen preview + firewall plan draft review.'
-      }
-    ]
-  },
-  {
-    section: 'Segmentation',
-    cards: [
-      {
-        title: 'Dante isolation not explicitly defined',
-        severity: 'High',
-        finding: 'No dedicated segmentation recommendation is captured for Dante-class endpoints.',
-        why: 'Shared VLAN placement can increase multicast spillover and reduce AV troubleshooting clarity.',
-        action: 'Create a dedicated audio transport segment and define explicit boundary policy.',
-        evidence: 'VLAN settings preview + discovered endpoint role mix.'
-      },
-      {
-        title: 'Control-system dependencies span broad network scope',
-        severity: 'Medium',
-        finding: 'Control processor dependencies appear to cross broader segments than necessary.',
-        why: 'Overly broad access raises policy management complexity and audit effort.',
-        action: 'Constrain control dependencies to the minimum required segment matrix.',
-        evidence: 'Firewall plan minimum-required vs recommended split.'
-      }
-    ]
-  },
-  {
-    section: 'DHCP',
-    cards: [
-      {
-        title: 'Reserve critical AV endpoint addresses',
-        severity: 'Medium',
-        finding: 'Key endpoints such as encoders/decoders and presentation controllers have no reservation strategy noted.',
-        why: 'Address drift can break control mappings and delay incident recovery.',
-        action: 'Define DHCP reservations for critical AV endpoints and include them in handoff docs.',
-        evidence: 'Discovery results + staged device list naming patterns.'
-      }
-    ]
-  },
-  {
-    section: 'Multicast',
-    cards: [
-      {
-        title: 'IGMP querier responsibility not confirmed',
-        severity: 'High',
-        finding: 'Multicast-dependent segments do not show an explicit querier ownership note.',
-        why: 'Without clear querier behavior, stream stability may degrade under real load.',
-        action: 'Confirm querier placement and document expected multicast boundaries per AV VLAN.',
-        evidence: 'Validation preview + AV video VLAN intent from settings.'
-      }
-    ]
-  },
-  {
-    section: 'Security',
-    cards: [
-      {
-        title: 'Firewall draft not yet verified against live validation',
-        severity: 'Medium',
-        finding: 'Firewall allow-list structure exists, but verification mapping is still staged.',
-        why: 'Unverified allow lists may pass review yet fail during commissioning day operations.',
-        action: 'Run targeted validation checks against minimum-required firewall paths before release.',
-        evidence: 'Firewall plan draft + validation preview mode outputs.'
-      }
-    ]
-  },
-  {
-    section: 'Commissioning Readiness',
-    cards: [
-      {
-        title: 'Metadata completeness could slow client handoff',
-        severity: 'Low',
-        finding: 'Some records remain partially complete for serial/zone-like fields.',
-        why: 'Incomplete metadata does not block execution but reduces delivery quality and support readiness.',
-        action: 'Complete key metadata fields before final documentation export.',
-        evidence: 'Device drawer metadata-gap indicators.'
-      }
-    ]
-  }
-];
+const categoryOrder = ['integrity', 'design', 'segmentation', 'DHCP', 'multicast', 'security', 'commissioning_readiness'];
+const categoryLabels = {
+  integrity: 'Integrity',
+  design: 'Design',
+  segmentation: 'Segmentation',
+  DHCP: 'DHCP',
+  multicast: 'Multicast',
+  security: 'Security',
+  commissioning_readiness: 'Commissioning Readiness'
+};
+let recommendationRows = [];
 
 function escapeHtml(str){
   return String(str || '')
@@ -150,65 +58,166 @@ function escapeHtml(str){
     .replace(/'/g, '&#039;');
 }
 
+function setStatus(message, tone){
+  const el = document.getElementById('rec-status');
+  if(!el) return;
+  el.textContent = message || '';
+  if(tone === 'error') el.style.color = '#f87171';
+  else el.style.color = '#9ca3af';
+}
+
+function normalizeSeverity(value){
+  const s = String(value || '').trim().toLowerCase();
+  if(['high', 'medium', 'low', 'info'].includes(s)) return s;
+  return 'info';
+}
+
 function severityBadge(severity){
-  const tone = severity === 'High'
+  const normalized = normalizeSeverity(severity);
+  const tone = normalized === 'high'
     ? 'badge-red'
-    : (severity === 'Medium' ? 'badge-amber' : 'badge-green');
-  return '<span class="badge ' + tone + '">' + escapeHtml(severity) + '</span>';
+    : (normalized === 'medium'
+      ? 'badge-amber'
+      : (normalized === 'low' ? 'badge-green' : 'badge-blue'));
+  return '<span class="badge ' + tone + '">' + escapeHtml(normalized) + '</span>';
+}
+
+function linkForEvidenceSource(source){
+  const key = String(source || '').trim().toLowerCase();
+  if(key.includes('validate_all.results')) return '/tools/validation';
+  if(key.includes('validate_systems')) return '/tools/validation';
+  if(key.includes('system_requirements.results')) return '/tools/firewall';
+  if(key.includes('generate_firewall_plan')) return '/tools/firewall';
+  if(key.includes('devices.json')) return '/tools/devices';
+  return '/tools/recommendations';
+}
+
+function renderEvidenceLinks(row){
+  const sources = Array.isArray(row.evidence_source) ? row.evidence_source : [];
+  if(!sources.length) return '<span style="color:#9ca3af">No evidence source provided.</span>';
+  return sources.map(source => {
+    const href = linkForEvidenceSource(source);
+    return '<a href="' + escapeHtml(href) + '" style="color:#93c5fd;text-decoration:none;margin-right:8px">' + escapeHtml(source) + '</a>';
+  }).join('');
+}
+
+function renderAffectedDevices(row){
+  const devices = Array.isArray(row.affected_devices) ? row.affected_devices : [];
+  if(!devices.length) return '<span style="color:#9ca3af">No specific affected devices listed.</span>';
+  return devices.slice(0, 8).map(name => (
+    '<span class="badge badge-blue" style="margin-right:6px;margin-bottom:4px;display:inline-block">' + escapeHtml(name) + '</span>'
+  )).join('');
+}
+
+function updateSummaryCards(summary){
+  const severity = (summary && summary.by_severity) || {};
+  const high = Number(severity.high || 0);
+  const medium = Number(severity.medium || 0);
+  const low = Number(severity.low || 0);
+  const info = Number(severity.info || 0);
+  const total = Number((summary && summary.total) || (high + medium + low + info));
+
+  const highEl = document.getElementById('rec-high-count');
+  const mediumEl = document.getElementById('rec-medium-count');
+  const lowEl = document.getElementById('rec-low-count');
+  const totalEl = document.getElementById('rec-total-count');
+  if(highEl) highEl.textContent = String(high);
+  if(mediumEl) mediumEl.textContent = String(medium);
+  if(lowEl) lowEl.textContent = String(low);
+  if(totalEl) totalEl.textContent = String(total);
+}
+
+function groupByCategory(rows){
+  const grouped = {};
+  categoryOrder.forEach(category => { grouped[category] = []; });
+  (rows || []).forEach(row => {
+    const category = String(row.category || '').trim();
+    if(grouped[category]) grouped[category].push(row);
+    else{
+      if(!grouped.misc) grouped.misc = [];
+      grouped.misc.push(row);
+    }
+  });
+  return grouped;
 }
 
 function renderRecommendations(){
   const root = document.getElementById('recommendation-sections');
   if(!root) return;
-
-  let high = 0;
-  let medium = 0;
-  let low = 0;
   root.innerHTML = '';
 
-  recommendationSections.forEach(group => {
-    const cards = Array.isArray(group.cards) ? group.cards : [];
-    cards.forEach(card => {
-      if(card.severity === 'High') high += 1;
-      else if(card.severity === 'Medium') medium += 1;
-      else low += 1;
-    });
+  if(!recommendationRows.length){
+    root.innerHTML = '<div class="panel"><div class="panel-body" style="font-size:12px;color:#9ca3af">No recommendations generated from current evidence.</div></div>';
+    return;
+  }
 
+  const grouped = groupByCategory(recommendationRows);
+  const orderedCategories = categoryOrder.concat(grouped.misc ? ['misc'] : []);
+
+  orderedCategories.forEach(category => {
+    const cards = grouped[category] || [];
+    if(!cards.length) return;
+
+    const label = category === 'misc' ? 'Other' : (categoryLabels[category] || category);
     const panel = document.createElement('div');
     panel.className = 'panel';
     panel.innerHTML =
-      '<div class="panel-header">' + escapeHtml(group.section) + '</div>'
+      '<div class="panel-header">' + escapeHtml(label) + ' <span style="font-size:11px;color:#9ca3af">' + cards.length + ' recommendation(s)</span></div>'
       + '<div class="panel-body">'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;">'
       + cards.map(card => (
         '<div style="border:1px solid #374151;border-radius:8px;padding:10px;background:#0f172a;">'
         + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px;">'
-        + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title) + '</div>'
+        + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title || '') + '</div>'
         + severityBadge(card.severity)
         + '</div>'
         + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Finding</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.finding) + '</div>'
+        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.finding || '') + '</div>'
         + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why it matters</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.why) + '</div>'
+        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.why_it_matters || '') + '</div>'
         + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Suggested action</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.action) + '</div>'
+        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.suggested_action || '') + '</div>'
+        + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Affected devices</div>'
+        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + renderAffectedDevices(card) + '</div>'
         + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Evidence source</div>'
-        + '<div style="font-size:12px;color:#93c5fd;">' + escapeHtml(card.evidence) + '</div>'
+        + '<div style="font-size:12px;color:#93c5fd;">' + renderEvidenceLinks(card) + '</div>'
         + '</div>'
       )).join('')
       + '</div>'
       + '</div>';
     root.appendChild(panel);
   });
-
-  const highEl = document.getElementById('rec-high-count');
-  const mediumEl = document.getElementById('rec-medium-count');
-  const lowEl = document.getElementById('rec-low-count');
-  if(highEl) highEl.textContent = String(high);
-  if(mediumEl) mediumEl.textContent = String(medium);
-  if(lowEl) lowEl.textContent = String(low);
 }
 
-renderRecommendations();
+function loadRecommendations(){
+  setStatus('Loading recommendations...');
+  fetch('/tools/api/recommendations', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  })
+    .then(resp => resp.json())
+    .then(data => {
+      if(!data || data.ok !== true){
+        throw new Error((data && data.error) || 'Recommendations request failed');
+      }
+      recommendationRows = Array.isArray(data.recommendations) ? data.recommendations : [];
+      updateSummaryCards(data.summary || {});
+      renderRecommendations();
+      if(recommendationRows.length){
+        setStatus('Loaded ' + recommendationRows.length + ' recommendation(s).');
+      } else {
+        setStatus('No recommendations generated from current evidence.');
+      }
+    })
+    .catch(err => {
+      recommendationRows = [];
+      updateSummaryCards({total: 0, by_severity: {high: 0, medium: 0, low: 0, info: 0}});
+      renderRecommendations();
+      setStatus('Unable to load recommendations: ' + (err && err.message ? err.message : 'unknown error'), 'error');
+    });
+}
+
+loadRecommendations();
 </script>
 {% endblock %}

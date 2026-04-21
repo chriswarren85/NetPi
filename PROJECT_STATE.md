@@ -181,3 +181,13 @@
   - Implemented deterministic category/severity mapping, deduplication, stable ordering, and summary grouping (`by_severity`, `by_category`) for UI/report compatibility
   - Added explicit AV-focused recommendation template coverage for Dante segmentation/multicast, DHCP reservations, VLAN fragmentation, unvalidated control ports, Barco advisory handling, control relationship concerns, low-confidence types, metadata gaps, and security exposure
   - Endpoint accepts wrapper payload inputs or empty payload fallback and keeps evidence traceability via `evidence_source` and `affected_devices` fields
+### Last Update
+- Feature: W8.1 Recommendations screen wiring
+- Files modified:
+  - templates/recommendations.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Wired recommendations screen to live `POST /tools/api/recommendations` data and removed static/demo recommendation content
+  - Implemented category-first recommendation grouping (`integrity`, `design`, `segmentation`, `DHCP`, `multicast`, `security`, `commissioning_readiness`) with deterministic ordering
+  - Added severity badge rendering from backend values and live summary card counts
+  - Added evidence source links mapped to relevant existing working screens plus affected-device context rendering
