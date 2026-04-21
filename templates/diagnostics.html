@@ -286,6 +286,7 @@ function renderDiscoveredHosts(devices, subnet, state){
 
   latestDiscoveredDevices.forEach(d => {
     const hostname = d.hostname || '';
+    const discoveredMac = d.mac || d.mac_address || '';
     const ipKey = (d.ip || '').replace(/\./g, '-');
     const fingerprint = fingerprintResults[d.ip] || null;
     const fingerprintPorts = Array.isArray(fingerprint?.open_ports) ? fingerprint.open_ports : [];
@@ -304,7 +305,7 @@ function renderDiscoveredHosts(devices, subnet, state){
       <td>${hostname ? escapeHtml(hostname) : '<span style="color:#6b7280">-</span>'}</td>
       <td style="font-family:monospace">${escapeHtml(d.ip)}</td>
       <td style="font-size:11px;color:#9ca3af">
-        ${d.mac ? `<div style="font-family:monospace">${escapeHtml(d.mac)}</div>` : '<div>-</div>'}
+        ${discoveredMac ? `<div style="font-family:monospace">${escapeHtml(discoveredMac)}</div>` : '<div>-</div>'}
         ${d.vendor ? `<div>${escapeHtml(d.vendor)}</div>` : ''}
       </td>
       <td>${statusBadge(d.status)}</td>

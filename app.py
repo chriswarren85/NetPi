@@ -14,6 +14,7 @@ from command_helpers import (
     build_nmap_host_discovery_command,
     build_ping_command,
     build_traceroute_command,
+    build_arp_lookup_commands,
 )
 from checks.network import run_base_checks
 from checks.devices import run_device_checks
@@ -589,6 +590,37 @@ def _persist_discovery_macs(discovered_devices):
             pass
 
 
+def _extract_mac_from_neighbor_output(output_text):
+    mac_match = re.search(r'([0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5})', str(output_text or ''))
+    if not mac_match:
+        return ""
+    return _normalize_mac_value(mac_match.group(1))
+
+
+def _lookup_cached_mac_for_ip(ip):
+    target_ip = str(ip or "").strip()
+    if not target_ip:
+        return ""
+
+    for command in build_arp_lookup_commands(target_ip):
+        if not command:
+            continue
+        try:
+            output = subprocess.check_output(
+                command,
+                stderr=subprocess.DEVNULL,
+                timeout=1.2
+            ).decode(errors='ignore')
+        except Exception:
+            continue
+
+        resolved = _extract_mac_from_neighbor_output(output)
+        if resolved:
+            return resolved
+
+    return ""
+
+
 def _parse_discovery_line(line):
     if 'Host:' not in line:
         return None
@@ -618,6 +650,9 @@ def _parse_discovery_line(line):
         except Exception:
             mac = ''
             vendor = ''
+
+    if not _normalize_mac_value(mac):
+        mac = _lookup_cached_mac_for_ip(ip) or ""
 
     if not hostname:
         try:
@@ -666,6 +701,8 @@ def _parse_discovery_line(line):
         "ip": ip,
         "hostname": hostname,
         "mac": normalized_mac or "",
+        "mac_address": normalized_mac or None,
+        "mac_source": "arp-cache" if normalized_mac else "unknown",
         "vendor": vendor,
         "guessed_type": guess_type_from_vendor(vendor),
         "status": "online"
