@@ -159,3 +159,15 @@
   - Implemented Live / Logical / Restricted modes with distinct data paths (Logical uses system-oriented validation only; Restricted scopes validation using configured VLAN when available)
   - Populated by-system, by-flow, and by-device tabs from truthful backend response fields with safe empty/error handling
   - Added deterministic per-row recommended actions derived from status and validation context while preserving existing Devices page validation behavior
+### Last Update
+- Feature: W7.4 Dashboard wiring
+- Files modified:
+  - app.py
+  - templates/base.html
+  - templates/dashboard.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added additive `/tools/dashboard` page route and sidebar navigation entry without changing existing screen routes
+  - Wired dashboard summary cards to live app data from existing endpoints (`/tools/api/ipschedule`, `/tools/api/validate_all`, `/tools/api/validate_systems`, `/tools/api/system_requirements`, `/tools/api/generate_firewall_plan`)
+  - Added live attention panels for missing metadata, low-confidence device types, and validation/flow concerns using conservative derivation from truthful existing fields
+  - Added real quick-action links to Devices, Validation, Firewall Plan, and IP Schedule with partial-failure-safe dashboard rendering

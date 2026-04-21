@@ -64,6 +64,7 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   <div class="sidebar-logo">Net<span>Pi</span></div>
   <div class="project-label" id="sidebar-project">No project loaded</div>
   <div class="nav-section">Diagnostics</div>
+  <a href="/tools/dashboard" class="nav-item {% if request.path == '/tools/dashboard' %}active{% endif %}"><span class="nav-dot blue"></span>Dashboard</a>
   <a href="/tools/diagnostics" class="nav-item {% if request.path == '/tools/diagnostics' %}active{% endif %}"><span class="nav-dot green"></span>Run checks</a>
   <a href="/tools/intake" class="nav-item {% if request.path == '/tools/intake' %}active{% endif %}"><span class="nav-dot amber"></span>Device intake</a>
   <a href="/tools/devices" class="nav-item {% if request.path == '/tools/devices' %}active{% endif %}"><span class="nav-dot blue"></span>Devices</a>

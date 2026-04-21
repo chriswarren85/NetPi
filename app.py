@@ -2463,6 +2463,11 @@ def diagnostics():
     return render_template('diagnostics.html', s=load_settings())
 
 
+@app.route('/tools/dashboard')
+def dashboard():
+    return render_template('dashboard.html', s=load_settings())
+
+
 @app.route('/tools/devices')
 def devices():
     return render_template('devices.html', s=load_settings(), devices=_devices_with_freshness_view(load_devices()))
