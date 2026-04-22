@@ -62,6 +62,7 @@ DEVICES_FILE  = os.path.join(os.path.dirname(__file__), 'devices.json')
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
 DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, 'device_evidence.json')
+TOPOLOGY_FILE = os.path.join(os.path.dirname(__file__), 'topology.json')
 BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
@@ -975,6 +976,19 @@ SNMP_INTERFACE_OIDS = {
 SNMP_MAX_INTERFACES = 12
 SNMP_TIMEOUT_SECONDS = 1
 SNMP_RETRIES = 0
+TOPOLOGY_SNMP_MAX_ROWS = 64
+TOPOLOGY_SNMP_MAX_PORT_ROWS = 128
+LLDP_LOC_PORT_ID_OID = "1.0.8802.1.1.2.1.3.7.1.3"
+LLDP_LOC_PORT_DESC_OID = "1.0.8802.1.1.2.1.3.7.1.4"
+LLDP_REM_CHASSIS_ID_OID = "1.0.8802.1.1.2.1.4.1.1.5"
+LLDP_REM_PORT_ID_OID = "1.0.8802.1.1.2.1.4.1.1.7"
+LLDP_REM_PORT_DESC_OID = "1.0.8802.1.1.2.1.4.1.1.8"
+LLDP_REM_SYS_NAME_OID = "1.0.8802.1.1.2.1.4.1.1.9"
+IF_NAME_OID = "1.3.6.1.2.1.31.1.1.1.1"
+IF_DESCR_OID = "1.3.6.1.2.1.2.2.1.2"
+CDP_CACHE_ADDRESS_OID = "1.3.6.1.4.1.9.9.23.1.2.1.1.4"
+CDP_CACHE_DEVICE_ID_OID = "1.3.6.1.4.1.9.9.23.1.2.1.1.6"
+CDP_CACHE_DEVICE_PORT_OID = "1.3.6.1.4.1.9.9.23.1.2.1.1.7"
 
 
 def _safe_snmp_text(value):
@@ -1253,6 +1267,557 @@ def _best_effort_snmp_enrich_device(device, validation_result=None, settings=Non
     if validation_result is not None:
         _apply_snmp_to_validation_result(validation_result, device)
     return changed
+
+
+def _load_topology_defaults():
+    return {
+        "topology": [],
+        "generated_at": "",
+        "switches_considered": 0,
+        "switches_queried": 0,
+    }
+
+
+def load_topology_snapshot():
+    defaults = _load_topology_defaults()
+    if not os.path.exists(TOPOLOGY_FILE):
+        return copy.deepcopy(defaults)
+
+    try:
+        with open(TOPOLOGY_FILE, encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return copy.deepcopy(defaults)
+
+    if isinstance(data, list):
+        payload = copy.deepcopy(defaults)
+        payload["topology"] = [row for row in data if isinstance(row, dict)]
+        return payload
+
+    if not isinstance(data, dict):
+        return copy.deepcopy(defaults)
+
+    payload = copy.deepcopy(defaults)
+    payload["topology"] = [row for row in (data.get("topology") or []) if isinstance(row, dict)]
+    payload["generated_at"] = str(data.get("generated_at") or "").strip()
+    payload["switches_considered"] = int(data.get("switches_considered") or 0)
+    payload["switches_queried"] = int(data.get("switches_queried") or 0)
+    return payload
+
+
+def save_topology_snapshot(data):
+    payload = _load_topology_defaults()
+    payload["topology"] = [copy.deepcopy(row) for row in (data or {}).get("topology") or [] if isinstance(row, dict)]
+    payload["generated_at"] = str((data or {}).get("generated_at") or "").strip()
+    payload["switches_considered"] = int((data or {}).get("switches_considered") or 0)
+    payload["switches_queried"] = int((data or {}).get("switches_queried") or 0)
+
+    topology_dir = os.path.dirname(TOPOLOGY_FILE) or "."
+    tmp_path = TOPOLOGY_FILE + ".tmp"
+    os.makedirs(topology_dir, exist_ok=True)
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+
+    try:
+        os.replace(tmp_path, TOPOLOGY_FILE)
+    except PermissionError:
+        with open(TOPOLOGY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def _snmp_walk_column(ip, community, base_oid, max_rows=TOPOLOGY_SNMP_MAX_ROWS):
+    if not SNMP_HLAPI_AVAILABLE or not ip or not community or not base_oid or max_rows <= 0:
+        return []
+
+    rows = []
+    try:
+        iterator = nextCmd(
+            SnmpEngine(),
+            CommunityData(community, mpModel=1),
+            UdpTransportTarget((ip, 161), timeout=SNMP_TIMEOUT_SECONDS, retries=SNMP_RETRIES),
+            ContextData(),
+            ObjectType(ObjectIdentity(base_oid)),
+            lexicographicMode=False,
+            ignoreNonIncreasingOid=True,
+            maxRows=max_rows,
+        )
+        for error_indication, error_status, error_index, var_binds in iterator:
+            if error_indication or error_status:
+                break
+            for oid, value in (var_binds or []):
+                rows.append({
+                    "oid": oid.prettyPrint(),
+                    "value": _snmp_value_to_python(value),
+                })
+                if len(rows) >= max_rows:
+                    return rows
+    except Exception:
+        return []
+    return rows
+
+
+def _snmp_oid_suffix_parts(base_oid, oid_text):
+    base = str(base_oid or "").strip().rstrip(".")
+    oid = str(oid_text or "").strip()
+    prefix = base + "."
+    if not oid.startswith(prefix):
+        return []
+    return [part for part in oid[len(prefix):].split(".") if part != ""]
+
+
+def _snmp_text_to_mac(value):
+    text = str(value or "").strip()
+    if text.lower().startswith("0x"):
+        text = text[2:]
+    return _normalize_mac_value(text)
+
+
+def _snmp_text_to_ip(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    try:
+        return str(ipaddress.ip_address(text))
+    except Exception:
+        pass
+
+    if text.lower().startswith("0x"):
+        hex_value = text[2:]
+        if len(hex_value) == 8:
+            try:
+                raw = bytes.fromhex(hex_value)
+                return str(ipaddress.ip_address(raw))
+            except Exception:
+                return ""
+        return ""
+
+    parts = [part for part in re.split(r"[\s,;:/-]+", text) if part != ""]
+    if len(parts) == 4 and all(part.isdigit() and 0 <= int(part) <= 255 for part in parts):
+        return ".".join(parts)
+
+    return ""
+
+
+def _device_runtime_type_hint(device):
+    return normalize_platform_name(
+        (device or {}).get("_resolved_type")
+        or (device or {}).get("effective_type")
+        or (device or {}).get("type")
+        or ""
+    )
+
+
+def _device_topology_text(device):
+    device = device or {}
+    snmp_data = device.get("snmp_data") if isinstance(device.get("snmp_data"), dict) else {}
+    return " ".join([
+        str(device.get("name") or ""),
+        str(device.get("hostname") or ""),
+        str(device.get("vendor") or ""),
+        str(device.get("model") or ""),
+        str(device.get("notes") or ""),
+        str(snmp_data.get("sys_name") or ""),
+        str(snmp_data.get("sys_descr") or ""),
+    ]).lower()
+
+
+def _device_is_switch_candidate(device):
+    device = device or {}
+    dtype = _device_runtime_type_hint(device)
+    text = _device_topology_text(device)
+
+    explicit_types = {
+        "switch",
+        "managed-switch",
+        "network-switch",
+        "cisco-switch",
+        "aruba-switch",
+        "netgear-switch",
+        "unifi-switch",
+    }
+    weak_network_types = {
+        "network-device",
+        "snmp-device",
+        "ssh-device",
+        "telnet-device",
+    }
+    switch_vendor_tokens = (
+        "cisco",
+        "catalyst",
+        "aruba",
+        "procurve",
+        "hewlett packard enterprise",
+        "hpe",
+        "netgear",
+        "juniper",
+        "ubiquiti",
+        "unifi",
+        "ruckus",
+        "arista",
+        "extreme",
+        "dell networking",
+    )
+    switch_hint_tokens = (
+        "switch",
+        "catalyst",
+        "procurve",
+        "switching",
+        "stackwise",
+        "access switch",
+        "distribution switch",
+        "edge switch",
+        "unifi switch",
+        "ex-series",
+        "sw-",
+    )
+    exclusion_tokens = (
+        "firewall",
+        "fortigate",
+        "router",
+        "gateway",
+        "wireless",
+        "access point",
+        "controller",
+    )
+
+    if dtype in explicit_types:
+        return True
+    if any(token in text for token in exclusion_tokens):
+        return False
+    if dtype in weak_network_types and any(token in text for token in switch_hint_tokens):
+        return True
+    if dtype in weak_network_types and any(token in text for token in switch_vendor_tokens) and any(token in text for token in switch_hint_tokens):
+        return True
+    return False
+
+
+def _device_is_cisco_like(device):
+    text = _device_topology_text(device)
+    return "cisco" in text or "catalyst" in text
+
+
+def _topology_inventory_index(devices):
+    by_ip = {}
+    by_mac = {}
+    by_hostname = {}
+
+    for device in devices or []:
+        if not isinstance(device, dict):
+            continue
+        ip_text = str(device.get("ip") or "").strip()
+        mac_text = _normalize_mac_value(device.get("mac") or device.get("mac_address") or device.get("snmp_mac"))
+        host_candidates = (
+            device.get("name"),
+            device.get("hostname"),
+            ((device.get("snmp_data") or {}).get("sys_name") if isinstance(device.get("snmp_data"), dict) else ""),
+        )
+
+        if ip_text:
+            by_ip[ip_text] = device
+        if mac_text:
+            by_mac[mac_text] = device
+        for candidate in host_candidates:
+            normalized = _normalize_identity_hostname(candidate)
+            if normalized:
+                by_hostname[normalized.lower()] = device
+
+    return {
+        "by_ip": by_ip,
+        "by_mac": by_mac,
+        "by_hostname": by_hostname,
+    }
+
+
+def _match_topology_neighbor(inventory_index, neighbor_ip="", neighbor_mac="", neighbor_hostname=""):
+    inventory_index = inventory_index or {}
+    normalized_mac = _normalize_mac_value(neighbor_mac)
+    hostname_key = _normalize_identity_hostname(neighbor_hostname).lower() if _normalize_identity_hostname(neighbor_hostname) else ""
+    ip_text = str(neighbor_ip or "").strip()
+
+    if normalized_mac and normalized_mac in (inventory_index.get("by_mac") or {}):
+        return inventory_index["by_mac"][normalized_mac]
+    if ip_text and ip_text in (inventory_index.get("by_ip") or {}):
+        return inventory_index["by_ip"][ip_text]
+    if hostname_key and hostname_key in (inventory_index.get("by_hostname") or {}):
+        return inventory_index["by_hostname"][hostname_key]
+    return None
+
+
+def _switch_display_name(device):
+    snmp_data = device.get("snmp_data") if isinstance(device.get("snmp_data"), dict) else {}
+    return (
+        str(device.get("name") or "").strip()
+        or _normalize_identity_hostname(device.get("hostname"))
+        or _normalize_identity_hostname(snmp_data.get("sys_name"))
+        or str(device.get("ip") or "").strip()
+    )
+
+
+def _build_port_label_map(ip, community, *, prefer_desc=False):
+    primary_oid = IF_DESCR_OID if prefer_desc else IF_NAME_OID
+    secondary_oid = IF_NAME_OID if prefer_desc else IF_DESCR_OID
+    labels = {}
+
+    for row in _snmp_walk_column(ip, community, primary_oid, max_rows=TOPOLOGY_SNMP_MAX_PORT_ROWS):
+        suffix = _snmp_oid_suffix_parts(primary_oid, row.get("oid"))
+        if not suffix:
+            continue
+        labels[suffix[-1]] = _safe_snmp_text(row.get("value"))
+
+    for row in _snmp_walk_column(ip, community, secondary_oid, max_rows=TOPOLOGY_SNMP_MAX_PORT_ROWS):
+        suffix = _snmp_oid_suffix_parts(secondary_oid, row.get("oid"))
+        if not suffix:
+            continue
+        index = suffix[-1]
+        if not labels.get(index):
+            labels[index] = _safe_snmp_text(row.get("value"))
+
+    return labels
+
+
+def _build_lldp_local_port_map(ip, community):
+    labels = {}
+
+    for row in _snmp_walk_column(ip, community, LLDP_LOC_PORT_DESC_OID, max_rows=TOPOLOGY_SNMP_MAX_PORT_ROWS):
+        suffix = _snmp_oid_suffix_parts(LLDP_LOC_PORT_DESC_OID, row.get("oid"))
+        if suffix:
+            labels[suffix[-1]] = _safe_snmp_text(row.get("value"))
+
+    for row in _snmp_walk_column(ip, community, LLDP_LOC_PORT_ID_OID, max_rows=TOPOLOGY_SNMP_MAX_PORT_ROWS):
+        suffix = _snmp_oid_suffix_parts(LLDP_LOC_PORT_ID_OID, row.get("oid"))
+        if not suffix:
+            continue
+        port_index = suffix[-1]
+        if not labels.get(port_index):
+            labels[port_index] = _safe_snmp_text(row.get("value"))
+
+    return labels
+
+
+def _collect_lldp_topology_rows(switch_device, community, inventory_index):
+    switch_device = switch_device or {}
+    switch_ip = str(switch_device.get("ip") or "").strip()
+    if not switch_ip or not community:
+        return []
+
+    local_port_labels = _build_lldp_local_port_map(switch_ip, community)
+    row_map = {}
+    column_defs = (
+        ("chassis_id", LLDP_REM_CHASSIS_ID_OID),
+        ("port_id", LLDP_REM_PORT_ID_OID),
+        ("port_desc", LLDP_REM_PORT_DESC_OID),
+        ("sys_name", LLDP_REM_SYS_NAME_OID),
+    )
+
+    for column_name, base_oid in column_defs:
+        for row in _snmp_walk_column(switch_ip, community, base_oid, max_rows=TOPOLOGY_SNMP_MAX_ROWS):
+            suffix = _snmp_oid_suffix_parts(base_oid, row.get("oid"))
+            if len(suffix) < 3:
+                continue
+            row_key = ".".join(suffix[:3])
+            entry = row_map.setdefault(row_key, {"local_port_num": suffix[1]})
+            entry[column_name] = _safe_snmp_text(row.get("value"))
+
+    rows = []
+    for entry in row_map.values():
+        local_port_num = str(entry.get("local_port_num") or "").strip()
+        raw_hostname = _normalize_identity_hostname(entry.get("sys_name")) or _safe_snmp_text(entry.get("sys_name"))
+        raw_mac = _snmp_text_to_mac(entry.get("chassis_id"))
+        matched = _match_topology_neighbor(inventory_index, neighbor_mac=raw_mac, neighbor_hostname=raw_hostname)
+
+        neighbor_hostname = raw_hostname
+        if not neighbor_hostname and isinstance(matched, dict):
+            neighbor_hostname = str(matched.get("name") or matched.get("hostname") or "").strip()
+
+        port_label = (
+            local_port_labels.get(local_port_num)
+            or _safe_snmp_text(entry.get("port_desc"))
+            or _safe_snmp_text(entry.get("port_id"))
+            or (f"Port {local_port_num}" if local_port_num else "")
+        )
+
+        if not port_label or (not neighbor_hostname and not raw_mac):
+            continue
+
+        rows.append({
+            "switch_ip": switch_ip,
+            "switch_hostname": _switch_display_name(switch_device),
+            "switch_vendor": str(switch_device.get("vendor") or "").strip(),
+            "port": port_label,
+            "neighbour_ip": "",
+            "neighbour_mac": raw_mac,
+            "neighbour_hostname": neighbor_hostname,
+            "source_protocol": "lldp",
+        })
+
+    return rows
+
+
+def _collect_cdp_topology_rows(switch_device, community, inventory_index):
+    switch_device = switch_device or {}
+    switch_ip = str(switch_device.get("ip") or "").strip()
+    if not switch_ip or not community:
+        return []
+
+    if_name_map = _build_port_label_map(switch_ip, community, prefer_desc=False)
+    if_descr_map = _build_port_label_map(switch_ip, community, prefer_desc=True)
+    row_map = {}
+    column_defs = (
+        ("device_id", CDP_CACHE_DEVICE_ID_OID),
+        ("device_port", CDP_CACHE_DEVICE_PORT_OID),
+        ("address", CDP_CACHE_ADDRESS_OID),
+    )
+
+    for column_name, base_oid in column_defs:
+        for row in _snmp_walk_column(switch_ip, community, base_oid, max_rows=TOPOLOGY_SNMP_MAX_ROWS):
+            suffix = _snmp_oid_suffix_parts(base_oid, row.get("oid"))
+            if len(suffix) < 2:
+                continue
+            row_key = ".".join(suffix[:2])
+            entry = row_map.setdefault(row_key, {"local_if_index": suffix[0]})
+            entry[column_name] = _safe_snmp_text(row.get("value"))
+
+    rows = []
+    for entry in row_map.values():
+        local_if_index = str(entry.get("local_if_index") or "").strip()
+        raw_device_id = _safe_snmp_text(entry.get("device_id"))
+        raw_hostname = _normalize_identity_hostname(raw_device_id) or ""
+        raw_mac = _snmp_text_to_mac(raw_device_id)
+        raw_ip = _snmp_text_to_ip(entry.get("address"))
+        matched = _match_topology_neighbor(
+            inventory_index,
+            neighbor_ip=raw_ip,
+            neighbor_mac=raw_mac,
+            neighbor_hostname=raw_hostname,
+        )
+
+        neighbor_hostname = raw_hostname
+        if not neighbor_hostname and isinstance(matched, dict):
+            neighbor_hostname = str(matched.get("name") or matched.get("hostname") or "").strip()
+
+        port_label = (
+            if_name_map.get(local_if_index)
+            or if_descr_map.get(local_if_index)
+            or (f"IfIndex {local_if_index}" if local_if_index else "")
+        )
+
+        if not port_label or (not neighbor_hostname and not raw_ip and not raw_mac):
+            continue
+
+        rows.append({
+            "switch_ip": switch_ip,
+            "switch_hostname": _switch_display_name(switch_device),
+            "switch_vendor": str(switch_device.get("vendor") or "").strip(),
+            "port": port_label,
+            "neighbour_ip": raw_ip,
+            "neighbour_mac": raw_mac,
+            "neighbour_hostname": neighbor_hostname,
+            "source_protocol": "cdp",
+        })
+
+    return rows
+
+
+def _dedupe_topology_rows(rows):
+    deduped = []
+    seen = set()
+
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        normalized = {
+            "switch_ip": str(row.get("switch_ip") or "").strip(),
+            "switch_hostname": str(row.get("switch_hostname") or "").strip(),
+            "switch_vendor": str(row.get("switch_vendor") or "").strip(),
+            "port": str(row.get("port") or "").strip(),
+            "neighbour_ip": str(row.get("neighbour_ip") or "").strip(),
+            "neighbour_mac": _normalize_mac_value(row.get("neighbour_mac")),
+            "neighbour_hostname": str(row.get("neighbour_hostname") or "").strip(),
+            "source_protocol": str(row.get("source_protocol") or "").strip().lower(),
+        }
+        row_key = (
+            normalized["switch_ip"],
+            normalized["port"],
+            normalized["neighbour_ip"],
+            normalized["neighbour_mac"],
+            normalized["neighbour_hostname"].lower(),
+            normalized["source_protocol"],
+        )
+        if row_key in seen:
+            continue
+        seen.add(row_key)
+        deduped.append(normalized)
+
+    return deduped
+
+
+def _topology_response_payload(snapshot, **extra):
+    snapshot = snapshot if isinstance(snapshot, dict) else _load_topology_defaults()
+    payload = {
+        "ok": True,
+        "count": len(snapshot.get("topology") or []),
+        "topology": list(snapshot.get("topology") or []),
+        "generated_at": str(snapshot.get("generated_at") or "").strip(),
+        "switches_considered": int(snapshot.get("switches_considered") or 0),
+        "switches_queried": int(snapshot.get("switches_queried") or 0),
+    }
+    payload.update(extra)
+    return payload
+
+
+def generate_topology_snapshot():
+    settings = load_settings()
+    community = str((settings or {}).get("snmp_community") or "").strip()
+    existing_snapshot = load_topology_snapshot()
+
+    if not community:
+        return _topology_response_payload(existing_snapshot, generated=False, note="SNMP community not configured; topology generation skipped.")
+    if not SNMP_HLAPI_AVAILABLE:
+        return _topology_response_payload(existing_snapshot, generated=False, note="SNMP helper unavailable; topology generation skipped.")
+
+    devices = load_devices()
+    eligible_switches = [device for device in devices if _device_is_switch_candidate(device)]
+    inventory_index = _topology_inventory_index(devices)
+    rows = []
+    devices_changed = False
+    switches_queried = 0
+
+    for switch_device in eligible_switches:
+        switch_ip = str(switch_device.get("ip") or "").strip()
+        if not switch_ip:
+            continue
+
+        switches_queried += 1
+        if _best_effort_snmp_enrich_device(switch_device, settings=settings):
+            devices_changed = True
+
+        lldp_rows = _collect_lldp_topology_rows(switch_device, community, inventory_index)
+        protocol_rows = lldp_rows
+        if not protocol_rows and _device_is_cisco_like(switch_device):
+            protocol_rows = _collect_cdp_topology_rows(switch_device, community, inventory_index)
+        rows.extend(protocol_rows)
+
+    if devices_changed:
+        save_devices_file(devices)
+
+    snapshot = {
+        "topology": _dedupe_topology_rows(rows),
+        "generated_at": utc_now_iso(),
+        "switches_considered": len(eligible_switches),
+        "switches_queried": switches_queried,
+    }
+    save_topology_snapshot(snapshot)
+    return _topology_response_payload(snapshot, generated=True)
 
 
 def _log_settings_load_once(message, level="info"):
@@ -4248,6 +4813,22 @@ def api_ipschedule():
             "count": len(devices),
             "devices": devices,
         })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@app.route("/tools/api/topology", methods=["GET"])
+def api_topology():
+    return jsonify(_topology_response_payload(load_topology_snapshot(), generated=False))
+
+
+@app.route("/tools/api/topology/generate", methods=["POST"])
+def api_generate_topology():
+    try:
+        return jsonify(generate_topology_snapshot())
     except Exception as e:
         return jsonify({
             "ok": False,

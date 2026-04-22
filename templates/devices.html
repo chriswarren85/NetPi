@@ -94,6 +94,16 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
 
 <div class="panel">
   <div class="panel-header">
+    <span>Inventory Views</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="inventory-view-devices-tab" onclick="showInventoryView('devices')">Device List</button>
+      <button class="btn" id="inventory-view-topology-tab" onclick="showInventoryView('topology')">Network Topology</button>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="inventory-view-devices-panel">
+  <div class="panel-header">
     <span>Device list</span>
     <div style="display:flex;gap:8px">
       <button class="btn" id="validate-all-devices-btn" onclick="validateAllDevices()">✅ Validate All</button>
@@ -150,6 +160,21 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="panel" id="inventory-view-topology-panel" style="display:none">
+  <div class="panel-header">
+    <span>Network Topology</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="generate-topology-btn" onclick="generateTopology()">Generate Topology</button>
+      <button class="btn" onclick="loadTopologyData()">Refresh</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="topology-summary" style="margin-bottom:10px;color:#d1d5db;">No topology has been generated yet.</div>
+    <div id="topology-results" style="overflow-x:auto;color:#6b7280;">Generate topology to harvest LLDP/CDP neighbour rows from known eligible switches.</div>
+    <div style="margin-top:10px;font-size:10px;line-height:1.4;color:#6b7280;">Topology is read-only, generated from known inventory switches only, and never scans unknown network segments.</div>
   </div>
 </div>
 
@@ -213,6 +238,8 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
 <script>
 let deviceList = {{ devices | tojson }};
 let pastedPreview = [];
+let topologyState = { topology: [], count: 0, generated_at: '', switches_considered: 0, switches_queried: 0, note: '' };
+let activeInventoryView = 'devices';
 
 const FILTER_STATE_KEY = 'netpi.devices.filterState.v1';
 const VALIDATION_STATE_KEY = 'netpi.devices.validationState.v1';
@@ -860,6 +887,115 @@ function renderDetectedSystems(data){
   }).join("");
 
   el.innerHTML = html;
+}
+
+function showInventoryView(view){
+  activeInventoryView = view === 'topology' ? 'topology' : 'devices';
+  const devicesPanel = document.getElementById('inventory-view-devices-panel');
+  const topologyPanel = document.getElementById('inventory-view-topology-panel');
+  const devicesTab = document.getElementById('inventory-view-devices-tab');
+  const topologyTab = document.getElementById('inventory-view-topology-tab');
+
+  if(devicesPanel){
+    devicesPanel.style.display = activeInventoryView === 'devices' ? 'block' : 'none';
+  }
+  if(topologyPanel){
+    topologyPanel.style.display = activeInventoryView === 'topology' ? 'block' : 'none';
+  }
+  if(devicesTab){
+    devicesTab.className = activeInventoryView === 'devices' ? 'btn btn-primary' : 'btn';
+  }
+  if(topologyTab){
+    topologyTab.className = activeInventoryView === 'topology' ? 'btn btn-primary' : 'btn';
+  }
+}
+
+function renderTopology(){
+  const summaryEl = document.getElementById('topology-summary');
+  const resultsEl = document.getElementById('topology-results');
+  if(!summaryEl || !resultsEl) return;
+
+  const rows = Array.isArray(topologyState && topologyState.topology) ? topologyState.topology : [];
+  const generatedAt = String((topologyState && topologyState.generated_at) || '').trim();
+  const considered = Number((topologyState && topologyState.switches_considered) || 0);
+  const queried = Number((topologyState && topologyState.switches_queried) || 0);
+  const note = String((topologyState && topologyState.note) || '').trim();
+
+  let summaryHtml = '<b>Topology rows:</b> ' + escapeHtml(String(rows.length));
+  summaryHtml += ' <span style="color:#9ca3af">(switch candidates: ' + escapeHtml(String(considered)) + ' | queried: ' + escapeHtml(String(queried)) + ')</span>';
+  if(generatedAt){
+    summaryHtml += '<div style="margin-top:4px;font-size:11px;color:#9ca3af">Generated: ' + escapeHtml(generatedAt) + '</div>';
+  }
+  if(note){
+    summaryHtml += '<div style="margin-top:6px;font-size:11px;color:#9ca3af">' + escapeHtml(note) + '</div>';
+  }
+  summaryEl.innerHTML = summaryHtml;
+
+  if(!rows.length){
+    resultsEl.innerHTML = '<div style="color:#6b7280;">No topology rows are currently available. Generate topology to query known eligible switches via LLDP, with Cisco CDP fallback where appropriate.</div>';
+    return;
+  }
+
+  let html = '<table><thead><tr><th>Switch</th><th>Port</th><th>Neighbour Hostname</th><th>Neighbour IP</th><th>Neighbour MAC</th><th>Source</th></tr></thead><tbody>';
+  rows.forEach(row => {
+    html += '<tr>'
+      + '<td>' + escapeHtml((row.switch_hostname || row.switch_ip || 'Unknown switch')) + '</td>'
+      + '<td>' + escapeHtml(row.port || '—') + '</td>'
+      + '<td>' + escapeHtml(row.neighbour_hostname || '—') + '</td>'
+      + '<td style="font-family:monospace">' + escapeHtml(row.neighbour_ip || '—') + '</td>'
+      + '<td style="font-family:monospace">' + escapeHtml(normalizeMacValue(row.neighbour_mac) || row.neighbour_mac || '—') + '</td>'
+      + '<td>' + escapeHtml((row.source_protocol || '').toUpperCase() || '—') + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  resultsEl.innerHTML = html;
+}
+
+async function loadTopologyData(){
+  try {
+    const res = await fetch('/tools/api/topology');
+    const data = await res.json();
+    if(!res.ok || !data || !data.ok){
+      throw new Error((data && data.error) || 'Failed to load topology');
+    }
+    topologyState = data;
+    renderTopology();
+  } catch (e) {
+    topologyState = { topology: [], count: 0, generated_at: '', switches_considered: 0, switches_queried: 0, note: String(e) };
+    renderTopology();
+  }
+}
+
+async function generateTopology(){
+  const button = document.getElementById('generate-topology-btn');
+  try {
+    if(button){
+      button.disabled = true;
+      button.textContent = 'Generating Topology...';
+    }
+    startDeviceActionProgress('Generating topology from known switches');
+    const res = await fetch('/tools/api/topology/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if(!res.ok || !data || !data.ok){
+      throw new Error((data && data.error) || 'Topology generation failed');
+    }
+    topologyState = data;
+    renderTopology();
+    showInventoryView('topology');
+    finishDeviceActionProgress('Topology generation completed with ' + String(data.count || 0) + ' row(s).', 'success');
+  } catch (e) {
+    finishDeviceActionProgress('Topology generation failed: ' + e, 'error');
+    alert('generateTopology error: ' + e);
+  } finally {
+    if(button){
+      button.disabled = false;
+      button.textContent = 'Generate Topology';
+    }
+  }
 }
 
 function escapeHtml(str){
@@ -1839,6 +1975,9 @@ function saveDevices(){
 window.validateDevice = validateDevice;
 window.validateAllDevices = validateAllDevices;
 window.runSystemValidation = runSystemValidation;
+window.generateTopology = generateTopology;
+window.loadTopologyData = loadTopologyData;
+window.showInventoryView = showInventoryView;
 
 restoreFilterState();
 document.getElementById('filter-vlan').addEventListener('change', () => {
@@ -1851,6 +1990,7 @@ document.getElementById('filter-freshness').addEventListener('change', () => {
 });
 renderTable();
 refreshRequirementsStateFromEndpoint();
+showInventoryView('devices');
+loadTopologyData();
 </script>
 {% endblock %}
-

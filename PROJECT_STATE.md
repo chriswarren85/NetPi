@@ -277,3 +277,15 @@
   - Harvests `sysDescr`, `sysName`, `sysLocation`, `sysContact`, plus bounded interface name/description/MAC rows where available, writing additive `snmp_enriched` and `snmp_data` fields
   - Hooks enrichment into post-reachability validation, fingerprint, and discovered-device add flows so records become richer during or after discovery without changing reachability outcomes
   - Keeps SNMP passive/read-only and non-blocking in practice: silent skip when no community is configured, when SNMP is unsupported, or when a device does not answer
+
+### Last Update
+- Feature: W10.1 CDP / LLDP Neighbour Map
+- Files modified:
+  - app.py
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a dedicated topology artifact flow backed by `topology.json`, with safe load/save helpers plus additive `GET /tools/api/topology` and `POST /tools/api/topology/generate` routes
+  - Topology generation queries known eligible switch-like inventory devices only, attempts LLDP first, and falls back to Cisco CDP only for Cisco-like switches when LLDP yields no usable rows
+  - Generated rows remain compact and truthful (`switch`, `port`, neighbour hostname/IP/MAC, source protocol) with conservative inventory matching used only to improve displayed hostname where evidence is strong
+  - Devices page now includes a read-only `Network Topology` inventory view with Generate/Refresh actions, while keeping discovery, validation, and existing UI flows non-blocking and unchanged
