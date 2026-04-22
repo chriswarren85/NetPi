@@ -76,6 +76,36 @@
   </div>
 </div>
 
+<div class="panel">
+  <div class="panel-header">
+    <span>Multicast Groups</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn" type="button" onclick="refreshMulticastGroups()">Refresh</button>
+      <button class="btn btn-primary" type="button" onclick="generateMulticastGroups()">Generate Multicast Discovery</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="multicast-groups-summary" style="margin-bottom:10px;font-size:12px;color:#9ca3af">No multicast snapshot loaded.</div>
+    <div style="overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Group Address</th>
+            <th>Members / Count</th>
+            <th>Switch</th>
+            <th>VLAN</th>
+            <th>Evidence Source</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="multicast-groups-table">
+          <tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No multicast groups loaded yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <script>
 function escapeHtml(str){
   return String(str || '')
@@ -91,6 +121,7 @@ let activeValidationMode = 'Live';
 let activeValidationView = 'By System';
 let expandedValidationIndex = -1;
 let modeData = {};
+let multicastData = { groups: [], generated_at: '', switches_considered: 0, switches_queried: 0, note: '' };
 
 function setStatus(message, color){
   const node = document.getElementById('validation-status');
@@ -330,6 +361,84 @@ function updateModeCards(rows){
   if(unknownEl) unknownEl.textContent = String(counts.unknown);
 }
 
+function renderMulticastGroups(snapshot){
+  multicastData = snapshot || { groups: [] };
+  const summary = document.getElementById('multicast-groups-summary');
+  const tbody = document.getElementById('multicast-groups-table');
+  if(!summary || !tbody) return;
+
+  const groups = Array.isArray(multicastData.groups) ? multicastData.groups : [];
+  const generatedAt = String(multicastData.generated_at || '').trim();
+  const note = String(multicastData.note || '').trim();
+  const switchSummary = 'Switches considered: ' + Number(multicastData.switches_considered || 0) + ' | queried: ' + Number(multicastData.switches_queried || 0);
+  summary.textContent = generatedAt
+    ? ('Snapshot: ' + generatedAt + ' | Groups: ' + groups.length + ' | ' + switchSummary + (note ? ' | ' + note : ''))
+    : (note || ('No saved multicast snapshot yet. ' + switchSummary));
+
+  if(!groups.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No multicast groups available. Generate discovery from eligible managed switches to populate this view.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = groups.map(group => {
+    const members = Array.isArray(group.members) ? group.members : [];
+    const memberLabel = members.length
+      ? members.map(member => {
+          const hostname = String(member.member_hostname || '').trim();
+          const ip = String(member.member_ip || '').trim();
+          const mac = String(member.member_mac || '').trim();
+          return escapeHtml(hostname || ip || mac || 'Unknown member');
+        }).join(', ')
+      : 'None identified';
+    const switchLabel = [group.switch_hostname || '', group.switch_ip || ''].filter(Boolean).join(' ');
+    return '<tr>'
+      + '<td>' + escapeHtml(group.group_address || '') + '</td>'
+      + '<td>' + escapeHtml(memberLabel + ' (' + Number(group.member_count || members.length || 0) + ')') + '</td>'
+      + '<td>' + escapeHtml(switchLabel || '') + '</td>'
+      + '<td>' + escapeHtml(group.vlan || '') + '</td>'
+      + '<td>' + escapeHtml(group.evidence_source || group.source_protocol || '') + '</td>'
+      + '<td>' + escapeHtml(group.notes || '') + '</td>'
+      + '</tr>';
+  }).join('');
+}
+
+function loadMulticastGroups(){
+  return fetch('/tools/api/multicast_groups')
+    .then(resp => resp.json())
+    .then(data => {
+      if(!data || data.ok !== true){
+        throw new Error((data && data.error) || 'multicast_groups failed');
+      }
+      renderMulticastGroups(data);
+      return data;
+    })
+    .catch(err => {
+      renderMulticastGroups({ groups: [], note: 'Unable to load multicast groups: ' + (err && err.message ? err.message : 'unknown error') });
+      return null;
+    });
+}
+
+function refreshMulticastGroups(){
+  return loadMulticastGroups();
+}
+
+function generateMulticastGroups(){
+  setStatus('Generating multicast discovery from eligible managed switches...', '#6b7280');
+  return fetchJson('/tools/api/multicast_groups/generate', {})
+    .then(data => {
+      if(!data || data.ok !== true){
+        throw new Error((data && data.error) || 'multicast discovery failed');
+      }
+      renderMulticastGroups(data);
+      setStatus('Multicast discovery completed.', '#6b7280');
+      return data;
+    })
+    .catch(err => {
+      setStatus('Unable to generate multicast discovery: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+      return null;
+    });
+}
+
 function renderValidationRows(){
   const tbody = document.getElementById('validation-results-table');
   if(!tbody) return;
@@ -435,6 +544,7 @@ function loadValidationMode(mode){
           validateSystems: systemData,
         };
         renderValidationRows();
+        renderMulticastGroups(systemData.multicast_groups || multicastData);
         setStatus('Loaded Logical mode from /tools/api/validate_systems.', '#6b7280');
       })
       .catch(err => {
@@ -463,6 +573,7 @@ function loadValidationMode(mode){
         validateSystems: systemData,
       };
       renderValidationRows();
+      renderMulticastGroups(systemData.multicast_groups || multicastData);
       if(mode === 'Restricted' && payload.vlan){
         setStatus('Loaded Restricted mode scoped to VLAN: ' + payload.vlan + '.', '#6b7280');
       } else if(mode === 'Restricted'){
@@ -478,6 +589,7 @@ function loadValidationMode(mode){
     });
 }
 
+loadMulticastGroups();
 loadValidationMode('Live');
 </script>
 {% endblock %}

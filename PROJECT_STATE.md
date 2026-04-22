@@ -289,3 +289,15 @@
   - Topology generation queries known eligible switch-like inventory devices only, attempts LLDP first, and falls back to Cisco CDP only for Cisco-like switches when LLDP yields no usable rows
   - Generated rows remain compact and truthful (`switch`, `port`, neighbour hostname/IP/MAC, source protocol) with conservative inventory matching used only to improve displayed hostname where evidence is strong
   - Devices page now includes a read-only `Network Topology` inventory view with Generate/Refresh actions, while keeping discovery, validation, and existing UI flows non-blocking and unchanged
+
+### Last Update
+- Feature: W10.2 Multicast Group Discovery
+- Files modified:
+  - app.py
+  - templates/validation.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added a passive multicast artifact flow backed by `multicast_groups.json`, with safe load/save helpers plus additive `GET /tools/api/multicast_groups` and `POST /tools/api/multicast_groups/generate` routes
+  - Multicast discovery reuses known eligible managed-switch selection, attempts passive IGMP membership discovery via SNMP only, and safely skips when SNMP or eligible switch infrastructure is unavailable
+  - Saved rows remain compact and truthful (`group_address`, switch context, member count, and strong member IP/hostname correlation where available) without inventing subscriber lists when the switch MIB view is partial
+  - Validation and recommendations now consume saved multicast findings additively, and the Validation page includes a read-only `Multicast Groups` panel for Generate/Refresh review without changing existing discovery or validation behavior

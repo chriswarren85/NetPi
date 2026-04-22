@@ -63,6 +63,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
 FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
 DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, 'device_evidence.json')
 TOPOLOGY_FILE = os.path.join(os.path.dirname(__file__), 'topology.json')
+MULTICAST_GROUPS_FILE = os.path.join(os.path.dirname(__file__), 'multicast_groups.json')
 BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
@@ -989,6 +990,8 @@ IF_DESCR_OID = "1.3.6.1.2.1.2.2.1.2"
 CDP_CACHE_ADDRESS_OID = "1.3.6.1.4.1.9.9.23.1.2.1.1.4"
 CDP_CACHE_DEVICE_ID_OID = "1.3.6.1.4.1.9.9.23.1.2.1.1.6"
 CDP_CACHE_DEVICE_PORT_OID = "1.3.6.1.4.1.9.9.23.1.2.1.1.7"
+IGMP_CACHE_SELF_OID = "1.3.6.1.2.1.85.1.2.1.3"
+IGMP_CACHE_LAST_REPORTER_OID = "1.3.6.1.2.1.85.1.2.1.4"
 
 
 def _safe_snmp_text(value):
@@ -1818,6 +1821,375 @@ def generate_topology_snapshot():
     }
     save_topology_snapshot(snapshot)
     return _topology_response_payload(snapshot, generated=True)
+
+
+def _load_multicast_groups_defaults():
+    return {
+        "generated_at": "",
+        "groups": [],
+        "switches_considered": 0,
+        "switches_queried": 0,
+    }
+
+
+def load_multicast_groups_snapshot():
+    defaults = _load_multicast_groups_defaults()
+    if not os.path.exists(MULTICAST_GROUPS_FILE):
+        return copy.deepcopy(defaults)
+
+    try:
+        with open(MULTICAST_GROUPS_FILE, encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        return copy.deepcopy(defaults)
+
+    if not isinstance(data, dict):
+        return copy.deepcopy(defaults)
+
+    payload = copy.deepcopy(defaults)
+    payload["generated_at"] = str(data.get("generated_at") or "").strip()
+    payload["switches_considered"] = int(data.get("switches_considered") or 0)
+    payload["switches_queried"] = int(data.get("switches_queried") or 0)
+    payload["groups"] = [copy.deepcopy(row) for row in (data.get("groups") or []) if isinstance(row, dict)]
+    return payload
+
+
+def save_multicast_groups_snapshot(data):
+    payload = _load_multicast_groups_defaults()
+    payload["generated_at"] = str((data or {}).get("generated_at") or "").strip()
+    payload["switches_considered"] = int((data or {}).get("switches_considered") or 0)
+    payload["switches_queried"] = int((data or {}).get("switches_queried") or 0)
+    payload["groups"] = [copy.deepcopy(row) for row in ((data or {}).get("groups") or []) if isinstance(row, dict)]
+
+    multicast_dir = os.path.dirname(MULTICAST_GROUPS_FILE) or "."
+    tmp_path = MULTICAST_GROUPS_FILE + ".tmp"
+    os.makedirs(multicast_dir, exist_ok=True)
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+
+    try:
+        os.replace(tmp_path, MULTICAST_GROUPS_FILE)
+    except PermissionError:
+        with open(MULTICAST_GROUPS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def _multicast_groups_response_payload(snapshot, **extra):
+    snapshot = snapshot if isinstance(snapshot, dict) else _load_multicast_groups_defaults()
+    payload = {
+        "ok": True,
+        "count": len(snapshot.get("groups") or []),
+        "groups": list(snapshot.get("groups") or []),
+        "generated_at": str(snapshot.get("generated_at") or "").strip(),
+        "switches_considered": int(snapshot.get("switches_considered") or 0),
+        "switches_queried": int(snapshot.get("switches_queried") or 0),
+    }
+    payload.update(extra)
+    return payload
+
+
+def _multicast_group_address_from_suffix(suffix_parts):
+    if not isinstance(suffix_parts, list) or len(suffix_parts) < 5:
+        return ""
+    address_parts = suffix_parts[:-1]
+    if len(address_parts) != 4:
+        return ""
+    candidate = ".".join(address_parts)
+    try:
+        ip_obj = ipaddress.ip_address(candidate)
+    except ValueError:
+        return ""
+    return candidate if isinstance(ip_obj, ipaddress.IPv4Address) and ip_obj.is_multicast else ""
+
+
+def _multicast_ifindex_from_suffix(suffix_parts):
+    if not isinstance(suffix_parts, list) or len(suffix_parts) < 1:
+        return ""
+    return str(suffix_parts[-1] or "").strip()
+
+
+def _match_inventory_device_strong(inventory_index, member_ip="", member_mac=""):
+    inventory_index = inventory_index or {}
+    normalized_mac = _normalize_mac_value(member_mac)
+    ip_text = str(member_ip or "").strip()
+
+    if normalized_mac and normalized_mac in (inventory_index.get("by_mac") or {}):
+        return inventory_index["by_mac"][normalized_mac]
+    if ip_text and ip_text in (inventory_index.get("by_ip") or {}):
+        return inventory_index["by_ip"][ip_text]
+    return None
+
+
+def _build_multicast_member(member_ip="", member_mac="", matched_device=None):
+    matched_device = matched_device if isinstance(matched_device, dict) else {}
+    ip_text = str(member_ip or "").strip()
+    mac_text = _normalize_mac_value(member_mac)
+    hostname = ""
+    if matched_device:
+        hostname = str(
+            matched_device.get("name")
+            or matched_device.get("hostname")
+            or ((matched_device.get("snmp_data") or {}).get("sys_name") if isinstance(matched_device.get("snmp_data"), dict) else "")
+            or ""
+        ).strip()
+        if not mac_text:
+            mac_text = _normalize_mac_value(
+                matched_device.get("mac")
+                or matched_device.get("mac_address")
+                or matched_device.get("snmp_mac")
+            )
+    return {
+        "member_ip": ip_text,
+        "member_mac": mac_text,
+        "member_hostname": hostname,
+    }
+
+
+def _normalize_multicast_groups(groups):
+    normalized = []
+    seen = set()
+
+    for row in groups or []:
+        if not isinstance(row, dict):
+            continue
+        group_address = str(row.get("group_address") or "").strip()
+        if not group_address:
+            continue
+
+        members = []
+        member_seen = set()
+        for member in row.get("members") or []:
+            if not isinstance(member, dict):
+                continue
+            normalized_member = {
+                "member_ip": str(member.get("member_ip") or "").strip(),
+                "member_mac": _normalize_mac_value(member.get("member_mac")),
+                "member_hostname": str(member.get("member_hostname") or "").strip(),
+            }
+            member_key = (
+                normalized_member["member_ip"],
+                normalized_member["member_mac"],
+                normalized_member["member_hostname"].lower(),
+            )
+            if member_key in member_seen:
+                continue
+            member_seen.add(member_key)
+            if any(normalized_member.values()):
+                members.append(normalized_member)
+
+        normalized_row = {
+            "group_address": group_address,
+            "switch_ip": str(row.get("switch_ip") or "").strip(),
+            "switch_hostname": str(row.get("switch_hostname") or "").strip(),
+            "vlan": str(row.get("vlan") or "").strip(),
+            "members": members,
+            "member_count": int(row.get("member_count") or len(members)),
+            "evidence_source": str(row.get("evidence_source") or "").strip(),
+            "source_protocol": str(row.get("source_protocol") or "").strip(),
+            "notes": str(row.get("notes") or "").strip(),
+        }
+        row_key = (
+            normalized_row["group_address"],
+            normalized_row["switch_ip"],
+            normalized_row["switch_hostname"].lower(),
+            normalized_row["vlan"],
+            normalized_row["source_protocol"].lower(),
+            json.dumps(normalized_row["members"], sort_keys=True),
+        )
+        if row_key in seen:
+            continue
+        seen.add(row_key)
+        normalized.append(normalized_row)
+
+    normalized.sort(key=lambda item: (
+        str(item.get("group_address") or ""),
+        str(item.get("switch_hostname") or ""),
+        str(item.get("switch_ip") or ""),
+    ))
+    return normalized
+
+
+def _aggregate_multicast_group_rows(rows):
+    grouped = {}
+
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        group_address = str(row.get("group_address") or "").strip()
+        if not group_address:
+            continue
+
+        group_key = (
+            group_address,
+            str(row.get("switch_ip") or "").strip(),
+            str(row.get("switch_hostname") or "").strip(),
+            str(row.get("vlan") or "").strip(),
+            str(row.get("source_protocol") or "").strip().lower(),
+        )
+        existing = grouped.get(group_key)
+        if not existing:
+            existing = {
+                "group_address": group_address,
+                "switch_ip": str(row.get("switch_ip") or "").strip(),
+                "switch_hostname": str(row.get("switch_hostname") or "").strip(),
+                "vlan": str(row.get("vlan") or "").strip(),
+                "members": [],
+                "member_count": 0,
+                "evidence_source": str(row.get("evidence_source") or "").strip() or "snmp_igmp",
+                "source_protocol": str(row.get("source_protocol") or "").strip().lower() or "igmp",
+                "notes": str(row.get("notes") or "").strip(),
+            }
+            grouped[group_key] = existing
+
+        for member in row.get("members") or []:
+            if isinstance(member, dict):
+                existing["members"].append(copy.deepcopy(member))
+
+    for existing in grouped.values():
+        unique_members = []
+        seen_members = set()
+        for member in existing.get("members") or []:
+            member_key = (
+                str(member.get("member_ip") or "").strip(),
+                _normalize_mac_value(member.get("member_mac")),
+                str(member.get("member_hostname") or "").strip().lower(),
+            )
+            if member_key in seen_members:
+                continue
+            seen_members.add(member_key)
+            unique_members.append({
+                "member_ip": member_key[0],
+                "member_mac": member_key[1],
+                "member_hostname": str(member.get("member_hostname") or "").strip(),
+            })
+        existing["members"] = unique_members
+        existing["member_count"] = len(unique_members)
+        if not existing["notes"] and not unique_members:
+            existing["notes"] = "Group observed via switch IGMP cache; subscriber identity not exposed by the current SNMP view."
+
+    return _normalize_multicast_groups(grouped.values())
+
+
+def _collect_switch_multicast_groups(switch_device, community, inventory_index):
+    switch_ip = str((switch_device or {}).get("ip") or "").strip()
+    if not switch_ip or not community:
+        return []
+
+    switch_name = _switch_display_name(switch_device)
+    port_labels = _build_port_label_map(switch_ip, community)
+    row_map = {}
+
+    for row in _snmp_walk_column(switch_ip, community, IGMP_CACHE_LAST_REPORTER_OID, max_rows=TOPOLOGY_SNMP_MAX_ROWS):
+        suffix = _snmp_oid_suffix_parts(IGMP_CACHE_LAST_REPORTER_OID, row.get("oid"))
+        group_address = _multicast_group_address_from_suffix(suffix)
+        if_index = _multicast_ifindex_from_suffix(suffix)
+        if not group_address or not if_index:
+            continue
+        row_key = ".".join(suffix)
+        row_map[row_key] = {
+            "group_address": group_address,
+            "if_index": if_index,
+            "last_reporter": _snmp_text_to_ip(row.get("value")),
+        }
+
+    if not row_map:
+        return []
+
+    for row in _snmp_walk_column(switch_ip, community, IGMP_CACHE_SELF_OID, max_rows=TOPOLOGY_SNMP_MAX_ROWS):
+        suffix = _snmp_oid_suffix_parts(IGMP_CACHE_SELF_OID, row.get("oid"))
+        if not suffix:
+            continue
+        row_key = ".".join(suffix)
+        if row_key not in row_map:
+            continue
+        row_map[row_key]["self"] = _safe_snmp_text(row.get("value")).lower()
+
+    groups = []
+    for entry in row_map.values():
+        group_address = str(entry.get("group_address") or "").strip()
+        last_reporter = str(entry.get("last_reporter") or "").strip()
+        if_index = str(entry.get("if_index") or "").strip()
+        matched_device = _match_inventory_device_strong(inventory_index, member_ip=last_reporter)
+        members = []
+        if last_reporter or matched_device:
+            members.append(_build_multicast_member(member_ip=last_reporter, matched_device=matched_device))
+
+        notes = ""
+        if not members:
+            notes = "Switch reports multicast group presence but not an identifiable subscriber."
+        elif str(entry.get("self") or "") in {"true", "1"}:
+            notes = "Switch also reports local membership for this group."
+
+        groups.append({
+            "group_address": group_address,
+            "switch_ip": switch_ip,
+            "switch_hostname": switch_name,
+            "vlan": "",
+            "members": members,
+            "member_count": len(members),
+            "evidence_source": "snmp_igmp",
+            "source_protocol": "igmp",
+            "notes": notes or (port_labels.get(if_index) and f"Observed on {port_labels.get(if_index)}") or "",
+        })
+
+    return groups
+
+
+def generate_multicast_groups_snapshot():
+    settings = load_settings()
+    community = str((settings or {}).get("snmp_community") or "").strip()
+    existing_snapshot = load_multicast_groups_snapshot()
+
+    if not community:
+        return _multicast_groups_response_payload(existing_snapshot, generated=False, note="SNMP community not configured; multicast discovery skipped.")
+    if not SNMP_HLAPI_AVAILABLE:
+        return _multicast_groups_response_payload(existing_snapshot, generated=False, note="SNMP helper unavailable; multicast discovery skipped.")
+
+    devices = load_devices()
+    eligible_switches = [device for device in devices if _device_is_switch_candidate(device)]
+    if not eligible_switches:
+        empty_snapshot = {
+            "generated_at": utc_now_iso(),
+            "groups": [],
+            "switches_considered": 0,
+            "switches_queried": 0,
+        }
+        save_multicast_groups_snapshot(empty_snapshot)
+        return _multicast_groups_response_payload(empty_snapshot, generated=True, note="No eligible managed switches found for multicast discovery.")
+
+    inventory_index = _topology_inventory_index(devices)
+    groups = []
+    devices_changed = False
+    switches_queried = 0
+
+    for switch_device in eligible_switches:
+        switch_ip = str(switch_device.get("ip") or "").strip()
+        if not switch_ip:
+            continue
+        switches_queried += 1
+        if _best_effort_snmp_enrich_device(switch_device, settings=settings):
+            devices_changed = True
+        groups.extend(_collect_switch_multicast_groups(switch_device, community, inventory_index))
+
+    if devices_changed:
+        save_devices_file(devices)
+
+    snapshot = {
+        "generated_at": utc_now_iso(),
+        "groups": _aggregate_multicast_group_rows(groups),
+        "switches_considered": len(eligible_switches),
+        "switches_queried": switches_queried,
+    }
+    save_multicast_groups_snapshot(snapshot)
+    return _multicast_groups_response_payload(snapshot, generated=True)
 
 
 def _log_settings_load_once(message, level="info"):
@@ -4836,6 +5208,22 @@ def api_generate_topology():
         }), 500
 
 
+@app.route("/tools/api/multicast_groups", methods=["GET"])
+def api_multicast_groups():
+    return jsonify(_multicast_groups_response_payload(load_multicast_groups_snapshot(), generated=False))
+
+
+@app.route("/tools/api/multicast_groups/generate", methods=["POST"])
+def api_generate_multicast_groups():
+    try:
+        return jsonify(generate_multicast_groups_snapshot())
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
 @app.route("/tools/api/checks/run", methods=["POST"])
 def api_checks_run():
     s = load_settings()
@@ -6099,6 +6487,7 @@ def api_validate_systems():
                 "connectivity_summary": connectivity_summary,
                 "connectivity_note": connectivity_note,
                 "detected_systems": detected,
+                "multicast_groups": load_multicast_groups_snapshot(),
             })
 
         enriched_devices = [enrich_device_runtime(device) for device in devices]
@@ -6178,6 +6567,7 @@ def api_validate_systems():
             connectivity_note = "Connectivity matrix evaluation failed; base system validation results remain available."
 
         detected = build_detected_systems(enriched_devices, results)
+        multicast_groups = load_multicast_groups_snapshot()
 
         return jsonify({
             "ok": True,
@@ -6190,6 +6580,7 @@ def api_validate_systems():
             "connectivity_summary": connectivity_summary,
             "connectivity_note": connectivity_note,
             "detected_systems": detected,
+            "multicast_groups": multicast_groups,
         })
     except Exception as e:
         return jsonify({
@@ -6835,6 +7226,7 @@ def _build_recommendation_context(payload):
         "validate_systems": validate_systems,
         "system_requirements": system_requirements,
         "firewall_plan": firewall_plan,
+        "multicast_groups": load_multicast_groups_snapshot(),
     }
 
 
@@ -6896,6 +7288,9 @@ def _build_recommendations(context):
     connectivity_results = list((context.get("validate_systems") or {}).get("connectivity") or [])
     system_requirements_results = _extract_results_from_payload(context.get("system_requirements"))
     firewall_rules = list((context.get("firewall_plan") or {}).get("rules") or [])
+    multicast_snapshot = context.get("multicast_groups") or {}
+    multicast_groups = list(multicast_snapshot.get("groups") or [])
+    multicast_generated_at = str(multicast_snapshot.get("generated_at") or "").strip()
 
     # 8) Missing metadata affecting commissioning readiness
     missing_mac = []
@@ -6998,16 +7393,67 @@ def _build_recommendations(context):
                 evidence_source=["devices.json", "validate_all.results"],
                 affected_devices=sorted(dante_device_names),
             )
+        if multicast_groups:
+            add_rec(
+                "multicast",
+                "info",
+                "Dante-capable endpoints have passive multicast evidence available",
+                "Managed-switch multicast membership data is available for review alongside Dante-capable endpoints.",
+                "Passive multicast evidence improves confidence when checking IGMP snooping, querier placement, and VLAN scoping.",
+                "Review observed multicast groups against Dante design intent and confirm switch multicast policy remains aligned.",
+                evidence_source=["validate_all.results", "devices.json", "multicast_groups.json"],
+                affected_devices=sorted(dante_device_names),
+            )
+        else:
+            add_rec(
+                "multicast",
+                "medium",
+                "Validate multicast controls for Dante-capable endpoints",
+                "Dante-capable devices were detected but passive multicast membership visibility is unavailable.",
+                "Missing IGMP/multicast policy visibility can hide intermittent AV transport and clock stability issues.",
+                "Confirm IGMP snooping/querier and multicast QoS policy on Dante VLANs, then generate multicast evidence from managed switches if available.",
+                evidence_source=["validate_all.results", "devices.json", "multicast_groups.json"],
+                affected_devices=sorted(dante_device_names),
+            )
+
+    if not multicast_groups and not multicast_generated_at:
         add_rec(
             "multicast",
-            "medium",
-            "Validate multicast controls for Dante-capable endpoints",
-            "Dante-capable devices were detected and require multicast-aware switching policy.",
-            "Missing IGMP/multicast policy validation can cause intermittent AV transport and clock stability issues.",
-            "Confirm IGMP snooping/querier and multicast QoS policy on Dante VLANs.",
-            evidence_source=["validate_all.results", "devices.json"],
-            affected_devices=sorted(dante_device_names),
+            "info",
+            "Managed switch multicast visibility has not been generated yet",
+            "No saved multicast group snapshot is available for the current project.",
+            "Without passive multicast evidence, switch-side IGMP state cannot be cross-checked against observed AV endpoints.",
+            "Generate multicast group discovery from known managed switches when SNMP is available.",
+            evidence_source=["multicast_groups.json"],
         )
+    elif multicast_groups:
+        groups_without_members = [
+            str(group.get("group_address") or "").strip()
+            for group in multicast_groups
+            if int(group.get("member_count") or 0) <= 0
+        ]
+        if groups_without_members:
+            add_rec(
+                "multicast",
+                "low",
+                "Some multicast groups do not expose identifiable subscribers",
+                "One or more observed multicast groups were present on managed switches without a strong subscriber identity.",
+                "Groups without visible subscribers can indicate limited switch SNMP visibility or unwanted multicast publishers.",
+                "Review the affected groups and confirm whether switch IGMP visibility, querier behavior, or publisher configuration needs attention.",
+                evidence_source=["multicast_groups.json"],
+                affected_devices=groups_without_members[:8],
+            )
+
+        if len(multicast_groups) >= 3:
+            add_rec(
+                "multicast",
+                "low",
+                "Multiple multicast groups are active on the managed switch estate",
+                "Several multicast groups were observed from eligible managed switches.",
+                "As multicast group count grows, querier placement, VLAN scoping, and snooping behavior become more important for stable AV transport.",
+                "Confirm multicast design intent, querier placement, and VLAN boundaries against the observed group list.",
+                evidence_source=["multicast_groups.json"],
+            )
 
     # 2) DHCP reservations (explicit DHCP signal only)
     dhcp_critical = []
