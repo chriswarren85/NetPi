@@ -39,6 +39,22 @@ from checks.requirements import (
     load_requirements_config,
     generate_device_requirements,
 )
+try:
+    from pysnmp.hlapi import (
+        CommunityData,
+        ContextData,
+        ObjectIdentity,
+        ObjectType,
+        SnmpEngine,
+        UdpTransportTarget,
+        getCmd,
+        nextCmd,
+    )
+    SNMP_HLAPI_AVAILABLE = True
+except Exception:
+    CommunityData = ContextData = ObjectIdentity = ObjectType = SnmpEngine = UdpTransportTarget = None
+    getCmd = nextCmd = None
+    SNMP_HLAPI_AVAILABLE = False
 
 app = Flask(__name__)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
@@ -925,6 +941,7 @@ def _default_settings():
         "site_location": "",
         "dns_suffix": ".av",
         "ntp_server": "",
+        "snmp_community": "",
         "vlans": [],
     }
 
@@ -941,6 +958,301 @@ def _merge_settings_defaults(raw_settings):
     if not isinstance(merged.get("vlans"), list):
         merged["vlans"] = []
     return merged
+
+
+SNMP_SYS_OIDS = {
+    "sys_descr": "1.3.6.1.2.1.1.1.0",
+    "sys_contact": "1.3.6.1.2.1.1.4.0",
+    "sys_name": "1.3.6.1.2.1.1.5.0",
+    "sys_location": "1.3.6.1.2.1.1.6.0",
+}
+SNMP_INTERFACE_OIDS = {
+    "descr": "1.3.6.1.2.1.2.2.1.2",
+    "mac_address": "1.3.6.1.2.1.2.2.1.6",
+    "index": "1.3.6.1.2.1.2.2.1.1",
+    "name": "1.3.6.1.2.1.31.1.1.1.1",
+}
+SNMP_MAX_INTERFACES = 12
+SNMP_TIMEOUT_SECONDS = 1
+SNMP_RETRIES = 0
+
+
+def _safe_snmp_text(value):
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return text[:512]
+
+
+def _normalize_snmp_interface_mac(value):
+    normalized = _normalize_mac_value(value)
+    if normalized == "00:00:00:00:00:00":
+        return ""
+    return normalized
+
+
+def _snmp_value_to_python(value):
+    if value is None:
+        return ""
+    try:
+        pretty = value.prettyPrint()
+    except Exception:
+        pretty = str(value)
+    return pretty.strip()
+
+
+def _infer_vendor_from_snmp(snmp_data):
+    text = " ".join([
+        _safe_snmp_text((snmp_data or {}).get("sys_descr")),
+        _safe_snmp_text((snmp_data or {}).get("sys_name")),
+    ]).lower()
+    vendor_tokens = (
+        ("QSC", ("qsc", "q-sys", "qsys")),
+        ("Crestron", ("crestron",)),
+        ("Biamp", ("biamp", "tesira")),
+        ("Shure", ("shure",)),
+        ("Barco", ("barco", "clickshare")),
+        ("Cisco", ("cisco",)),
+        ("Aruba", ("aruba", "hewlett packard enterprise", "hpe officeconnect")),
+        ("NETGEAR", ("netgear",)),
+        ("Ubiquiti", ("ubiquiti", "unifi")),
+        ("Fortinet", ("fortinet", "fortigate")),
+        ("Juniper", ("juniper",)),
+    )
+    for vendor_name, tokens in vendor_tokens:
+        if any(token in text for token in tokens):
+            return vendor_name
+    return ""
+
+
+def _infer_model_from_snmp(snmp_data):
+    text = " ".join([
+        _safe_snmp_text((snmp_data or {}).get("sys_descr")),
+        _safe_snmp_text((snmp_data or {}).get("sys_name")),
+    ])
+    patterns = (
+        r"\b(CP4|MC4|RMC4|PRO4)\b",
+        r"\b(TSW-\d+[A-Z]*)\b",
+        r"\b(TSS-\d+[A-Z]*)\b",
+        r"\b(NV-32-H|NV32-H|NV-21|NV21)\b",
+        r"\b(TSC-\d+[A-Z]*)\b",
+        r"\b(CORE(?:\s+|[-_]?)(?:110F|510I|510C|NANO|8 FLEX))\b",
+        r"\b(TESIRA(?:FORT[E]?)?(?:\s+[A-Z0-9-]+)?)\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return re.sub(r"\s+", " ", match.group(1).strip())
+    return ""
+
+
+def _infer_firmware_from_snmp(snmp_data):
+    text = " ".join([
+        _safe_snmp_text((snmp_data or {}).get("sys_descr")),
+        _safe_snmp_text((snmp_data or {}).get("sys_name")),
+    ])
+    patterns = (
+        r"(?:firmware|fw|software version|version|release)[^\dA-Za-z]{0,8}([A-Za-z0-9][A-Za-z0-9._-]{1,31})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _snmp_get_scalar_map(ip, community):
+    values = {}
+    if not SNMP_HLAPI_AVAILABLE or not ip or not community:
+        return values
+
+    objects = [ObjectType(ObjectIdentity(oid)) for oid in SNMP_SYS_OIDS.values()]
+    try:
+        iterator = getCmd(
+            SnmpEngine(),
+            CommunityData(community, mpModel=1),
+            UdpTransportTarget((ip, 161), timeout=SNMP_TIMEOUT_SECONDS, retries=SNMP_RETRIES),
+            ContextData(),
+            *objects,
+        )
+        error_indication, error_status, error_index, var_binds = next(iterator)
+    except Exception:
+        return values
+
+    if error_indication or error_status:
+        return values
+
+    keys = list(SNMP_SYS_OIDS.keys())
+    for idx, var_bind in enumerate(var_binds or []):
+        try:
+            _, value = var_bind
+        except Exception:
+            continue
+        if idx < len(keys):
+            values[keys[idx]] = _safe_snmp_text(_snmp_value_to_python(value))
+    return values
+
+
+def _snmp_walk_interface_table(ip, community, max_rows=SNMP_MAX_INTERFACES):
+    if not SNMP_HLAPI_AVAILABLE or not ip or not community or max_rows <= 0:
+        return []
+
+    rows_by_index = {}
+    column_keys = list(SNMP_INTERFACE_OIDS.keys())
+    objects = [ObjectType(ObjectIdentity(oid)) for oid in SNMP_INTERFACE_OIDS.values()]
+
+    try:
+        iterator = nextCmd(
+            SnmpEngine(),
+            CommunityData(community, mpModel=1),
+            UdpTransportTarget((ip, 161), timeout=SNMP_TIMEOUT_SECONDS, retries=SNMP_RETRIES),
+            ContextData(),
+            *objects,
+            lexicographicMode=False,
+            ignoreNonIncreasingOid=True,
+            maxRows=max_rows,
+        )
+        for error_indication, error_status, error_index, var_binds in iterator:
+            if error_indication or error_status:
+                break
+            row = {}
+            row_index = ""
+            for key, var_bind in zip(column_keys, var_binds or []):
+                try:
+                    oid, value = var_bind
+                    oid_text = oid.prettyPrint()
+                except Exception:
+                    continue
+                row_index = oid_text.rsplit(".", 1)[-1]
+                row[key] = _snmp_value_to_python(value)
+            if row_index:
+                rows_by_index[row_index] = row
+            if len(rows_by_index) >= max_rows:
+                break
+    except Exception:
+        return []
+
+    interfaces = []
+    for row_index in sorted(rows_by_index.keys(), key=lambda value: int(value) if str(value).isdigit() else value):
+        raw = rows_by_index[row_index]
+        interface = {
+            "index": int(raw.get("index") or row_index) if str(raw.get("index") or row_index).isdigit() else row_index,
+            "name": _safe_snmp_text(raw.get("name") or ""),
+            "descr": _safe_snmp_text(raw.get("descr") or ""),
+            "mac_address": _normalize_snmp_interface_mac(raw.get("mac_address") or ""),
+        }
+        if not interface["name"] and interface["descr"]:
+            interface["name"] = interface["descr"]
+        if interface["index"] == "" and not interface["name"] and not interface["descr"] and not interface["mac_address"]:
+            continue
+        interfaces.append(interface)
+    return interfaces
+
+
+def _collect_snmp_data(ip, settings=None):
+    settings = settings if isinstance(settings, dict) else load_settings()
+    community = str((settings or {}).get("snmp_community") or "").strip()
+    if not community:
+        return None
+    if not SNMP_HLAPI_AVAILABLE:
+        return None
+
+    scalar_values = _snmp_get_scalar_map(ip, community)
+    if not scalar_values:
+        return None
+
+    interfaces = _snmp_walk_interface_table(ip, community, max_rows=SNMP_MAX_INTERFACES)
+    snmp_data = {
+        "sys_descr": scalar_values.get("sys_descr", ""),
+        "sys_name": scalar_values.get("sys_name", ""),
+        "sys_location": scalar_values.get("sys_location", ""),
+        "sys_contact": scalar_values.get("sys_contact", ""),
+        "interfaces": interfaces,
+    }
+    return snmp_data
+
+
+def _merge_snmp_enrichment(device, snmp_data):
+    if not isinstance(device, dict) or not isinstance(snmp_data, dict):
+        return False
+
+    changed = False
+    current_snmp = copy.deepcopy(device.get("snmp_data") or {})
+    if current_snmp != snmp_data:
+        device["snmp_data"] = snmp_data
+        changed = True
+
+    if device.get("snmp_enriched") is not True:
+        device["snmp_enriched"] = True
+        changed = True
+
+    inferred_vendor = _infer_vendor_from_snmp(snmp_data)
+    inferred_model = _infer_model_from_snmp(snmp_data)
+    inferred_firmware = _infer_firmware_from_snmp(snmp_data)
+
+    if inferred_vendor and not str(device.get("vendor") or "").strip():
+        device["vendor"] = inferred_vendor
+        changed = True
+    if inferred_model and not str(device.get("model") or "").strip():
+        device["model"] = inferred_model
+        changed = True
+    if inferred_firmware and not str(device.get("firmware_version") or "").strip():
+        device["firmware_version"] = inferred_firmware
+        changed = True
+
+    unique_interface_macs = []
+    for interface in snmp_data.get("interfaces") or []:
+        mac_value = _normalize_snmp_interface_mac((interface or {}).get("mac_address"))
+        if mac_value and mac_value not in unique_interface_macs:
+            unique_interface_macs.append(mac_value)
+    if len(unique_interface_macs) == 1 and str(device.get("snmp_mac") or "").strip() != unique_interface_macs[0]:
+        device["snmp_mac"] = unique_interface_macs[0]
+        changed = True
+
+    return changed
+
+
+def _apply_snmp_to_validation_result(result, device):
+    if not isinstance(result, dict) or not isinstance(device, dict):
+        return
+    if "snmp_enriched" in device:
+        result["snmp_enriched"] = bool(device.get("snmp_enriched"))
+    if isinstance(device.get("snmp_data"), dict):
+        result["snmp_data"] = copy.deepcopy(device.get("snmp_data"))
+    if str(device.get("model") or "").strip():
+        result["model"] = device.get("model")
+    if str(device.get("firmware_version") or "").strip():
+        result["firmware_version"] = device.get("firmware_version")
+    if str(device.get("snmp_mac") or "").strip():
+        result["snmp_mac"] = device.get("snmp_mac")
+    evidence = result.get("evidence")
+    if isinstance(evidence, dict):
+        if isinstance(device.get("snmp_data"), dict):
+            evidence["snmp_data"] = copy.deepcopy(device.get("snmp_data"))
+        if str(device.get("snmp_mac") or "").strip():
+            evidence["snmp_mac"] = device.get("snmp_mac")
+        if str(device.get("vendor") or "").strip():
+            evidence["vendor"] = device.get("vendor")
+
+
+def _best_effort_snmp_enrich_device(device, validation_result=None, settings=None):
+    if not isinstance(device, dict):
+        return False
+
+    ip = str(device.get("ip") or "").strip()
+    if not ip:
+        return False
+    if validation_result is not None and not _validation_confirms_reachability(validation_result):
+        return False
+
+    snmp_data = _collect_snmp_data(ip, settings=settings)
+    if not isinstance(snmp_data, dict):
+        return False
+
+    changed = _merge_snmp_enrichment(device, snmp_data)
+    if validation_result is not None:
+        _apply_snmp_to_validation_result(validation_result, device)
+    return changed
 
 
 def _log_settings_load_once(message, level="info"):
@@ -1263,6 +1575,7 @@ def resolve_runtime_type(device, effective_type="", type_suggestion=None, valida
 def enrich_device_runtime(device):
     item = dict(device or {})
     validation = run_validation(item)
+    _best_effort_snmp_enrich_device(item, validation)
     auto_type = decide_auto_promoted_type(item, validation)
     type_suggestion = build_type_suggestion(item, validation)
     guessed_type = auto_type.get("proposed_type") or ""
@@ -3629,6 +3942,8 @@ def api_validate_device():
                 device.clear()
                 device.update(refreshed_device)
                 device_changed = True
+            if _best_effort_snmp_enrich_device(device, result):
+                device_changed = True
 
         # Passive MAC harvest (best-effort, non-blocking): ARP -> SNMP-context -> LLDP/CDP-context.
         passive_mac = ""
@@ -3735,6 +4050,8 @@ def api_validate_all():
                 if refreshed_device != device:
                     device.clear()
                     device.update(refreshed_device)
+                    devices_changed = True
+                if _best_effort_snmp_enrich_device(device, result):
                     devices_changed = True
             auto_type = decide_auto_promoted_type(device, result)
             type_suggestion = build_type_suggestion(device, result)
@@ -4209,6 +4526,14 @@ def fingerprint_host():
                 updated_device = dict(inventory_device)
             break
 
+        if _validation_confirms_reachability(validation):
+            if matched_inventory_device is not None:
+                if _best_effort_snmp_enrich_device(matched_inventory_device, validation):
+                    updated_device = dict(matched_inventory_device)
+                    device_updated = True
+            else:
+                _best_effort_snmp_enrich_device(device, validation)
+
         type_suggestion = build_type_suggestion(updated_device or device, validation)
         promotion = evaluate_safe_type_promotion(updated_device or device, type_suggestion)
         if matched_inventory_device is not None and promotion.get("should_apply"):
@@ -4301,6 +4626,7 @@ def add_discovered_devices_to_inventory(devices_in):
             if refreshed_device != existing_device or mac_updated:
                 existing_device.clear()
                 existing_device.update(refreshed_device)
+            _best_effort_snmp_enrich_device(existing_device)
             skipped_existing += 1
             continue
 
@@ -4311,7 +4637,7 @@ def add_discovered_devices_to_inventory(devices_in):
         normalized_mac = _normalize_mac_value(normalized.get("mac") or normalized.get("mac_address"))
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
-        devices.append(_mark_device_freshness({
+        new_device = _mark_device_freshness({
             "name": generated_name,
             "ip": ip,
             "type": device_type,
@@ -4321,7 +4647,9 @@ def add_discovered_devices_to_inventory(devices_in):
             "mac_address": normalized_mac or None,
             "mac_source": "arp-cache" if normalized_mac else "unknown",
             "vendor": vendor
-        }, seen=True, reachable=True))
+        }, seen=True, reachable=True)
+        _best_effort_snmp_enrich_device(new_device)
+        devices.append(new_device)
         added += 1
         added_ips.append(ip)
 
@@ -4360,6 +4688,7 @@ def add_discovered_device():
         refreshed_device = _mark_device_freshness(existing_device, seen=True, reachable=True)
         existing_device.clear()
         existing_device.update(refreshed_device)
+        _best_effort_snmp_enrich_device(existing_device)
         save_devices_file(devices)
         return jsonify({"success": True, "message": "Device already exists"})
 
@@ -4368,7 +4697,7 @@ def add_discovered_device():
     name = generate_device_name(devices, device_type, hostname)
     normalized_mac = _normalize_mac_value(mac or normalized.get("mac_address"))
 
-    devices.append(_mark_device_freshness({
+    new_device = _mark_device_freshness({
         "name": name,
         "ip": ip,
         "type": device_type,
@@ -4378,7 +4707,9 @@ def add_discovered_device():
         "mac_address": normalized_mac or None,
         "mac_source": "arp-cache" if normalized_mac else "unknown",
         "vendor": vendor
-    }, seen=True, reachable=True))
+    }, seen=True, reachable=True)
+    _best_effort_snmp_enrich_device(new_device)
+    devices.append(new_device)
 
     save_devices_file(devices)
     return jsonify({"success": True, "message": f"Device added as {name}"})
@@ -5202,6 +5533,10 @@ def api_validate_systems():
                     device.clear()
                     device.update(refreshed_device)
                     devices_changed = True
+                if isinstance(item.get("snmp_data"), dict):
+                    if _merge_snmp_enrichment(device, item.get("snmp_data")):
+                        devices_changed = True
+                    _apply_snmp_to_validation_result(result, device)
             auto_type = result.get("auto_type") or {}
             role = item.get("av_role")
             validations_by_ip[result.get("ip", "")] = result

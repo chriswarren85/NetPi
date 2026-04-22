@@ -266,3 +266,14 @@
   - Added resilient settings load behavior with additive defaults, invalid-JSON recovery fallback, and one-time startup log messages for load source/recovery path
   - Preserved unknown/custom top-level settings keys and unknown per-VLAN keys during settings form saves to avoid destructive key loss
   - Added optional JSON save confirmation on POST /tools/settings when client requests application/json (`success`, `saved_to`, `timestamp`) while preserving existing HTML UI behavior
+
+### Last Update
+- Feature: W10.0 SNMP Enrichment Pass
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added lightweight best-effort SNMPv2c enrichment using configured project `snmp_community` when present, with short timeout/retry settings and safe optional-library fallback
+  - Harvests `sysDescr`, `sysName`, `sysLocation`, `sysContact`, plus bounded interface name/description/MAC rows where available, writing additive `snmp_enriched` and `snmp_data` fields
+  - Hooks enrichment into post-reachability validation, fingerprint, and discovered-device add flows so records become richer during or after discovery without changing reachability outcomes
+  - Keeps SNMP passive/read-only and non-blocking in practice: silent skip when no community is configured, when SNMP is unsupported, or when a device does not answer
