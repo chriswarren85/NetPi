@@ -65,6 +65,7 @@ DEFAULT_PROJECT_ID = "default"
 CURRENT_PROJECT_STATE_FILE = os.path.join(DATA_DIR, "current_project.json")
 PROJECT_BACKUPS_DIRNAME = "project_backups"
 PROJECTS_STATE_RESERVED_NAMES = {
+    "backups",
     PROJECT_BACKUPS_DIRNAME,
     "__pycache__",
 }
@@ -155,6 +156,13 @@ def _sanitize_project_id(value):
     return text
 
 
+def _is_reserved_or_internal_project_id(project_id):
+    normalized = _sanitize_project_id(project_id)
+    if not normalized:
+        return False
+    return normalized.lower() in {name.lower() for name in PROJECTS_STATE_RESERVED_NAMES}
+
+
 def _load_current_project_state():
     if not os.path.exists(CURRENT_PROJECT_STATE_FILE):
         return {}
@@ -228,9 +236,15 @@ def _list_project_ids():
     os.makedirs(DATA_DIR, exist_ok=True)
     found = set()
     for name in os.listdir(DATA_DIR):
+        if str(name).startswith("."):
+            continue
         candidate = _sanitize_project_id(name)
         full = os.path.join(DATA_DIR, name)
-        if not candidate or candidate in PROJECTS_STATE_RESERVED_NAMES or not os.path.isdir(full):
+        if (
+            not candidate
+            or _is_reserved_or_internal_project_id(candidate)
+            or not os.path.isdir(full)
+        ):
             continue
         found.add(candidate)
     found.add(DEFAULT_PROJECT_ID)
@@ -6014,6 +6028,11 @@ def api_projects_create():
             "ok": False,
             "error": "Invalid project_id. Use letters, numbers, dot, underscore, or dash.",
         }), 400
+    if _is_reserved_or_internal_project_id(normalized):
+        return jsonify({
+            "ok": False,
+            "error": f"Project '{normalized}' is reserved and cannot be created.",
+        }), 400
 
     if normalized in _list_project_ids():
         return jsonify({
@@ -6044,6 +6063,11 @@ def api_projects_switch():
         return jsonify({
             "ok": False,
             "error": "Invalid project_id. Use letters, numbers, dot, underscore, or dash.",
+        }), 400
+    if _is_reserved_or_internal_project_id(normalized):
+        return jsonify({
+            "ok": False,
+            "error": f"Project '{normalized}' is reserved and cannot be selected.",
         }), 400
 
     _project_dir(normalized, ensure=True)
