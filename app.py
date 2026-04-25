@@ -9,6 +9,7 @@ import uuid
 import queue
 import time
 import signal
+import zipfile
 from command_helpers import (
     build_nmap_command,
     build_nmap_host_discovery_command,
@@ -69,6 +70,41 @@ BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
 DISCOVERY_SUBNET_TIMEOUT_SECONDS = 10
 _SETTINGS_LOAD_LOGGED = False
+SNAPSHOT_SCHEMA_VERSION = "1.0"
+PROJECT_STATE_REQUIRED_FILES = [
+    "devices.json",
+    "settings.json",
+    "data/fingerprints.json",
+    "data/device_evidence.json",
+]
+PROJECT_STATE_OPTIONAL_FILES = [
+    "topology.json",
+    "multicast_groups.json",
+    "requirements.json",
+    "flows.json",
+    "firewall_plan.json",
+    "recommendations.json",
+    "report.json",
+    "data/requirements.json",
+    "data/flows.json",
+    "data/firewall_plan.json",
+    "data/recommendations.json",
+    "data/report.json",
+]
+PROJECT_RESTORE_ALLOWLIST = set(PROJECT_STATE_REQUIRED_FILES + [
+    "topology.json",
+    "multicast_groups.json",
+    "requirements.json",
+    "flows.json",
+    "firewall_plan.json",
+    "recommendations.json",
+    "report.json",
+    "data/requirements.json",
+    "data/flows.json",
+    "data/firewall_plan.json",
+    "data/recommendations.json",
+    "data/report.json",
+])
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -3978,6 +4014,141 @@ def save_run(results):
 
 # ── Pages ──────────────────────────────────────────────
 
+
+def _project_root():
+    return os.path.abspath(os.path.dirname(__file__))
+
+
+def _normalize_snapshot_relpath(value):
+    text = str(value or "").replace("\\", "/").strip()
+    while text.startswith("./"):
+        text = text[2:]
+    text = re.sub(r"/+", "/", text)
+    return text
+
+
+def _is_safe_snapshot_member(name):
+    rel = _normalize_snapshot_relpath(name)
+    if not rel or rel.endswith("/"):
+        return False
+    if rel.startswith("/") or rel.startswith("\\"):
+        return False
+    if re.match(r"^[A-Za-z]:", rel):
+        return False
+
+    parts = rel.split("/")
+    for part in parts:
+        if not part or part in {".", ".."}:
+            return False
+        if part.startswith("."):
+            return False
+    return True
+
+
+def _rel_to_abs_project_path(relpath):
+    rel = _normalize_snapshot_relpath(relpath)
+    return os.path.abspath(os.path.join(_project_root(), rel.replace("/", os.sep)))
+
+
+def _is_within_project_root(path):
+    try:
+        return os.path.commonpath([_project_root(), os.path.abspath(path)]) == _project_root()
+    except Exception:
+        return False
+
+
+def _safe_instance_metadata():
+    return {
+        "hostname": socket.gethostname(),
+        "platform": platform.system(),
+    }
+
+
+def _collect_snapshot_files():
+    included = {}
+    missing_optional = []
+    notes = []
+
+    for rel in PROJECT_STATE_REQUIRED_FILES:
+        target = _rel_to_abs_project_path(rel)
+        if not _is_within_project_root(target):
+            notes.append(f"Skipped unsafe required path mapping: {rel}")
+            continue
+        if os.path.isfile(target):
+            included[rel] = target
+        else:
+            notes.append(f"Required state file unavailable: {rel}")
+
+    for rel in PROJECT_STATE_OPTIONAL_FILES:
+        target = _rel_to_abs_project_path(rel)
+        if not _is_within_project_root(target):
+            notes.append(f"Skipped unsafe optional path mapping: {rel}")
+            continue
+        if os.path.isfile(target):
+            included[rel] = target
+        else:
+            missing_optional.append(rel)
+
+    return included, sorted(set(missing_optional)), notes
+
+
+def _atomic_write_bytes(path, payload):
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    temp_path = path + f".restore_tmp_{int(time.time() * 1000)}"
+    with open(temp_path, "wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    return temp_path
+
+
+def _create_pre_restore_backup():
+    backup_root = _rel_to_abs_project_path("data/project_backups")
+    os.makedirs(backup_root, exist_ok=True)
+
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    backup_name = f"netpi_pre_restore_{timestamp}.avp"
+    backup_path = os.path.join(backup_root, backup_name)
+
+    files, _, notes = _collect_snapshot_files()
+    included_files = []
+
+    with zipfile.ZipFile(backup_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rel, abs_path in files.items():
+            try:
+                archive.write(abs_path, arcname=rel)
+                included_files.append(rel)
+            except Exception as exc:
+                notes.append(f"Backup skipped unreadable file {rel}: {exc}")
+
+        archive.writestr(
+            "manifest.json",
+            json.dumps(
+                {
+                    "schema_version": SNAPSHOT_SCHEMA_VERSION,
+                    "created_at": utc_now_iso(),
+                    "app_name": "NetPi",
+                    "type": "pre_restore_backup",
+                    "included_files": included_files,
+                    "notes": notes,
+                },
+                indent=2
+            ),
+        )
+
+    return backup_path, notes
+
+
+def _get_uploaded_snapshot_file():
+    if "snapshot" in request.files:
+        return request.files["snapshot"]
+    if "file" in request.files:
+        return request.files["file"]
+    for _, uploaded in request.files.items():
+        return uploaded
+    return None
+
 @app.route('/tools/')
 @app.route('/tools')
 def index():
@@ -5174,6 +5345,236 @@ def api_project_name():
     if s.get('job_number'):
         name += ' — ' + s['job_number']
     return jsonify({'name': name or ''})
+
+
+@app.route("/tools/api/project/snapshot", methods=["GET"])
+def api_project_snapshot():
+    files, missing_optional, notes = _collect_snapshot_files()
+    archive_io = io.BytesIO()
+    included_files = []
+
+    with zipfile.ZipFile(archive_io, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for rel, abs_path in files.items():
+            try:
+                archive.write(abs_path, arcname=rel)
+                included_files.append(rel)
+            except Exception as exc:
+                notes.append(f"Skipped unreadable file {rel}: {exc}")
+
+        manifest = {
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
+            "exported_at": utc_now_iso(),
+            "app_name": "NetPi",
+            "included_files": included_files,
+            "missing_optional_files": missing_optional,
+            "source_instance": _safe_instance_metadata(),
+            "notes": notes,
+        }
+        archive.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    archive_io.seek(0)
+    filename = f"netpi_project_snapshot_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.avp"
+    return send_file(
+        archive_io,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/octet-stream",
+    )
+
+
+@app.route("/tools/api/project/restore", methods=["POST"])
+def api_project_restore():
+    uploaded = _get_uploaded_snapshot_file()
+    if uploaded is None or not getattr(uploaded, "filename", ""):
+        return jsonify({
+            "ok": False,
+            "restored_files": [],
+            "skipped_files": [],
+            "backup_path": "",
+            "schema_version": "",
+            "notes": ["No snapshot file uploaded. Use multipart form file field 'snapshot' or 'file'."],
+        }), 400
+
+    try:
+        payload = uploaded.read()
+        archive_handle = io.BytesIO(payload)
+        with zipfile.ZipFile(archive_handle, "r") as archive:
+            file_members = {}
+            invalid_members = []
+            duplicate_members = []
+
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                normalized = _normalize_snapshot_relpath(info.filename)
+                if not _is_safe_snapshot_member(normalized):
+                    invalid_members.append(info.filename)
+                    continue
+                if normalized in file_members:
+                    duplicate_members.append(normalized)
+                    continue
+                file_members[normalized] = info
+
+            if invalid_members:
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": [],
+                    "backup_path": "",
+                    "schema_version": "",
+                    "notes": [f"Archive contains invalid file paths: {sorted(invalid_members)}"],
+                }), 400
+
+            if duplicate_members:
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": [],
+                    "backup_path": "",
+                    "schema_version": "",
+                    "notes": [f"Archive contains duplicate file paths: {sorted(set(duplicate_members))}"],
+                }), 400
+
+            if "manifest.json" not in file_members:
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": [],
+                    "backup_path": "",
+                    "schema_version": "",
+                    "notes": ["Archive is missing manifest.json."],
+                }), 400
+
+            manifest_raw = archive.read(file_members["manifest.json"])
+            manifest = json.loads(manifest_raw.decode("utf-8"))
+            if not isinstance(manifest, dict):
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": [],
+                    "backup_path": "",
+                    "schema_version": "",
+                    "notes": ["Invalid manifest format."],
+                }), 400
+
+            schema_version = str(manifest.get("schema_version") or "").strip()
+            if schema_version != SNAPSHOT_SCHEMA_VERSION:
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": [],
+                    "backup_path": "",
+                    "schema_version": schema_version,
+                    "notes": [f"Unsupported schema_version '{schema_version}'. Expected '{SNAPSHOT_SCHEMA_VERSION}'."],
+                }), 400
+
+            restore_payloads = {}
+            disallowed_files = []
+            for rel, info in file_members.items():
+                if rel == "manifest.json":
+                    continue
+                if rel not in PROJECT_RESTORE_ALLOWLIST:
+                    disallowed_files.append(rel)
+                    continue
+                restore_payloads[rel] = archive.read(info)
+
+            if disallowed_files:
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": sorted(disallowed_files),
+                    "backup_path": "",
+                    "schema_version": schema_version,
+                    "notes": ["Archive includes non-restorable files; restore was blocked to avoid unsafe partial apply."],
+                }), 400
+
+            if not restore_payloads:
+                return jsonify({
+                    "ok": False,
+                    "restored_files": [],
+                    "skipped_files": [],
+                    "backup_path": "",
+                    "schema_version": schema_version,
+                    "notes": ["No approved project-state files found in archive."],
+                }), 400
+
+            backup_path, backup_notes = _create_pre_restore_backup()
+            notes = list(backup_notes or [])
+            staged_writes = []
+
+            for rel, content in restore_payloads.items():
+                target = _rel_to_abs_project_path(rel)
+                if not _is_within_project_root(target):
+                    notes.append(f"Skipped unsafe restore target: {rel}")
+                    continue
+                temp_path = _atomic_write_bytes(target, content)
+                staged_writes.append((rel, temp_path, target))
+
+            restored_files = []
+            skipped_files = []
+
+            for rel, temp_path, target in staged_writes:
+                try:
+                    os.replace(temp_path, target)
+                    restored_files.append(rel)
+                except PermissionError:
+                    # Windows/dev fallback when target file is temporarily locked.
+                    with open(temp_path, "rb") as src:
+                        content = src.read()
+                    with open(target, "wb") as dst:
+                        dst.write(content)
+                        dst.flush()
+                        os.fsync(dst.fileno())
+                    restored_files.append(rel)
+                except Exception as exc:
+                    skipped_files.append(rel)
+                    notes.append(f"Failed restoring {rel}: {exc}")
+                finally:
+                    try:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                    except Exception:
+                        pass
+
+            ok = len(restored_files) > 0 and len(skipped_files) == 0
+            if not restored_files:
+                notes.append("No files were restored.")
+
+            return jsonify({
+                "ok": ok,
+                "restored_files": restored_files,
+                "skipped_files": skipped_files,
+                "backup_path": backup_path,
+                "schema_version": schema_version,
+                "notes": notes,
+            }), (200 if ok else 500)
+    except zipfile.BadZipFile:
+        return jsonify({
+            "ok": False,
+            "restored_files": [],
+            "skipped_files": [],
+            "backup_path": "",
+            "schema_version": "",
+            "notes": ["Invalid archive format. Expected a .avp/.zip snapshot archive."],
+        }), 400
+    except json.JSONDecodeError:
+        return jsonify({
+            "ok": False,
+            "restored_files": [],
+            "skipped_files": [],
+            "backup_path": "",
+            "schema_version": "",
+            "notes": ["manifest.json is not valid JSON."],
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "restored_files": [],
+            "skipped_files": [],
+            "backup_path": "",
+            "schema_version": "",
+            "notes": [str(e)],
+        }), 500
 
 
 @app.route("/tools/api/ipschedule", methods=["GET"])
@@ -8047,3 +8448,4 @@ def api_generate_firewall_plan():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
+

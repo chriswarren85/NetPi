@@ -301,3 +301,13 @@
   - Multicast discovery reuses known eligible managed-switch selection, attempts passive IGMP membership discovery via SNMP only, and safely skips when SNMP or eligible switch infrastructure is unavailable
   - Saved rows remain compact and truthful (`group_address`, switch context, member count, and strong member IP/hostname correlation where available) without inventing subscriber lists when the switch MIB view is partial
   - Validation and recommendations now consume saved multicast findings additively, and the Validation page includes a read-only `Multicast Groups` panel for Generate/Refresh review without changing existing discovery or validation behavior
+### Last Update
+- Feature: W11.0 Project State Snapshot + Restore
+- Files modified:
+  - app.py
+  - templates/settings.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added additive `GET /tools/api/project/snapshot` to export a compressed portable `.avp` project archive with `manifest.json` including schema version, included files, missing optional files, source instance metadata, and notes
+  - Added additive `POST /tools/api/project/restore` to validate archive structure/manifest/schema/paths/allowlist, create a timestamped pre-restore backup under `data/project_backups/`, and restore only approved state files with clear restored/skipped summary
+  - Added minimal Settings page snapshot export link without introducing restore UI changes, preserving existing behavior and portability between Windows/Pi runtime instances
