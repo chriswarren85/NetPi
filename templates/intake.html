@@ -2,105 +2,85 @@
 {% block title %}- Device Intake{% endblock %}
 {% block content %}
 <div class="page-title">Device Intake</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Raw capture and staging before promotion to the master device list</div>
+<div class="page-sub">Use this page for manual device entry, pasted bulk intake, and controlled commit into the active project inventory.</div>
 
-<div style="display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:12px;align-items:start">
-  <div class="panel">
-    <div class="panel-header">Intake Actions</div>
-    <div class="panel-body">
-      <div style="margin-bottom:12px;font-size:12px;line-height:1.45;color:#9ca3af">
-        Capture raw devices here first. Discovery, suggestions, and normalization cues in this stage are provisional.
-      </div>
-      <div style="display:grid;gap:8px">
-        <button class="btn btn-primary" onclick="runIntakeStub('Discover')">Discover</button>
-        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Find candidate devices on target subnets for intake review.</div>
+<div id="intake-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
 
-        <button class="btn" onclick="runIntakeStub('Paste')">Paste</button>
-        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Paste spreadsheet-style rows into intake staging.</div>
-
-        <button class="btn" onclick="runIntakeStub('Add Manual')">Add Manual</button>
-        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Create an intake row directly when discovery is not available.</div>
-
-        <button class="btn" onclick="runIntakeStub('Fingerprint')">Fingerprint</button>
-        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Run provisional identity checks on staged candidates.</div>
-
-        <button class="btn" onclick="runIntakeStub('Bulk Normalize')">Bulk Normalize</button>
-        <div style="font-size:11px;color:#6b7280;margin-top:-2px">Apply staging-level normalization before later promotion.</div>
-      </div>
-      <div id="intake-status" style="display:none;margin-top:12px;padding:8px 10px;border-radius:6px;background:#111827;border:1px solid #374151;color:#d1d5db;font-size:12px"></div>
+<div class="panel" id="manual-add-panel">
+  <div class="panel-header">Manual Add Device</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group"><label>Name</label><input id="manual-name" placeholder="e.g. DSP-01"></div>
+      <div class="form-group"><label>Hostname</label><input id="manual-hostname" placeholder="e.g. dsp01"></div>
+      <div class="form-group"><label>IP</label><input id="manual-ip" placeholder="e.g. 192.168.1.20"></div>
+      <div class="form-group"><label>MAC</label><input id="manual-mac" placeholder="e.g. AA:BB:CC:DD:EE:FF"></div>
     </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-header">
-      <span>Intake Results (Staging)</span>
-      <span style="font-size:11px;color:#9ca3af">Demo skeleton data</span>
+    <div class="form-row">
+      <div class="form-group"><label>Type</label><input id="manual-type" placeholder="e.g. qsys"></div>
+      <div class="form-group"><label>VLAN</label><input id="manual-vlan" placeholder="e.g. AV_Control"></div>
+      <div class="form-group"><label>Room</label><input id="manual-room" placeholder="e.g. Room A"></div>
+      <div class="form-group"><label>Zone</label><input id="manual-zone" placeholder="e.g. Stage Left"></div>
     </div>
-    <div class="panel-body" style="padding:0">
-      <table>
-        <thead>
-          <tr>
-            <th>Name / Host</th>
-            <th>IP</th>
-            <th>Suggested Type</th>
-            <th>Confidence</th>
-            <th>VLAN Inference</th>
-            <th>Reachability</th>
-            <th>Source</th>
-            <th>Add To List</th>
-          </tr>
-        </thead>
-        <tbody id="intake-results"></tbody>
-      </table>
+    <div class="form-row">
+      <div class="form-group"><label>Vendor</label><input id="manual-vendor" placeholder="e.g. QSC"></div>
+      <div class="form-group"><label>Model</label><input id="manual-model" placeholder="e.g. Core"></div>
+      <div class="form-group"><label>Serial</label><input id="manual-serial" placeholder="e.g. SN12345"></div>
+      <div class="form-group"><label>Notes</label><input id="manual-notes" placeholder="Optional notes"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="addManualDevice()">Add Manual Device</button>
+      <a class="btn" href="/tools/devices">Open Devices</a>
     </div>
   </div>
 </div>
 
+<div class="panel" id="paste-list-panel">
+  <div class="panel-header">Paste Device List</div>
+  <div class="panel-body">
+    <textarea id="pasted-device-text" style="width:100%;min-height:170px;font-family:monospace;" placeholder="Name,IP,Type,VLAN\nDSP-01,192.168.1.20,qsys,AV_Control\n192.168.1.30"></textarea>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="previewPasteDevices()">Preview Parse</button>
+      <button class="btn" onclick="clearPaste()">Clear</button>
+    </div>
+    <div id="paste-summary" style="margin-top:10px;"></div>
+    <div id="paste-invalid" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span>Intake Results</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="selectAllRows(true)">Select All</button>
+      <button class="btn" onclick="selectAllRows(false)">Select None</button>
+      <button class="btn btn-primary" onclick="commitSelected()">Commit Selected</button>
+      <button class="btn" onclick="commitAll()">Commit All</button>
+    </div>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px"></th>
+          <th>Name</th>
+          <th>Hostname</th>
+          <th>IP</th>
+          <th>MAC</th>
+          <th>Type</th>
+          <th>VLAN</th>
+          <th>Vendor</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="intake-results">
+        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually or preview pasted data.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <script>
-const intakeCandidates = [
-  {name: 'CP4-RoomA', ip: '10.110.50.21', suggested_type: 'crestron_control', confidence: 'medium', vlan_inference: 'AV_Control', reachability: 'reachable', source: 'Discover'},
-  {name: 'DSP-StageLeft', ip: '10.110.50.34', suggested_type: 'biamp-tesira', confidence: 'high', vlan_inference: 'AV_Control', reachability: 'reachable', source: 'Paste'},
-  {name: 'TSC-Lobby', ip: '10.110.50.57', suggested_type: 'qsys-touchpanel', confidence: 'medium', vlan_inference: 'AV_Control', reachability: 'unknown', source: 'Add Manual'},
-  {name: 'VideoWall-A', ip: '10.110.60.12', suggested_type: 'video-wall-processor', confidence: 'low', vlan_inference: 'AV_Video', reachability: 'reachable', source: 'Discover'}
-];
-
-function renderIntakeResults(){
-  const tbody = document.getElementById('intake-results');
-  if(!tbody) return;
-  tbody.innerHTML = '';
-
-  intakeCandidates.forEach((row, index) => {
-    const tr = document.createElement('tr');
-    const reachTone = row.reachability === 'reachable'
-      ? '<span class="badge badge-green">Reachable</span>'
-      : '<span class="badge badge-amber">Unknown</span>';
-    tr.innerHTML =
-      '<td>' + escapeHtml(row.name) + '</td>' +
-      '<td style="font-family:monospace">' + escapeHtml(row.ip) + '</td>' +
-      '<td>' + escapeHtml(row.suggested_type) + '</td>' +
-      '<td>' + escapeHtml(row.confidence) + '</td>' +
-      '<td>' + escapeHtml(row.vlan_inference) + '</td>' +
-      '<td>' + reachTone + '</td>' +
-      '<td style="color:#9ca3af">' + escapeHtml(row.source) + '</td>' +
-      '<td><button class="btn" onclick="stageAddToList(' + index + ')">Add to list</button></td>';
-    tbody.appendChild(tr);
-  });
-}
-
-function runIntakeStub(action){
-  const status = document.getElementById('intake-status');
-  if(!status) return;
-  status.style.display = 'block';
-  status.textContent = action + ' is shown as a W5.0 intake skeleton action. Live intake orchestration is not wired from this page yet.';
-}
-
-function stageAddToList(index){
-  const status = document.getElementById('intake-status');
-  if(!status) return;
-  const row = intakeCandidates[index] || {};
-  status.style.display = 'block';
-  status.textContent = (row.name || 'Candidate') + ' is staged in the intake demo queue. Add-to-list persistence is not wired in W5.0.';
-}
+let intakeRows = [];
 
 function escapeHtml(str){
   return String(str || '')
@@ -109,6 +89,279 @@ function escapeHtml(str){
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function showIntakeStatus(message, tone){
+  const box = document.getElementById('intake-status');
+  if(!box) return;
+  box.style.display = message ? 'block' : 'none';
+  box.textContent = message || '';
+  if(tone === 'error'){
+    box.style.background = '#3b0d0d';
+    box.style.color = '#fecaca';
+    box.style.borderColor = '#7f1d1d';
+    return;
+  }
+  if(tone === 'success'){
+    box.style.background = '#0f2f1f';
+    box.style.color = '#bbf7d0';
+    box.style.borderColor = '#166534';
+    return;
+  }
+  box.style.background = '#111827';
+  box.style.color = '#d1d5db';
+  box.style.borderColor = '#374151';
+}
+
+function collectManualPayload(){
+  return {
+    name: document.getElementById('manual-name').value.trim(),
+    hostname: document.getElementById('manual-hostname').value.trim(),
+    ip: document.getElementById('manual-ip').value.trim(),
+    mac: document.getElementById('manual-mac').value.trim(),
+    type: document.getElementById('manual-type').value.trim(),
+    vlan: document.getElementById('manual-vlan').value.trim(),
+    room: document.getElementById('manual-room').value.trim(),
+    zone: document.getElementById('manual-zone').value.trim(),
+    vendor: document.getElementById('manual-vendor').value.trim(),
+    model: document.getElementById('manual-model').value.trim(),
+    serial: document.getElementById('manual-serial').value.trim(),
+    notes: document.getElementById('manual-notes').value.trim()
+  };
+}
+
+function clearManualForm(){
+  ['manual-name','manual-hostname','manual-ip','manual-mac','manual-type','manual-vlan','manual-room','manual-zone','manual-vendor','manual-model','manual-serial','manual-notes']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.value = '';
+    });
+}
+
+async function addManualDevice(){
+  const payload = collectManualPayload();
+  if(!payload.ip){
+    showIntakeStatus('Manual add requires an IP address.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/tools/api/devices/add_manual', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!res.ok || !data.success){
+      showIntakeStatus(data.error || 'Manual add failed.', 'error');
+      return;
+    }
+
+    const added = data.device || payload;
+    intakeRows.unshift({
+      selected: false,
+      source: 'manual',
+      committed: true,
+      status: 'Committed',
+      conflict_reason: '',
+      ...added
+    });
+    renderIntakeResults();
+    clearManualForm();
+    showIntakeStatus('Manual device added to active project inventory.', 'success');
+  } catch (e) {
+    showIntakeStatus('Manual add failed: ' + e, 'error');
+  }
+}
+
+async function previewPasteDevices(){
+  const pasted = document.getElementById('pasted-device-text').value.trim();
+  if(!pasted){
+    showIntakeStatus('Paste device rows first.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/tools/api/devices/preview_pasted', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text: pasted })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      showIntakeStatus(data.error || 'Preview failed.', 'error');
+      return;
+    }
+
+    intakeRows = (Array.isArray(data.devices) ? data.devices : []).map((row, idx) => {
+      const duplicate = !!row.duplicate;
+      const duplicateIp = !!row.duplicate_ip;
+      const duplicateMac = !!row.duplicate_mac;
+      let reason = '';
+      if(duplicateIp && duplicateMac){
+        reason = 'duplicate_ip+duplicate_mac';
+      } else if(duplicateIp){
+        reason = 'duplicate_ip';
+      } else if(duplicateMac){
+        reason = 'duplicate_mac';
+      }
+      return {
+        id: idx + 1,
+        selected: !duplicate,
+        source: 'paste',
+        committed: false,
+        status: duplicate ? 'Conflict' : 'Ready',
+        conflict_reason: reason,
+        ...row
+      };
+    });
+
+    document.getElementById('paste-summary').innerHTML =
+      '<div style="color:#9ca3af"><strong>Preview:</strong> valid ' + (data.rows_valid || 0)
+      + ' | invalid ' + (data.rows_invalid || 0)
+      + ' | duplicate IP ' + (data.rows_duplicate_ip || 0)
+      + ' | duplicate MAC ' + (data.rows_duplicate_mac || 0)
+      + ' | headers detected: ' + (data.headers_detected ? 'yes' : 'no') + '</div>';
+
+    const invalidRows = Array.isArray(data.invalid_rows) ? data.invalid_rows : [];
+    if(invalidRows.length){
+      document.getElementById('paste-invalid').innerHTML =
+        '<details><summary><strong>Invalid rows (' + invalidRows.length + ')</strong></summary>'
+        + '<pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">'
+        + escapeHtml(JSON.stringify(invalidRows, null, 2))
+        + '</pre></details>';
+    } else {
+      document.getElementById('paste-invalid').innerHTML = '';
+    }
+
+    renderIntakeResults();
+    showIntakeStatus('Paste preview generated. Review rows and commit selected.', 'success');
+  } catch (e) {
+    showIntakeStatus('Preview failed: ' + e, 'error');
+  }
+}
+
+function clearPaste(){
+  const text = document.getElementById('pasted-device-text');
+  if(text) text.value = '';
+  document.getElementById('paste-summary').innerHTML = '';
+  document.getElementById('paste-invalid').innerHTML = '';
+  intakeRows = [];
+  renderIntakeResults();
+  showIntakeStatus('', 'neutral');
+}
+
+function selectAllRows(nextValue){
+  intakeRows = intakeRows.map(row => ({ ...row, selected: !!nextValue && !row.committed && row.status !== 'Conflict' }));
+  renderIntakeResults();
+}
+
+function toggleRow(index){
+  const row = intakeRows[index];
+  if(!row || row.committed || row.status === 'Conflict') return;
+  row.selected = !row.selected;
+}
+
+function buildCommitPayload(rows){
+  return rows.map(row => ({
+    name: row.name || '',
+    hostname: row.hostname || '',
+    ip: row.ip || '',
+    mac: row.mac || row.mac_address || '',
+    type: row.type || '',
+    vlan: row.vlan || '',
+    room: row.room || '',
+    zone: row.zone || '',
+    vendor: row.vendor || '',
+    model: row.model || '',
+    serial: row.serial || '',
+    notes: row.notes || ''
+  }));
+}
+
+async function commitRows(rows){
+  if(!rows.length){
+    showIntakeStatus('No intake rows selected for commit.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/tools/api/devices/import_pasted', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ devices: buildCommitPayload(rows) })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      showIntakeStatus(data.error || 'Commit failed.', 'error');
+      return;
+    }
+
+    const skipped = Array.isArray(data.skipped) ? data.skipped : [];
+    const skippedByIp = new Map(skipped.map(item => [String(item.ip || ''), String(item.reason || 'skipped')]));
+    intakeRows = intakeRows.map(row => {
+      if(!rows.includes(row)) return row;
+      const reason = skippedByIp.get(String(row.ip || ''));
+      if(reason){
+        return { ...row, selected: false, committed: false, status: 'Conflict', conflict_reason: reason };
+      }
+      return { ...row, selected: false, committed: true, status: 'Committed', conflict_reason: '' };
+    });
+
+    renderIntakeResults();
+    showIntakeStatus(
+      'Commit complete. Added: ' + (data.added || 0)
+      + ' | Skipped: ' + (data.skipped_count || 0)
+      + ' | Duplicate IP: ' + (((data.conflicts || {}).duplicate_ip) || 0)
+      + ' | Duplicate MAC: ' + (((data.conflicts || {}).duplicate_mac) || 0),
+      'success'
+    );
+  } catch (e) {
+    showIntakeStatus('Commit failed: ' + e, 'error');
+  }
+}
+
+function commitSelected(){
+  const rows = intakeRows.filter(row => row.selected && !row.committed && row.status !== 'Conflict');
+  commitRows(rows);
+}
+
+function commitAll(){
+  const rows = intakeRows.filter(row => !row.committed && row.status !== 'Conflict');
+  commitRows(rows);
+}
+
+function renderIntakeResults(){
+  const tbody = document.getElementById('intake-results');
+  if(!tbody) return;
+
+  if(!intakeRows.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually or preview pasted data.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = intakeRows.map((row, index) => {
+    const statusTone = row.status === 'Committed'
+      ? 'color:#bbf7d0'
+      : (row.status === 'Conflict' ? 'color:#fecaca' : 'color:#d1d5db');
+    const disabled = (row.committed || row.status === 'Conflict') ? 'disabled' : '';
+    const checked = row.selected ? 'checked' : '';
+    const statusText = row.status === 'Conflict' && row.conflict_reason
+      ? 'Conflict (' + row.conflict_reason + ')'
+      : row.status;
+
+    return '<tr>'
+      + '<td><input type="checkbox" ' + checked + ' ' + disabled + ' onchange="toggleRow(' + index + ')"></td>'
+      + '<td>' + escapeHtml(row.name || '') + '</td>'
+      + '<td>' + escapeHtml(row.hostname || '') + '</td>'
+      + '<td style="font-family:monospace">' + escapeHtml(row.ip || '') + '</td>'
+      + '<td style="font-family:monospace">' + escapeHtml(row.mac || row.mac_address || '') + '</td>'
+      + '<td>' + escapeHtml(row.type || '') + '</td>'
+      + '<td>' + escapeHtml(row.vlan || '') + '</td>'
+      + '<td>' + escapeHtml(row.vendor || '') + '</td>'
+      + '<td style="' + statusTone + '">' + escapeHtml(statusText || '') + '</td>'
+      + '</tr>';
+  }).join('');
 }
 
 renderIntakeResults();

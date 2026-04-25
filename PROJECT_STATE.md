@@ -347,3 +347,15 @@
   - Implemented W9.5 Commissioning Workbook master export (`GET /tools/api/export/xlsx/commissioning_workbook`) containing cover, device register, per-VLAN IP schedule tabs, firewall tabs, validation, recommendations, and flow map.
   - Added minimal Settings-page download links for the new XLSX exports.
   - Exports are active-project aware and read-only (no project-state mutation).
+### Last Update
+- Feature: W12.0 Device Intake workflow realignment
+- Files modified:
+  - app.py
+  - templates/intake.html
+  - templates/devices.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Moved device entry workflow ownership to Device Intake by wiring manual add, pasted-list preview, intake result review, and commit selected/all into active project inventory.
+  - Removed duplicate Add Device and Paste Device List controls from Devices page while preserving inventory table, filtering, validation, topology, and renderTable behavior.
+  - Added conservative intake conflict handling for duplicate IP and duplicate MAC in preview/import/manual-add paths with non-destructive skip behavior.
+  - Confirmed intake commit writes to active project only and inventory remains isolated across project switches.

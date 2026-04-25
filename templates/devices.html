@@ -6,69 +6,6 @@
 <div id="success" class="success-msg">Device list saved.</div>
 <div id="device-action-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
 <div class="panel">
-  <div class="panel-header">Add device</div>
-  <div class="panel-body">
-    <div class="form-row">
-      <div class="form-group">
-        <label>Device name</label>
-        <input id="new-name" placeholder="e.g. Barco CTRL Server">
-      </div>
-      <div class="form-group">
-        <label>IP address</label>
-        <input id="new-ip" placeholder="e.g. 192.168.1.10">
-      </div>
-        <div class="form-group">
-          <label>Device type</label>
-          <select id="new-type">
-            <option value="generic">Generic</option>
-            <option value="crestron">Crestron</option>
-            <option value="qsys">Q-SYS</option>
-            <option value="biamp">Biamp / Tesira</option>
-            <option value="touchpanel">Touch Panel</option>
-            <option value="uc_engine">UC Engine</option>
-            <option value="barco_ctrl">Barco CTRL</option>
-            <option value="novastar">Novastar</option>
-            <option value="dante">Dante</option>
-            <option value="sacn">sACN node</option>
-            <option value="artnet">Art-Net node</option>
-            <option value="grandma">GrandMA</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Notes</label>
-        <input id="new-notes" placeholder="Optional notes">
-      </div>
-      <div class="form-group" style="display:flex;align-items:flex-end">
-        <button class="btn btn-primary" onclick="addDevice()">Add</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-header">Paste Device List</div>
-    <div class="panel-body">
-
-      <textarea id="pasted-device-text"
-        style="width:100%; min-height:160px; font-family:monospace;"
-        placeholder="Name	IP	VLAN	Type	Vendor
-DSP-01	192.168.1.20	10		Biamp
-SW-01	192.168.1.10	10		Cisco"></textarea>
-
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn" onclick="previewPasteDevices()">👁 Preview</button>
-        <button class="btn btn-primary" onclick="addPastedToList()">➕ Add to Device List</button>
-        <button class="btn" onclick="clearPaste()">✖ Clear</button>
-      </div>
-
-      <div id="paste-summary" style="margin-top:10px;"></div>
-      <div id="paste-invalid" style="margin-top:10px;"></div>
-      <div id="paste-preview" style="margin-top:10px; overflow-x:auto;"></div>
-
-    </div>
-  </div>
-
-<div class="panel">
   <div class="panel-header">Filter</div>
   <div class="panel-body">
     <div class="form-row">
@@ -156,7 +93,7 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
           <td></td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — add one above</td></tr>
+        <tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — use Device Intake to add or import inventory</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -237,7 +174,6 @@ SW-01	192.168.1.10	10		Cisco"></textarea>
 
 <script>
 let deviceList = {{ devices | tojson }};
-let pastedPreview = [];
 let topologyState = { topology: [], count: 0, generated_at: '', switches_considered: 0, switches_queried: 0, note: '' };
 let activeInventoryView = 'devices';
 
@@ -1257,26 +1193,6 @@ function applySuggestedType(ip, newType){
   renderTable();
 }
 
-function addDevice(){
-  const name  = document.getElementById('new-name').value.trim();
-  const ip    = document.getElementById('new-ip').value.trim();
-  const type  = document.getElementById('new-type').value;
-  const notes = document.getElementById('new-notes').value.trim();
-
-  if(!name || !ip){
-    alert('Name and IP are required');
-    return;
-  }
-
-  deviceList.push({name, ip, type, vlan: '', notes});
-  renderTable();
-  refreshRequirementsStateFromEndpoint();
-
-  document.getElementById('new-name').value = '';
-  document.getElementById('new-ip').value = '';
-  document.getElementById('new-notes').value = '';
-}
-
 function removeDevice(ip){
   deviceList = deviceList.filter(d => d.ip !== ip);
   delete validationResults[ip];
@@ -1562,7 +1478,7 @@ function renderTable(){
     } else if(filterFreshness === 'stale'){
       emptyMessage = 'No stale devices match this view';
     } else if(!filterVlan){
-      emptyMessage = 'No devices in the master inventory yet. Use Add, Import, or Discover to populate this list, then run Fingerprint and Normalize as needed.';
+      emptyMessage = 'No devices in the master inventory yet. Use Device Intake to Add or Import, then run Fingerprint and Normalize as needed.';
     }
     tbody.innerHTML = '<tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
     return;
@@ -1828,17 +1744,11 @@ function renderTable(){
 }
 
 function focusAddDevice(){
-  const input = document.getElementById('new-name');
-  if(input){
-    input.focus();
-  }
+  window.location.href = '/tools/intake#manual-add-panel';
 }
 
 function focusImportDevices(){
-  const input = document.getElementById('pasted-device-text');
-  if(input){
-    input.focus();
-  }
+  window.location.href = '/tools/intake#paste-list-panel';
 }
 
 function showWorkflowStub(action){
@@ -1851,107 +1761,6 @@ function showWorkflowStub(action){
     return;
   }
   alert('This workflow step is planned for a later stage.');
-}
-
-async function previewPasteDevices(){
-  const pasted = document.getElementById('pasted-device-text').value.trim();
-  if(!pasted){
-    alert('Paste something first');
-    return;
-  }
-
-  try {
-    const res = await fetch('/tools/api/devices/preview_pasted', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text: pasted })
-    });
-
-    const data = await res.json();
-
-    if(!data.ok){
-      alert(data.error || 'Preview failed');
-      return;
-    }
-
-    pastedPreview = data.devices || [];
-
-    document.getElementById('paste-summary').innerHTML =
-      '<div style="color:#6b7280"><strong>Preview:</strong> valid ' +
-      data.rows_valid + ' | invalid ' +
-      data.rows_invalid + ' | duplicates ' +
-      data.rows_duplicate + ' | headers detected: ' +
-      (data.headers_detected ? 'yes' : 'no') + '</div>';
-
-    if(data.invalid_rows && data.invalid_rows.length){
-      document.getElementById('paste-invalid').innerHTML =
-        '<details>' +
-        '<summary><strong>Invalid rows (' + data.invalid_rows.length + ')</strong></summary>' +
-        '<pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">' +
-        escapeHtml(JSON.stringify(data.invalid_rows, null, 2)) +
-        '</pre></details>';
-    } else {
-      document.getElementById('paste-invalid').innerHTML = '';
-    }
-
-    const rows = pastedPreview.map(d => {
-      const rowStyle = d.duplicate ? ' style="background:#3f3f00"' : '';
-      const status = d.duplicate ? 'Skip duplicate' : 'Ready';
-      return '<tr' + rowStyle + '>' +
-        '<td>' + escapeHtml(d.name) + '</td>' +
-        '<td style="font-family:monospace">' + escapeHtml(d.ip) + '</td>' +
-        '<td>' + escapeHtml(d.type) + '</td>' +
-        '<td>' + escapeHtml(d.vlan || '') + '</td>' +
-        '<td>' + escapeHtml(d.vendor || '') + '</td>' +
-        '<td>' + status + '</td>' +
-      '</tr>';
-    }).join('');
-
-    document.getElementById('paste-preview').innerHTML =
-      '<table>' +
-        '<thead>' +
-          '<tr><th>Name</th><th>IP</th><th>Type</th><th>VLAN</th><th>Vendor</th><th>Status</th></tr>' +
-        '</thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>';
-  } catch (e) {
-    alert('Preview failed: ' + e);
-  }
-}
-
-function addPastedToList(){
-  if(!pastedPreview.length){
-    alert('Preview first');
-    return;
-  }
-
-  let added = 0;
-
-  pastedPreview.forEach(d => {
-    if(deviceList.some(x => x.ip === d.ip)) return;
-
-    deviceList.push({
-      name: d.name,
-      ip: d.ip,
-      type: d.type,
-      vlan: d.vlan || '',
-      notes: d.notes || ''
-    });
-
-    added++;
-  });
-
-  renderTable();
-  refreshRequirementsStateFromEndpoint();
-  alert('Added ' + added + ' devices to list. Click Save changes to write them to devices.json.');
-}
-
-function clearPaste(){
-  document.getElementById('pasted-device-text').value = '';
-  document.getElementById('paste-summary').innerHTML = '';
-  document.getElementById('paste-invalid').innerHTML = '';
-  document.getElementById('paste-preview').innerHTML = '';
-  pastedPreview = [];
 }
 
 function saveDevices(){
@@ -1994,3 +1803,7 @@ showInventoryView('devices');
 loadTopologyData();
 </script>
 {% endblock %}
+
+
+
+

@@ -7821,6 +7821,70 @@ def add_all_discovered_devices():
         "total_seen": summary["total_seen"]
     })
 
+
+@app.route("/tools/api/devices/add_manual", methods=["POST"])
+def api_add_manual_device():
+    payload = request.get_json(silent=True) or {}
+    settings = load_settings()
+    devices = load_devices()
+
+    ip = str(payload.get("ip") or "").strip()
+    if not ip or not _valid_ip(ip):
+        return jsonify({
+            "ok": False,
+            "success": False,
+            "error": "Missing or invalid IP address.",
+        }), 400
+
+    existing_ips, existing_macs = _existing_inventory_identity_sets(devices)
+    if ip in existing_ips:
+        return jsonify({
+            "ok": False,
+            "success": False,
+            "error": "Device with this IP already exists.",
+            "conflicts": [{"ip": ip, "reason": "duplicate_ip"}],
+        }), 409
+
+    normalized_mac = _normalize_mac_value(payload.get("mac") or payload.get("mac_address"))
+    if normalized_mac and normalized_mac in existing_macs:
+        return jsonify({
+            "ok": False,
+            "success": False,
+            "error": "Device with this MAC already exists.",
+            "conflicts": [{"ip": ip, "mac": normalized_mac, "reason": "duplicate_mac"}],
+        }), 409
+
+    normalized = assign_inferred_vlan(payload, settings=settings)
+    device_type = str(normalized.get("type") or "").strip() or guess_type_from_vendor(normalized.get("vendor", ""))
+    preferred_name = str(normalized.get("name") or normalized.get("hostname") or "").strip()
+    generated_name = generate_device_name(devices, device_type, preferred_name)
+
+    record = {
+        "name": generated_name,
+        "hostname": str(normalized.get("hostname") or "").strip(),
+        "ip": ip,
+        "type": device_type or "generic",
+        "vlan": str(normalized.get("vlan") or "").strip(),
+        "room": str(normalized.get("room") or "").strip(),
+        "zone": str(normalized.get("zone") or "").strip(),
+        "vendor": str(normalized.get("vendor") or "").strip(),
+        "model": str(normalized.get("model") or "").strip(),
+        "serial": str(normalized.get("serial") or "").strip(),
+        "notes": str(normalized.get("notes") or "").strip(),
+        "mac": normalized_mac or "",
+        "mac_address": normalized_mac or None,
+        "mac_source": _canonicalize_mac_source(normalized.get("mac_source"), has_mac=bool(normalized_mac)),
+    }
+    devices.append(_mark_device_freshness(record, seen=False, reachable=False))
+    save_devices_file(devices)
+
+    return jsonify({
+        "ok": True,
+        "success": True,
+        "added": 1,
+        "device": record,
+    })
+
 @app.route("/tools/api/checks/export_csv")
 def export_csv():
     runs_dir = _runs_dir()
@@ -8139,6 +8203,21 @@ def _preview_name_for_row(row, row_index):
     return f"{device_name_prefix(device_type)}-{suffix}"
 
 
+def _existing_inventory_identity_sets(devices):
+    existing_ips = set()
+    existing_macs = set()
+    for item in devices or []:
+        if not isinstance(item, dict):
+            continue
+        ip = str(item.get("ip") or "").strip()
+        if ip:
+            existing_ips.add(ip)
+        mac = _normalize_mac_value(item.get("mac") or item.get("mac_address"))
+        if mac:
+            existing_macs.add(mac)
+    return existing_ips, existing_macs
+
+
 def parse_pasted_device_text(text):
     rows = _read_pasted_rows(text or "")
     parsed = []
@@ -8206,15 +8285,22 @@ def preview_pasted_devices():
     result = parse_pasted_device_text(pasted_text)
     existing_devices = load_devices()
     settings = load_settings()
-    existing_ips = { (d.get("ip") or "").strip() for d in existing_devices if d.get("ip") }
+    existing_ips, existing_macs = _existing_inventory_identity_sets(existing_devices)
 
     preview_devices = []
     simulated_devices = list(existing_devices)
+    simulated_ips = set(existing_ips)
+    simulated_macs = set(existing_macs)
 
     for row in result["devices"]:
         row_copy = assign_inferred_vlan(row, settings=settings)
         row_ip = (row_copy.get("ip") or "").strip()
-        row_copy["duplicate"] = row_ip in existing_ips
+        row_mac = _normalize_mac_value(row_copy.get("mac") or row_copy.get("mac_address"))
+        duplicate_ip = row_ip in simulated_ips if row_ip else False
+        duplicate_mac = row_mac in simulated_macs if row_mac else False
+        row_copy["duplicate"] = bool(duplicate_ip or duplicate_mac)
+        row_copy["duplicate_ip"] = bool(duplicate_ip)
+        row_copy["duplicate_mac"] = bool(duplicate_mac)
 
         if not row_copy["duplicate"]:
             final_name = generate_device_name(
@@ -8229,9 +8315,13 @@ def preview_pasted_devices():
                 "type": row_copy.get("type", "generic"),
                 "vlan": row_copy.get("vlan", ""),
                 "notes": row_copy.get("notes", ""),
-                "mac": row_copy.get("mac", ""),
+                "mac": row_mac or "",
                 "vendor": row_copy.get("vendor", "")
             })
+            if row_ip:
+                simulated_ips.add(row_ip)
+            if row_mac:
+                simulated_macs.add(row_mac)
 
         preview_devices.append(row_copy)
 
@@ -8243,6 +8333,8 @@ def preview_pasted_devices():
         "rows_valid": len(preview_devices),
         "rows_invalid": len(result["invalid_rows"]),
         "rows_duplicate": sum(1 for r in preview_devices if r.get("duplicate")),
+        "rows_duplicate_ip": sum(1 for r in preview_devices if r.get("duplicate_ip")),
+        "rows_duplicate_mac": sum(1 for r in preview_devices if r.get("duplicate_mac")),
         "devices": preview_devices,
         "invalid_rows": result["invalid_rows"],
     })
@@ -8262,16 +8354,21 @@ def import_pasted_devices():
     settings = load_settings()
     added = 0
     skipped = []
+    existing_ips, existing_macs = _existing_inventory_identity_sets(devices)
 
     for d in devices_in:
         normalized = assign_inferred_vlan(d, settings=settings)
         ip = (normalized.get("ip") or "").strip()
+        normalized_mac = _normalize_mac_value(normalized.get("mac") or normalized.get("mac_address"))
         if not ip or not _valid_ip(ip):
             skipped.append({"ip": ip, "reason": "invalid_ip"})
             continue
 
-        if any(existing.get("ip") == ip for existing in devices):
+        if ip in existing_ips:
             skipped.append({"ip": ip, "reason": "duplicate_ip"})
+            continue
+        if normalized_mac and normalized_mac in existing_macs:
+            skipped.append({"ip": ip, "mac": normalized_mac, "reason": "duplicate_mac"})
             continue
 
         device_type = (normalized.get("type") or "").strip() or guess_type_from_vendor(normalized.get("vendor", ""))
@@ -8284,10 +8381,15 @@ def import_pasted_devices():
             "type": device_type,
             "vlan": (normalized.get("vlan") or "").strip(),
             "notes": (normalized.get("notes") or "").strip() or f"Pasted import ({normalized.get('vendor', '')})".strip(),
-            "mac": (normalized.get("mac") or "").strip(),
+            "mac": normalized_mac or "",
+            "mac_address": normalized_mac or None,
+            "mac_source": _canonicalize_mac_source(normalized.get("mac_source"), has_mac=bool(normalized_mac)),
             "vendor": (normalized.get("vendor") or "").strip()
         })
         added += 1
+        existing_ips.add(ip)
+        if normalized_mac:
+            existing_macs.add(normalized_mac)
 
     save_devices_file(devices)
 
@@ -8296,7 +8398,11 @@ def import_pasted_devices():
         "success": True,
         "added": added,
         "skipped": skipped,
-        "skipped_count": len(skipped)
+        "skipped_count": len(skipped),
+        "conflicts": {
+            "duplicate_ip": sum(1 for item in skipped if item.get("reason") == "duplicate_ip"),
+            "duplicate_mac": sum(1 for item in skipped if item.get("reason") == "duplicate_mac"),
+        },
     })
 
 
