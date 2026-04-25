@@ -3,6 +3,16 @@
 {% block content %}
 <div class="page-title">Diagnostics</div>
 <div class="page-sub">{{ s.project_name or 'No project loaded' }} - {{ s.site_location or '' }}</div>
+<div class="panel">
+  <div class="panel-header">Workflow Update</div>
+  <div class="panel-body" style="font-size:13px;color:#9ca3af;line-height:1.4">
+    Run Checks and Discovery are now available in Device Intake as the primary intake workflow.
+    This diagnostics page remains available for compatibility.
+    <div style="margin-top:10px">
+      <a class="btn btn-primary" href="/tools/intake#run-checks-panel">Open Run Checks in Device Intake</a>
+    </div>
+  </div>
+</div>
 
 <div class="cards" id="summary-cards" style="display:none">
   <div class="card">

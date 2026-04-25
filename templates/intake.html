@@ -2,7 +2,7 @@
 {% block title %}- Device Intake{% endblock %}
 {% block content %}
 <div class="page-title">Device Intake</div>
-<div class="page-sub">Use this page for manual device entry, pasted bulk intake, and controlled commit into the active project inventory.</div>
+<div class="page-sub">Single intake workflow for manual entry, paste import, discovery/check staging, and commit into the active project inventory.</div>
 
 <div id="intake-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
 
@@ -47,16 +47,67 @@
   </div>
 </div>
 
-<div class="panel">
-  <div class="panel-header">
-    <span>Intake Results</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="selectAllRows(true)">Select All</button>
-      <button class="btn" onclick="selectAllRows(false)">Select None</button>
-      <button class="btn btn-primary" onclick="commitSelected()">Commit Selected</button>
-      <button class="btn" onclick="commitAll()">Commit All</button>
+<div class="panel" id="run-checks-panel">
+  <div class="panel-header">Run Checks / Discovery</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Discovery VLAN</label>
+        <select id="checks-vlan">
+          <option value="">Auto (default)</option>
+          {% for v in s.vlans %}
+          <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Host / IP</label>
+        <input id="checks-host" placeholder="e.g. 192.168.1.20 or hostname">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-primary" onclick="discoverHostsForIntake()">Discover Hosts</button>
+      <button class="btn" onclick="runPingCheck()">Ping</button>
+      <button class="btn" onclick="runPortScanCheck()">Port Scan</button>
+      <button class="btn" onclick="runTracerouteCheck()">Traceroute</button>
+      <button class="btn" onclick="fingerprintHostForIntake()">Fingerprint Host</button>
+    </div>
+
+    <div id="checks-summary" style="margin-bottom:10px;color:#9ca3af"></div>
+
+    <div id="discover-wrap" style="display:none;overflow-x:auto;margin-bottom:10px">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="discover-select-all" onchange="toggleAllDiscovered(this.checked)"></th>
+            <th>Hostname</th>
+            <th>IP</th>
+            <th>MAC / Vendor</th>
+            <th>Status</th>
+            <th>Likely Type</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="discover-results"></tbody>
+      </table>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" onclick="stageSelectedDiscovered()">Stage Selected Discovered</button>
+        <button class="btn" onclick="stageAllDiscovered()">Stage All Discovered</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:0">
+      <div class="panel-header">Check Output</div>
+      <div class="panel-body">
+        <pre id="checks-output" style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:0;min-height:110px"></pre>
+      </div>
     </div>
   </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Intake Results</div>
   <div class="panel-body" style="padding:0">
     <table>
       <thead>
@@ -73,14 +124,25 @@
         </tr>
       </thead>
       <tbody id="intake-results">
-        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually or preview pasted data.</td></tr>
+        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually, paste, or run checks/discovery above.</td></tr>
       </tbody>
     </table>
   </div>
 </div>
 
+<div class="panel">
+  <div class="panel-header">Commit Intake Results</div>
+  <div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" onclick="selectAllRows(true)">Select All</button>
+    <button class="btn" onclick="selectAllRows(false)">Select None</button>
+    <button class="btn btn-primary" onclick="commitSelected()">Commit Selected</button>
+    <button class="btn" onclick="commitAll()">Commit All</button>
+  </div>
+</div>
+
 <script>
 let intakeRows = [];
+let discoveredRows = [];
 
 function escapeHtml(str){
   return String(str || '')
@@ -111,6 +173,48 @@ function showIntakeStatus(message, tone){
   box.style.background = '#111827';
   box.style.color = '#d1d5db';
   box.style.borderColor = '#374151';
+}
+
+function appendCheckOutput(text){
+  const output = document.getElementById('checks-output');
+  if(!output) return;
+  const previous = output.textContent || '';
+  output.textContent = previous ? (previous + '\n\n' + text) : text;
+}
+
+function statusBadge(s){
+  const map = {
+    ok: '<span class="badge badge-green">OK</span>',
+    warn: '<span class="badge badge-amber">WARN</span>',
+    fail: '<span class="badge badge-red">FAIL</span>',
+    error: '<span class="badge badge-red">ERROR</span>',
+    online: '<span class="badge badge-green">ONLINE</span>'
+  };
+  return map[s] || escapeHtml(s || 'unknown');
+}
+
+function dedupeAndUpsertIntakeRow(nextRow){
+  const ip = String((nextRow && nextRow.ip) || '').trim();
+  if(!ip) return;
+  const idx = intakeRows.findIndex(row => String((row && row.ip) || '').trim() === ip);
+  if(idx >= 0){
+    const merged = {
+      ...intakeRows[idx],
+      ...nextRow,
+      selected: intakeRows[idx].committed ? false : (nextRow.selected !== undefined ? !!nextRow.selected : intakeRows[idx].selected),
+      committed: !!intakeRows[idx].committed
+    };
+    intakeRows[idx] = merged;
+  } else {
+    intakeRows.push({
+      selected: true,
+      committed: false,
+      status: 'Ready',
+      source: 'checks',
+      conflict_reason: '',
+      ...nextRow
+    });
+  }
 }
 
 function collectManualPayload(){
@@ -158,13 +262,13 @@ async function addManualDevice(){
     }
 
     const added = data.device || payload;
-    intakeRows.unshift({
+    dedupeAndUpsertIntakeRow({
+      ...added,
       selected: false,
-      source: 'manual',
       committed: true,
+      source: 'manual',
       status: 'Committed',
-      conflict_reason: '',
-      ...added
+      conflict_reason: ''
     });
     renderIntakeResults();
     clearManualForm();
@@ -249,6 +353,222 @@ function clearPaste(){
   intakeRows = [];
   renderIntakeResults();
   showIntakeStatus('', 'neutral');
+}
+
+function getChecksHost(){
+  return String((document.getElementById('checks-host') || {}).value || '').trim();
+}
+
+function getChecksVlan(){
+  return String((document.getElementById('checks-vlan') || {}).value || '').trim();
+}
+
+async function runPingCheck(){
+  const host = getChecksHost();
+  if(!host){
+    showIntakeStatus('Enter Host/IP for Ping.', 'error');
+    return;
+  }
+  try {
+    appendCheckOutput('Ping: ' + host + ' ...');
+    const res = await fetch('/tools/api/ping', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ host })
+    });
+    const data = await res.json();
+    appendCheckOutput(data.output || data.error || 'No ping output.');
+    showIntakeStatus('Ping completed.', 'success');
+  } catch (e) {
+    showIntakeStatus('Ping failed: ' + e, 'error');
+  }
+}
+
+async function runPortScanCheck(){
+  const host = getChecksHost();
+  if(!host){
+    showIntakeStatus('Enter Host/IP for Port Scan.', 'error');
+    return;
+  }
+  try {
+    appendCheckOutput('Port Scan: ' + host + ' ...');
+    const res = await fetch('/tools/api/portscan', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ host })
+    });
+    const data = await res.json();
+    appendCheckOutput(data.output || data.error || 'No port scan output.');
+    showIntakeStatus('Port scan completed.', 'success');
+  } catch (e) {
+    showIntakeStatus('Port scan failed: ' + e, 'error');
+  }
+}
+
+async function runTracerouteCheck(){
+  const host = getChecksHost();
+  if(!host){
+    showIntakeStatus('Enter Host/IP for Traceroute.', 'error');
+    return;
+  }
+  try {
+    appendCheckOutput('Traceroute: ' + host + ' ...');
+    const res = await fetch('/tools/api/traceroute', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ host })
+    });
+    const data = await res.json();
+    appendCheckOutput(data.output || data.error || 'No traceroute output.');
+    showIntakeStatus('Traceroute completed.', 'success');
+  } catch (e) {
+    showIntakeStatus('Traceroute failed: ' + e, 'error');
+  }
+}
+
+async function fingerprintHostForIntake(){
+  const host = getChecksHost();
+  if(!host){
+    showIntakeStatus('Enter Host/IP for Fingerprint.', 'error');
+    return;
+  }
+  try {
+    const res = await fetch('/tools/api/fingerprint_host', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ip: host, vendor: '' })
+    });
+    const data = await res.json();
+    if(data.error){
+      showIntakeStatus(data.error, 'error');
+      appendCheckOutput('Fingerprint failed for ' + host + ': ' + data.error);
+      return;
+    }
+
+    const summary = {
+      name: host,
+      hostname: '',
+      ip: host,
+      mac: '',
+      type: data.guessed_type || data.suggested_type || 'generic',
+      vlan: '',
+      vendor: '',
+      notes: 'Fingerprint: ' + (data.suggested_type || data.guessed_type || 'generic') + (data.confidence_label ? (' (' + data.confidence_label + ')') : '')
+    };
+    dedupeAndUpsertIntakeRow(summary);
+    renderIntakeResults();
+
+    const ports = Array.isArray(data.open_ports) ? data.open_ports.join(', ') : '';
+    appendCheckOutput('Fingerprint ' + host + ': guessed=' + (data.guessed_type || 'generic') + ', suggested=' + (data.suggested_type || '-') + ', confidence=' + (data.confidence_label || '-') + (ports ? (', open_ports=' + ports) : ''));
+    showIntakeStatus('Fingerprint completed and staged into intake results.', 'success');
+  } catch (e) {
+    showIntakeStatus('Fingerprint failed: ' + e, 'error');
+  }
+}
+
+function renderDiscoveredTable(){
+  const wrap = document.getElementById('discover-wrap');
+  const tbody = document.getElementById('discover-results');
+  if(!wrap || !tbody) return;
+
+  wrap.style.display = 'block';
+  if(!discoveredRows.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">No discovered hosts.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = discoveredRows.map((row, index) => {
+    const ipSafe = String((row.ip || '')).replace(/'/g, "\\'");
+    const status = statusBadge(row.status || 'online');
+    const likely = escapeHtml(row.guessed_type || 'generic');
+    return '<tr>'
+      + '<td><input type="checkbox" class="discover-check" data-idx="' + index + '" ' + (row.selected ? 'checked' : '') + ' onchange="toggleDiscovered(' + index + ')"></td>'
+      + '<td>' + (row.hostname ? escapeHtml(row.hostname) : '<span style="color:#6b7280">-</span>') + '</td>'
+      + '<td style="font-family:monospace">' + escapeHtml(row.ip || '') + '</td>'
+      + '<td style="font-size:11px;color:#9ca3af">'
+      + (row.mac ? '<div style="font-family:monospace">' + escapeHtml(row.mac) + '</div>' : '<div>-</div>')
+      + (row.vendor ? '<div>' + escapeHtml(row.vendor) + '</div>' : '')
+      + '</td>'
+      + '<td>' + status + '</td>'
+      + '<td>' + likely + '</td>'
+      + '<td><button class="btn" onclick="stageDiscoveredByIndex(' + index + ')">Stage</button></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function toggleDiscovered(index){
+  if(!discoveredRows[index]) return;
+  discoveredRows[index].selected = !discoveredRows[index].selected;
+}
+
+function toggleAllDiscovered(nextValue){
+  discoveredRows = discoveredRows.map(row => ({ ...row, selected: !!nextValue }));
+  renderDiscoveredTable();
+}
+
+function stageDiscoveredByIndex(index){
+  const row = discoveredRows[index];
+  if(!row) return;
+  dedupeAndUpsertIntakeRow({
+    name: row.hostname || row.ip,
+    hostname: row.hostname || '',
+    ip: row.ip || '',
+    mac: row.mac || row.mac_address || '',
+    type: row.guessed_type || 'generic',
+    vlan: getChecksVlan(),
+    vendor: row.vendor || '',
+    notes: 'Discovered host'
+  });
+  renderIntakeResults();
+  showIntakeStatus('Discovered host staged into intake results.', 'success');
+}
+
+function stageSelectedDiscovered(){
+  let staged = 0;
+  discoveredRows.forEach((row, idx) => {
+    if(row.selected){
+      stageDiscoveredByIndex(idx);
+      staged += 1;
+    }
+  });
+  if(!staged){
+    showIntakeStatus('No discovered rows selected to stage.', 'error');
+  }
+}
+
+function stageAllDiscovered(){
+  if(!discoveredRows.length){
+    showIntakeStatus('No discovered rows available to stage.', 'error');
+    return;
+  }
+  discoveredRows.forEach((_, idx) => stageDiscoveredByIndex(idx));
+}
+
+async function discoverHostsForIntake(){
+  const vlan = getChecksVlan();
+  try {
+    document.getElementById('checks-summary').textContent = 'Discovering hosts...';
+    const res = await fetch('/tools/api/discover_hosts', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ vlan })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error){
+      showIntakeStatus(data.error || 'Discover hosts failed.', 'error');
+      document.getElementById('checks-summary').textContent = data.error || 'Discovery failed.';
+      return;
+    }
+
+    discoveredRows = (Array.isArray(data.devices) ? data.devices : []).map(item => ({ ...item, selected: true }));
+    renderDiscoveredTable();
+    document.getElementById('checks-summary').textContent = 'Discovery found ' + (data.count || 0) + ' host(s) on ' + (data.subnet || 'selected subnet') + '.';
+    showIntakeStatus('Discovery completed. Stage rows into Intake Results as needed.', 'success');
+    appendCheckOutput('Discovery complete: ' + (data.count || 0) + ' hosts.');
+  } catch (e) {
+    showIntakeStatus('Discover hosts failed: ' + e, 'error');
+    document.getElementById('checks-summary').textContent = 'Discovery failed.';
+  }
 }
 
 function selectAllRows(nextValue){
@@ -336,7 +656,7 @@ function renderIntakeResults(){
   if(!tbody) return;
 
   if(!intakeRows.length){
-    tbody.innerHTML = '<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually or preview pasted data.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually, paste, or run checks/discovery above.</td></tr>';
     return;
   }
 

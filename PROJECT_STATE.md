@@ -359,3 +359,15 @@
   - Removed duplicate Add Device and Paste Device List controls from Devices page while preserving inventory table, filtering, validation, topology, and renderTable behavior.
   - Added conservative intake conflict handling for duplicate IP and duplicate MAC in preview/import/manual-add paths with non-destructive skip behavior.
   - Confirmed intake commit writes to active project only and inventory remains isolated across project switches.
+### Last Update
+- Feature: W12.10 merge Diagnostics/Run Checks into Device Intake
+- Files modified:
+  - templates/intake.html
+  - templates/diagnostics.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Device Intake now includes a Run Checks / Discovery panel above Intake Results with ping, port scan, traceroute, fingerprint host, and discover hosts controls.
+  - Discovery and fingerprint outcomes can be staged into Intake Results for explicit commit; results are staged first and never auto-saved.
+  - Intake layout now follows manual add -> paste -> run checks/discovery -> intake results -> commit actions.
+  - Diagnostics route remains live and now includes a compatibility notice linking operators to Device Intake as the primary workflow entry point.
+  - Active-project save isolation remains intact because commit continues to use existing project-aware import/manual-add endpoints.
