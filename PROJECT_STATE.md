@@ -311,3 +311,12 @@
   - Added additive `GET /tools/api/project/snapshot` to export a compressed portable `.avp` project archive with `manifest.json` including schema version, included files, missing optional files, source instance metadata, and notes
   - Added additive `POST /tools/api/project/restore` to validate archive structure/manifest/schema/paths/allowlist, create a timestamped pre-restore backup under `data/project_backups/`, and restore only approved state files with clear restored/skipped summary
   - Added minimal Settings page snapshot export link without introducing restore UI changes, preserving existing behavior and portability between Windows/Pi runtime instances
+### Last Update
+- Feature: W11.1 Snapshot Diff / Compare
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added additive read-only `POST /tools/api/project/snapshot/compare` endpoint to compare two `.avp` snapshots (`baseline` and `current`) with strict archive/manifest/schema/path/allowlist validation
+  - Compare output reports compact devices/settings/topology/multicast/artifact differences (added/removed/changed) and summary counts without restoring or mutating local runtime state
+  - Supports commissioning before/after and handoff audit workflows while preserving existing W11.0 snapshot/restore endpoint behavior

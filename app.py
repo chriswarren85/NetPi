@@ -105,6 +105,34 @@ PROJECT_RESTORE_ALLOWLIST = set(PROJECT_STATE_REQUIRED_FILES + [
     "data/recommendations.json",
     "data/report.json",
 ])
+SNAPSHOT_COMPARE_DEVICE_FIELDS = [
+    "ip",
+    "name",
+    "hostname",
+    "type",
+    "effective_type",
+    "suggested_type",
+    "mac",
+    "mac_address",
+    "vlan",
+    "zone",
+    "room",
+    "status",
+    "reachable",
+    "reachability",
+    "confidence",
+    "confidence_score",
+    "open_ports",
+]
+SNAPSHOT_COMPARE_ARTIFACT_PATHS = {
+    "topology": ["topology.json"],
+    "multicast_groups": ["multicast_groups.json"],
+    "recommendations": ["recommendations.json", "data/recommendations.json"],
+    "requirements": ["requirements.json", "data/requirements.json"],
+    "flows": ["flows.json", "data/flows.json"],
+    "firewall_plan": ["firewall_plan.json", "data/firewall_plan.json"],
+    "report": ["report.json", "data/report.json"],
+}
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -4149,6 +4177,437 @@ def _get_uploaded_snapshot_file():
         return uploaded
     return None
 
+
+def _read_uploaded_snapshot_archive(uploaded, label):
+    if uploaded is None or not getattr(uploaded, "filename", ""):
+        raise ValueError(f"{label}: snapshot file is required.")
+
+    payload = uploaded.read()
+    archive_handle = io.BytesIO(payload)
+    try:
+        archive = zipfile.ZipFile(archive_handle, "r")
+    except zipfile.BadZipFile:
+        raise ValueError(f"{label}: invalid archive format; expected .avp/.zip.")
+
+    with archive:
+        file_members = {}
+        invalid_members = []
+        duplicate_members = []
+
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            normalized = _normalize_snapshot_relpath(info.filename)
+            if not _is_safe_snapshot_member(normalized):
+                invalid_members.append(info.filename)
+                continue
+            if normalized in file_members:
+                duplicate_members.append(normalized)
+                continue
+            file_members[normalized] = info
+
+        if invalid_members:
+            raise ValueError(f"{label}: archive contains invalid file paths: {sorted(invalid_members)}")
+        if duplicate_members:
+            raise ValueError(f"{label}: archive contains duplicate file paths: {sorted(set(duplicate_members))}")
+        if "manifest.json" not in file_members:
+            raise ValueError(f"{label}: archive is missing manifest.json.")
+
+        try:
+            manifest_raw = archive.read(file_members["manifest.json"])
+            manifest = json.loads(manifest_raw.decode("utf-8"))
+        except json.JSONDecodeError:
+            raise ValueError(f"{label}: manifest.json is not valid JSON.")
+        except UnicodeDecodeError:
+            raise ValueError(f"{label}: manifest.json must be UTF-8 JSON.")
+
+        if not isinstance(manifest, dict):
+            raise ValueError(f"{label}: invalid manifest format.")
+
+        schema_version = str(manifest.get("schema_version") or "").strip()
+        if schema_version != SNAPSHOT_SCHEMA_VERSION:
+            raise ValueError(
+                f"{label}: unsupported schema_version '{schema_version}'. Expected '{SNAPSHOT_SCHEMA_VERSION}'."
+            )
+
+        disallowed_files = []
+        files = {}
+        for rel, info in file_members.items():
+            if rel == "manifest.json":
+                continue
+            if rel not in PROJECT_RESTORE_ALLOWLIST:
+                disallowed_files.append(rel)
+                continue
+            raw = archive.read(info)
+            try:
+                parsed = json.loads(raw.decode("utf-8"))
+            except UnicodeDecodeError:
+                raise ValueError(f"{label}: file '{rel}' must be UTF-8 JSON.")
+            except json.JSONDecodeError:
+                raise ValueError(f"{label}: file '{rel}' is not valid JSON.")
+            files[rel] = parsed
+
+        if disallowed_files:
+            raise ValueError(f"{label}: archive contains disallowed files: {sorted(disallowed_files)}")
+
+        included_files = manifest.get("included_files")
+        if not isinstance(included_files, list):
+            included_files = sorted(files.keys())
+        else:
+            included_files = [str(item) for item in included_files]
+
+        return {
+            "schema_version": schema_version,
+            "exported_at": str(manifest.get("exported_at") or ""),
+            "included_files": included_files,
+            "files": files,
+        }
+
+
+def _extract_snapshot_devices(files):
+    payload = files.get("devices.json")
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if isinstance(payload, dict):
+        rows = payload.get("devices")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def _extract_snapshot_settings(files):
+    payload = files.get("settings.json")
+    return payload if isinstance(payload, dict) else {}
+
+
+def _snapshot_device_display(device):
+    device = device if isinstance(device, dict) else {}
+    return {
+        "name": str(device.get("name") or "").strip(),
+        "hostname": str(device.get("hostname") or device.get("stable_hostname") or "").strip(),
+        "ip": str(device.get("ip") or "").strip(),
+        "mac": _normalize_mac_value(device.get("mac") or device.get("mac_address")),
+        "type": str(device.get("type") or device.get("effective_type") or "").strip(),
+    }
+
+
+def _snapshot_device_identity_mac(device):
+    return _normalize_mac_value((device or {}).get("mac") or (device or {}).get("mac_address"))
+
+
+def _snapshot_device_identity_ip(device):
+    return str((device or {}).get("ip") or "").strip()
+
+
+def _snapshot_device_identity_name(device):
+    device = device if isinstance(device, dict) else {}
+    for key in ("name", "hostname", "stable_hostname"):
+        value = str(device.get(key) or "").strip()
+        lowered = value.lower()
+        if value and lowered not in {"unknown", "n/a", "none", "-", "—"}:
+            return lowered
+    return ""
+
+
+def _normalize_compare_value(value):
+    if isinstance(value, list):
+        return sorted((_normalize_compare_value(item) for item in value), key=lambda item: json.dumps(item, sort_keys=True))
+    if isinstance(value, dict):
+        return {str(k): _normalize_compare_value(v) for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))}
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _snapshot_device_field_value(device, field):
+    device = device if isinstance(device, dict) else {}
+    if field == "open_ports":
+        ports = []
+        for port in (device.get("open_ports") or []):
+            if str(port).isdigit():
+                ports.append(int(port))
+            else:
+                ports.append(str(port))
+        return sorted(set(ports), key=lambda item: str(item))
+    if field in {"mac", "mac_address"}:
+        return _normalize_mac_value(device.get("mac") or device.get("mac_address"))
+    return _normalize_compare_value(device.get(field))
+
+
+def _compare_snapshot_devices(baseline_devices, current_devices):
+    baseline_records = [{"device": device, "matched": False} for device in baseline_devices]
+    current_records = [{"device": device, "matched": False} for device in current_devices]
+    matches = []
+
+    def _match_unique(identity_name, extractor):
+        baseline_map = {}
+        current_map = {}
+        for idx, record in enumerate(baseline_records):
+            if record["matched"]:
+                continue
+            key = extractor(record["device"])
+            if not key:
+                continue
+            baseline_map.setdefault(key, []).append(idx)
+        for idx, record in enumerate(current_records):
+            if record["matched"]:
+                continue
+            key = extractor(record["device"])
+            if not key:
+                continue
+            current_map.setdefault(key, []).append(idx)
+
+        for key in sorted(set(baseline_map.keys()) & set(current_map.keys())):
+            if len(baseline_map[key]) != 1 or len(current_map[key]) != 1:
+                continue
+            left_idx = baseline_map[key][0]
+            right_idx = current_map[key][0]
+            baseline_records[left_idx]["matched"] = True
+            current_records[right_idx]["matched"] = True
+            matches.append((left_idx, right_idx, identity_name, key))
+
+    _match_unique("mac", _snapshot_device_identity_mac)
+    _match_unique("ip", _snapshot_device_identity_ip)
+    _match_unique("name", _snapshot_device_identity_name)
+
+    changed = []
+    for left_idx, right_idx, identity_type, identity_value in matches:
+        left = baseline_records[left_idx]["device"]
+        right = current_records[right_idx]["device"]
+        field_changes = []
+        for field in SNAPSHOT_COMPARE_DEVICE_FIELDS:
+            left_value = _snapshot_device_field_value(left, field)
+            right_value = _snapshot_device_field_value(right, field)
+            if left_value != right_value:
+                field_changes.append({
+                    "field": field,
+                    "baseline": left_value,
+                    "current": right_value,
+                })
+        if field_changes:
+            changed.append({
+                "identity": {
+                    "type": identity_type,
+                    "value": identity_value,
+                },
+                "baseline_ref": _snapshot_device_display(left),
+                "current_ref": _snapshot_device_display(right),
+                "fields": field_changes,
+            })
+
+    added = [_snapshot_device_display(r["device"]) for r in current_records if not r["matched"]]
+    removed = [_snapshot_device_display(r["device"]) for r in baseline_records if not r["matched"]]
+
+    return {
+        "added": added,
+        "removed": removed,
+        "changed": changed,
+    }
+
+
+def _normalize_vlan_rows(vlans):
+    normalized = []
+    for vlan in vlans or []:
+        if not isinstance(vlan, dict):
+            continue
+        row = {
+            "name": str(vlan.get("name") or "").strip(),
+            "vlan_id": str(vlan.get("vlan_id") or vlan.get("id") or "").strip(),
+            "subnet": str(vlan.get("subnet") or "").strip(),
+            "gateway": str(vlan.get("gateway") or "").strip(),
+            "dhcp_range_start": str(vlan.get("dhcp_range_start") or "").strip(),
+            "dhcp_range_end": str(vlan.get("dhcp_range_end") or "").strip(),
+            "notes": str(vlan.get("notes") or "").strip(),
+            "device_types": sorted([str(item).strip() for item in (vlan.get("device_types") or []) if str(item).strip()]),
+        }
+        normalized.append(row)
+    normalized.sort(key=lambda item: (item.get("name") or "", item.get("vlan_id") or ""))
+    return normalized
+
+
+def _compare_snapshot_settings(baseline_settings, current_settings):
+    baseline_settings = baseline_settings if isinstance(baseline_settings, dict) else {}
+    current_settings = current_settings if isinstance(current_settings, dict) else {}
+    changed = []
+
+    for field in ("project_name", "job_number", "client_name", "site_location", "dns_suffix", "ntp_server"):
+        baseline_value = str(baseline_settings.get(field) or "").strip()
+        current_value = str(current_settings.get(field) or "").strip()
+        if baseline_value != current_value:
+            changed.append({
+                "field": field,
+                "baseline": baseline_value,
+                "current": current_value,
+            })
+
+    baseline_vlans = _normalize_vlan_rows(baseline_settings.get("vlans") or [])
+    current_vlans = _normalize_vlan_rows(current_settings.get("vlans") or [])
+    if baseline_vlans != current_vlans:
+        changed.append({
+            "field": "vlans",
+            "baseline_count": len(baseline_vlans),
+            "current_count": len(current_vlans),
+        })
+
+    baseline_snmp_present = bool(str(baseline_settings.get("snmp_community") or "").strip())
+    current_snmp_present = bool(str(current_settings.get("snmp_community") or "").strip())
+    if baseline_snmp_present != current_snmp_present:
+        changed.append({
+            "field": "snmp_community_present",
+            "baseline": baseline_snmp_present,
+            "current": current_snmp_present,
+        })
+
+    return {"changed": changed}
+
+
+def _select_snapshot_artifact_file(files, candidates):
+    for rel in candidates or []:
+        if rel in files:
+            return rel
+    return ""
+
+
+def _extract_topology_rows(payload):
+    if isinstance(payload, dict):
+        rows = payload.get("topology")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    return []
+
+
+def _extract_multicast_rows(payload):
+    if isinstance(payload, dict):
+        rows = payload.get("groups")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    return []
+
+
+def _multicast_row_key(row):
+    row = row if isinstance(row, dict) else {}
+    return "|".join([
+        str(row.get("group_address") or "").strip(),
+        str(row.get("switch_ip") or "").strip(),
+        str(row.get("switch_hostname") or "").strip().lower(),
+        str(row.get("vlan") or "").strip(),
+    ])
+
+
+def _normalize_multicast_row(row):
+    row = row if isinstance(row, dict) else {}
+    members = []
+    for member in row.get("members") or []:
+        if not isinstance(member, dict):
+            continue
+        members.append({
+            "member_ip": str(member.get("member_ip") or "").strip(),
+            "member_mac": _normalize_mac_value(member.get("member_mac")),
+            "member_hostname": str(member.get("member_hostname") or "").strip(),
+        })
+    members.sort(key=lambda item: (item.get("member_ip") or "", item.get("member_mac") or "", item.get("member_hostname") or ""))
+    return {
+        "group_address": str(row.get("group_address") or "").strip(),
+        "switch_ip": str(row.get("switch_ip") or "").strip(),
+        "switch_hostname": str(row.get("switch_hostname") or "").strip(),
+        "vlan": str(row.get("vlan") or "").strip(),
+        "member_count": int(row.get("member_count") or len(members)),
+        "notes": str(row.get("notes") or "").strip(),
+        "members": members,
+    }
+
+
+def _snapshot_payload_changed(left, right):
+    return _normalize_compare_value(left) != _normalize_compare_value(right)
+
+
+def _compare_snapshot_artifacts(baseline_files, current_files):
+    required = set(PROJECT_STATE_REQUIRED_FILES)
+    baseline_artifact_files = sorted([name for name in baseline_files.keys() if name not in required])
+    current_artifact_files = sorted([name for name in current_files.keys() if name not in required])
+    artifacts = {
+        "added_files": sorted(set(current_artifact_files) - set(baseline_artifact_files)),
+        "removed_files": sorted(set(baseline_artifact_files) - set(current_artifact_files)),
+        "common_files": sorted(set(baseline_artifact_files) & set(current_artifact_files)),
+    }
+
+    topology = {"changed": []}
+    baseline_topology_file = _select_snapshot_artifact_file(baseline_files, SNAPSHOT_COMPARE_ARTIFACT_PATHS["topology"])
+    current_topology_file = _select_snapshot_artifact_file(current_files, SNAPSHOT_COMPARE_ARTIFACT_PATHS["topology"])
+    if baseline_topology_file and current_topology_file:
+        baseline_rows = _extract_topology_rows(baseline_files.get(baseline_topology_file))
+        current_rows = _extract_topology_rows(current_files.get(current_topology_file))
+        if _snapshot_payload_changed(baseline_rows, current_rows):
+            topology["changed"].append({
+                "field": "rows",
+                "baseline_count": len(baseline_rows),
+                "current_count": len(current_rows),
+            })
+
+    multicast = {"added": [], "removed": [], "changed": []}
+    baseline_multicast_file = _select_snapshot_artifact_file(baseline_files, SNAPSHOT_COMPARE_ARTIFACT_PATHS["multicast_groups"])
+    current_multicast_file = _select_snapshot_artifact_file(current_files, SNAPSHOT_COMPARE_ARTIFACT_PATHS["multicast_groups"])
+    if baseline_multicast_file and current_multicast_file:
+        baseline_rows = _extract_multicast_rows(baseline_files.get(baseline_multicast_file))
+        current_rows = _extract_multicast_rows(current_files.get(current_multicast_file))
+        baseline_map = {}
+        current_map = {}
+        for row in baseline_rows:
+            key = _multicast_row_key(row)
+            if key:
+                baseline_map[key] = _normalize_multicast_row(row)
+        for row in current_rows:
+            key = _multicast_row_key(row)
+            if key:
+                current_map[key] = _normalize_multicast_row(row)
+
+        for key in sorted(set(current_map.keys()) - set(baseline_map.keys())):
+            multicast["added"].append(current_map[key])
+        for key in sorted(set(baseline_map.keys()) - set(current_map.keys())):
+            multicast["removed"].append(baseline_map[key])
+        for key in sorted(set(baseline_map.keys()) & set(current_map.keys())):
+            left = baseline_map[key]
+            right = current_map[key]
+            if left != right:
+                field_changes = []
+                for field in ("member_count", "notes", "members"):
+                    if _normalize_compare_value(left.get(field)) != _normalize_compare_value(right.get(field)):
+                        field_changes.append({
+                            "field": field,
+                            "baseline": left.get(field),
+                            "current": right.get(field),
+                        })
+                multicast["changed"].append({
+                    "group_address": right.get("group_address") or left.get("group_address") or "",
+                    "switch_ip": right.get("switch_ip") or left.get("switch_ip") or "",
+                    "fields": field_changes,
+                })
+
+    baseline_recommendations_file = _select_snapshot_artifact_file(
+        baseline_files, SNAPSHOT_COMPARE_ARTIFACT_PATHS["recommendations"]
+    )
+    current_recommendations_file = _select_snapshot_artifact_file(
+        current_files, SNAPSHOT_COMPARE_ARTIFACT_PATHS["recommendations"]
+    )
+    recommendations_changed = 0
+    if baseline_recommendations_file and current_recommendations_file:
+        if _snapshot_payload_changed(
+            baseline_files.get(baseline_recommendations_file),
+            current_files.get(current_recommendations_file),
+        ):
+            recommendations_changed = 1
+
+    return {
+        "artifacts": artifacts,
+        "topology": topology,
+        "multicast_groups": multicast,
+        "recommendations_changed": recommendations_changed,
+    }
+
 @app.route('/tools/')
 @app.route('/tools')
 def index():
@@ -5583,6 +6042,82 @@ def api_project_restore():
             "backup_path": "",
             "schema_version": "",
             "notes": [str(e)],
+        }), 500
+
+
+@app.route("/tools/api/project/snapshot/compare", methods=["POST"])
+def api_project_snapshot_compare():
+    baseline_upload = request.files.get("baseline")
+    current_upload = request.files.get("current")
+
+    if baseline_upload is None or current_upload is None:
+        return jsonify({
+            "ok": False,
+            "notes": ["Both 'baseline' and 'current' snapshot files are required."],
+        }), 400
+
+    try:
+        baseline_snapshot = _read_uploaded_snapshot_archive(baseline_upload, "baseline")
+        current_snapshot = _read_uploaded_snapshot_archive(current_upload, "current")
+
+        baseline_files = baseline_snapshot.get("files") or {}
+        current_files = current_snapshot.get("files") or {}
+
+        device_diff = _compare_snapshot_devices(
+            _extract_snapshot_devices(baseline_files),
+            _extract_snapshot_devices(current_files),
+        )
+        settings_diff = _compare_snapshot_settings(
+            _extract_snapshot_settings(baseline_files),
+            _extract_snapshot_settings(current_files),
+        )
+        artifact_diff = _compare_snapshot_artifacts(baseline_files, current_files)
+
+        summary = {
+            "devices_added": len(device_diff.get("added") or []),
+            "devices_removed": len(device_diff.get("removed") or []),
+            "devices_changed": len(device_diff.get("changed") or []),
+            "settings_changed": len(settings_diff.get("changed") or []),
+            "topology_changed": len((artifact_diff.get("topology") or {}).get("changed") or []),
+            "multicast_changed": (
+                len((artifact_diff.get("multicast_groups") or {}).get("added") or [])
+                + len((artifact_diff.get("multicast_groups") or {}).get("removed") or [])
+                + len((artifact_diff.get("multicast_groups") or {}).get("changed") or [])
+            ),
+            "recommendations_changed": int(artifact_diff.get("recommendations_changed") or 0),
+        }
+
+        return jsonify({
+            "ok": True,
+            "baseline": {
+                "schema_version": baseline_snapshot.get("schema_version") or "",
+                "exported_at": baseline_snapshot.get("exported_at") or "",
+                "included_files": baseline_snapshot.get("included_files") or [],
+            },
+            "current": {
+                "schema_version": current_snapshot.get("schema_version") or "",
+                "exported_at": current_snapshot.get("exported_at") or "",
+                "included_files": current_snapshot.get("included_files") or [],
+            },
+            "summary": summary,
+            "diff": {
+                "devices": device_diff,
+                "settings": settings_diff,
+                "topology": artifact_diff.get("topology") or {"changed": []},
+                "multicast_groups": artifact_diff.get("multicast_groups") or {"added": [], "removed": [], "changed": []},
+                "artifacts": artifact_diff.get("artifacts") or {"added_files": [], "removed_files": [], "common_files": []},
+            },
+            "notes": [],
+        })
+    except ValueError as exc:
+        return jsonify({
+            "ok": False,
+            "notes": [str(exc)],
+        }), 400
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "notes": [str(exc)],
         }), 500
 
 
