@@ -5374,12 +5374,21 @@ def api_project_snapshot():
 
     archive_io.seek(0)
     filename = f"netpi_project_snapshot_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.avp"
-    return send_file(
-        archive_io,
-        as_attachment=True,
-        download_name=filename,
-        mimetype="application/octet-stream",
-    )
+    try:
+        return send_file(
+            archive_io,
+            as_attachment=True,
+            download_name=filename,
+            mimetype="application/octet-stream",
+        )
+    except TypeError:
+        archive_io.seek(0)
+        return send_file(
+            archive_io,
+            as_attachment=True,
+            attachment_filename=filename,
+            mimetype="application/octet-stream",
+        )
 
 
 @app.route("/tools/api/project/restore", methods=["POST"])
