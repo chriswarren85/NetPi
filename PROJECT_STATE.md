@@ -320,3 +320,15 @@
   - Added additive read-only `POST /tools/api/project/snapshot/compare` endpoint to compare two `.avp` snapshots (`baseline` and `current`) with strict archive/manifest/schema/path/allowlist validation
   - Compare output reports compact devices/settings/topology/multicast/artifact differences (added/removed/changed) and summary counts without restoring or mutating local runtime state
   - Supports commissioning before/after and handoff audit workflows while preserving existing W11.0 snapshot/restore endpoint behavior
+### Last Update
+- Feature: W11.15 Multi-Project Switcher
+- Files modified:
+  - app.py
+  - templates/base.html
+  - templates/settings.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Added project_id namespacing with active project persistence and per-project runtime storage under `data/{project_id}/` via a small path resolution layer
+  - Added startup-safe legacy migration into `data/default/` for existing root-level devices/settings/fingerprints/evidence/topology/multicast files without overwriting existing project data
+  - Added additive project management APIs (`GET /tools/api/projects`, `POST /tools/api/projects/create`, `POST /tools/api/projects/switch`) and minimal sidebar/settings UI controls for create/switch flows without restart
+  - Updated W11.0/W11.1 data path resolution to operate against the active project context while preserving snapshot archive format and compare behavior

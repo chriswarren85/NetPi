@@ -10,6 +10,7 @@ import queue
 import time
 import signal
 import zipfile
+import shutil
 from command_helpers import (
     build_nmap_command,
     build_nmap_host_discovery_command,
@@ -58,18 +59,28 @@ except Exception:
     SNMP_HLAPI_AVAILABLE = False
 
 app = Flask(__name__)
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), 'settings.json')
-DEVICES_FILE  = os.path.join(os.path.dirname(__file__), 'devices.json')
-DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
-FINGERPRINTS_FILE = os.path.join(DATA_DIR, 'fingerprints.json')
-DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, 'device_evidence.json')
-TOPOLOGY_FILE = os.path.join(os.path.dirname(__file__), 'topology.json')
-MULTICAST_GROUPS_FILE = os.path.join(os.path.dirname(__file__), 'multicast_groups.json')
+BASE_DIR = os.path.dirname(__file__)
+DATA_DIR = os.path.join(BASE_DIR, "data")
+DEFAULT_PROJECT_ID = "default"
+CURRENT_PROJECT_STATE_FILE = os.path.join(DATA_DIR, "current_project.json")
+PROJECT_BACKUPS_DIRNAME = "project_backups"
+PROJECTS_STATE_RESERVED_NAMES = {
+    PROJECT_BACKUPS_DIRNAME,
+    "__pycache__",
+}
+LEGACY_SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+LEGACY_DEVICES_FILE = os.path.join(BASE_DIR, "devices.json")
+LEGACY_TOPOLOGY_FILE = os.path.join(BASE_DIR, "topology.json")
+LEGACY_MULTICAST_GROUPS_FILE = os.path.join(BASE_DIR, "multicast_groups.json")
+LEGACY_FINGERPRINTS_FILE = os.path.join(DATA_DIR, "fingerprints.json")
+LEGACY_DEVICE_EVIDENCE_FILE = os.path.join(DATA_DIR, "device_evidence.json")
 BACKGROUND_JOBS = {}
 BACKGROUND_JOBS_LOCK = threading.Lock()
 DEVICE_EVIDENCE_LOCK = threading.Lock()
+PROJECT_STATE_LOCK = threading.Lock()
 DISCOVERY_SUBNET_TIMEOUT_SECONDS = 10
 _SETTINGS_LOAD_LOGGED = False
+_ACTIVE_PROJECT_ID = DEFAULT_PROJECT_ID
 SNAPSHOT_SCHEMA_VERSION = "1.0"
 PROJECT_STATE_REQUIRED_FILES = [
     "devices.json",
@@ -133,6 +144,163 @@ SNAPSHOT_COMPARE_ARTIFACT_PATHS = {
     "firewall_plan": ["firewall_plan.json", "data/firewall_plan.json"],
     "report": ["report.json", "data/report.json"],
 }
+
+
+def _sanitize_project_id(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", text):
+        return ""
+    return text
+
+
+def _load_current_project_state():
+    if not os.path.exists(CURRENT_PROJECT_STATE_FILE):
+        return {}
+    try:
+        with open(CURRENT_PROJECT_STATE_FILE, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_current_project_state(project_id):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    payload = {
+        "active_project_id": project_id,
+        "updated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+    }
+    temp_path = CURRENT_PROJECT_STATE_FILE + ".tmp"
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        os.replace(temp_path, CURRENT_PROJECT_STATE_FILE)
+    except PermissionError:
+        with open(CURRENT_PROJECT_STATE_FILE, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+
+
+def get_active_project_id():
+    with PROJECT_STATE_LOCK:
+        return _ACTIVE_PROJECT_ID
+
+
+def _set_active_project_id(project_id, *, persist=True):
+    normalized = _sanitize_project_id(project_id) or DEFAULT_PROJECT_ID
+    with PROJECT_STATE_LOCK:
+        global _ACTIVE_PROJECT_ID
+        _ACTIVE_PROJECT_ID = normalized
+        if persist:
+            _save_current_project_state(normalized)
+    return normalized
+
+
+def _project_dir(project_id=None, *, ensure=False):
+    pid = _sanitize_project_id(project_id or get_active_project_id()) or DEFAULT_PROJECT_ID
+    path = os.path.abspath(os.path.join(DATA_DIR, pid))
+    if ensure:
+        os.makedirs(path, exist_ok=True)
+    return path
+
+
+def get_project_path(filename, project_id=None, *, ensure_parent=False):
+    rel = str(filename or "").replace("\\", "/").strip().lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        raise ValueError(f"Unsafe project path: {filename}")
+    path = os.path.abspath(os.path.join(_project_dir(project_id, ensure=True), rel.replace("/", os.sep)))
+    if ensure_parent:
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    return path
+
+
+def _list_project_ids():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    found = set()
+    for name in os.listdir(DATA_DIR):
+        candidate = _sanitize_project_id(name)
+        full = os.path.join(DATA_DIR, name)
+        if not candidate or candidate in PROJECTS_STATE_RESERVED_NAMES or not os.path.isdir(full):
+            continue
+        found.add(candidate)
+    found.add(DEFAULT_PROJECT_ID)
+    return sorted(found)
+
+
+def _migrate_legacy_data_to_default_project():
+    default_dir = _project_dir(DEFAULT_PROJECT_ID, ensure=True)
+    _ = default_dir
+
+    legacy_to_project_map = [
+        (LEGACY_DEVICES_FILE, "devices.json"),
+        (LEGACY_SETTINGS_FILE, "settings.json"),
+        (LEGACY_TOPOLOGY_FILE, "topology.json"),
+        (LEGACY_MULTICAST_GROUPS_FILE, "multicast_groups.json"),
+        (LEGACY_FINGERPRINTS_FILE, "data/fingerprints.json"),
+        (LEGACY_DEVICE_EVIDENCE_FILE, "data/device_evidence.json"),
+    ]
+    for source, rel_target in legacy_to_project_map:
+        if not os.path.exists(source):
+            continue
+        target = get_project_path(rel_target, DEFAULT_PROJECT_ID, ensure_parent=True)
+        if os.path.exists(target):
+            continue
+        try:
+            shutil.copy2(source, target)
+        except Exception:
+            pass
+
+
+def _initialize_project_state():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    _migrate_legacy_data_to_default_project()
+    state = _load_current_project_state()
+    candidate = _sanitize_project_id(state.get("active_project_id") if isinstance(state, dict) else "")
+    active = candidate if candidate else DEFAULT_PROJECT_ID
+    _project_dir(active, ensure=True)
+    _set_active_project_id(active, persist=not candidate)
+
+
+def _settings_file():
+    return get_project_path("settings.json")
+
+
+def _devices_file():
+    return get_project_path("devices.json")
+
+
+def _fingerprints_file():
+    return get_project_path("data/fingerprints.json")
+
+
+def _device_evidence_file():
+    return get_project_path("data/device_evidence.json")
+
+
+def _topology_file():
+    return get_project_path("topology.json")
+
+
+def _multicast_groups_file():
+    return get_project_path("multicast_groups.json")
+
+
+def _runs_dir():
+    return get_project_path("runs")
+
+
+_initialize_project_state()
+
 
 def guess_type_from_vendor(vendor_raw):
     vendor = (vendor_raw or "").lower()
@@ -1347,11 +1515,12 @@ def _load_topology_defaults():
 
 def load_topology_snapshot():
     defaults = _load_topology_defaults()
-    if not os.path.exists(TOPOLOGY_FILE):
+    topology_file = _topology_file()
+    if not os.path.exists(topology_file):
         return copy.deepcopy(defaults)
 
     try:
-        with open(TOPOLOGY_FILE, encoding='utf-8') as f:
+        with open(topology_file, encoding='utf-8') as f:
             data = json.load(f)
     except Exception:
         return copy.deepcopy(defaults)
@@ -1379,8 +1548,9 @@ def save_topology_snapshot(data):
     payload["switches_considered"] = int((data or {}).get("switches_considered") or 0)
     payload["switches_queried"] = int((data or {}).get("switches_queried") or 0)
 
-    topology_dir = os.path.dirname(TOPOLOGY_FILE) or "."
-    tmp_path = TOPOLOGY_FILE + ".tmp"
+    topology_file = _topology_file()
+    topology_dir = os.path.dirname(topology_file) or "."
+    tmp_path = topology_file + ".tmp"
     os.makedirs(topology_dir, exist_ok=True)
     with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=2)
@@ -1388,9 +1558,9 @@ def save_topology_snapshot(data):
         os.fsync(f.fileno())
 
     try:
-        os.replace(tmp_path, TOPOLOGY_FILE)
+        os.replace(tmp_path, topology_file)
     except PermissionError:
-        with open(TOPOLOGY_FILE, 'w', encoding='utf-8') as f:
+        with open(topology_file, 'w', encoding='utf-8') as f:
             json.dump(payload, f, indent=2)
             f.flush()
             os.fsync(f.fileno())
@@ -1898,11 +2068,12 @@ def _load_multicast_groups_defaults():
 
 def load_multicast_groups_snapshot():
     defaults = _load_multicast_groups_defaults()
-    if not os.path.exists(MULTICAST_GROUPS_FILE):
+    multicast_file = _multicast_groups_file()
+    if not os.path.exists(multicast_file):
         return copy.deepcopy(defaults)
 
     try:
-        with open(MULTICAST_GROUPS_FILE, encoding='utf-8') as f:
+        with open(multicast_file, encoding='utf-8') as f:
             data = json.load(f)
     except Exception:
         return copy.deepcopy(defaults)
@@ -1925,8 +2096,9 @@ def save_multicast_groups_snapshot(data):
     payload["switches_queried"] = int((data or {}).get("switches_queried") or 0)
     payload["groups"] = [copy.deepcopy(row) for row in ((data or {}).get("groups") or []) if isinstance(row, dict)]
 
-    multicast_dir = os.path.dirname(MULTICAST_GROUPS_FILE) or "."
-    tmp_path = MULTICAST_GROUPS_FILE + ".tmp"
+    multicast_file = _multicast_groups_file()
+    multicast_dir = os.path.dirname(multicast_file) or "."
+    tmp_path = multicast_file + ".tmp"
     os.makedirs(multicast_dir, exist_ok=True)
     with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=2)
@@ -1934,9 +2106,9 @@ def save_multicast_groups_snapshot(data):
         os.fsync(f.fileno())
 
     try:
-        os.replace(tmp_path, MULTICAST_GROUPS_FILE)
+        os.replace(tmp_path, multicast_file)
     except PermissionError:
-        with open(MULTICAST_GROUPS_FILE, 'w', encoding='utf-8') as f:
+        with open(multicast_file, 'w', encoding='utf-8') as f:
             json.dump(payload, f, indent=2)
             f.flush()
             os.fsync(f.fileno())
@@ -2270,32 +2442,34 @@ def _log_settings_load_once(message, level="info"):
 
 
 def load_settings():
-    if not os.path.exists(SETTINGS_FILE):
-        _log_settings_load_once(f"Using defaults because settings.json missing at {SETTINGS_FILE}")
+    settings_file = _settings_file()
+    if not os.path.exists(settings_file):
+        _log_settings_load_once(f"Using defaults because settings.json missing at {settings_file}")
         return _merge_settings_defaults({})
 
     try:
-        with open(SETTINGS_FILE, encoding='utf-8') as f:
+        with open(settings_file, encoding='utf-8') as f:
             loaded = json.load(f)
-        _log_settings_load_once(f"Loaded settings from {SETTINGS_FILE}")
+        _log_settings_load_once(f"Loaded settings from {settings_file}")
         return _merge_settings_defaults(loaded)
     except json.JSONDecodeError as exc:
         _log_settings_load_once(
-            f"Recovered from invalid JSON in {SETTINGS_FILE}: {exc}",
+            f"Recovered from invalid JSON in {settings_file}: {exc}",
             level="warning"
         )
         return _merge_settings_defaults({})
     except Exception as exc:
         _log_settings_load_once(
-            f"Failed loading settings from {SETTINGS_FILE}; using defaults. Error: {exc}",
+            f"Failed loading settings from {settings_file}; using defaults. Error: {exc}",
             level="error"
         )
         return _merge_settings_defaults({})
 
 
 def save_settings(data):
-    settings_dir = os.path.dirname(SETTINGS_FILE) or "."
-    tmp_path = SETTINGS_FILE + ".tmp"
+    settings_file = _settings_file()
+    settings_dir = os.path.dirname(settings_file) or "."
+    tmp_path = settings_file + ".tmp"
     payload = _merge_settings_defaults(data or {})
 
     os.makedirs(settings_dir, exist_ok=True)
@@ -2305,10 +2479,10 @@ def save_settings(data):
         os.fsync(f.fileno())
 
     try:
-        os.replace(tmp_path, SETTINGS_FILE)
+        os.replace(tmp_path, settings_file)
     except PermissionError:
         # Windows/dev fallback when target file is temporarily locked.
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+        with open(settings_file, 'w', encoding='utf-8') as f:
             json.dump(payload, f, indent=2)
             f.flush()
             os.fsync(f.fileno())
@@ -2950,11 +3124,12 @@ def build_system_topology_results(system_groups, system_group_results):
 
 
 def load_devices():
-    if not os.path.exists(DEVICES_FILE):
+    devices_file = _devices_file()
+    if not os.path.exists(devices_file):
         return []
 
     try:
-        with open(DEVICES_FILE) as f:
+        with open(devices_file) as f:
             data = json.load(f)
 
         if isinstance(data, list):
@@ -3169,7 +3344,9 @@ def _apply_observed_mac(device, observed_mac, observed_source):
 
 def save_devices_file(devices):
     devices = normalize_devices_for_save(devices, settings=load_settings())
-    with open(DEVICES_FILE, 'w') as f:
+    devices_file = _devices_file()
+    os.makedirs(os.path.dirname(devices_file) or ".", exist_ok=True)
+    with open(devices_file, 'w') as f:
         json.dump({'devices': devices}, f, indent=2)
 
 
@@ -3184,11 +3361,12 @@ def _devices_with_freshness_view(devices):
 
 
 def load_fingerprints():
-    if not os.path.exists(FINGERPRINTS_FILE):
+    fingerprints_file = _fingerprints_file()
+    if not os.path.exists(fingerprints_file):
         return {}
 
     try:
-        with open(FINGERPRINTS_FILE) as f:
+        with open(fingerprints_file) as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
@@ -3196,17 +3374,19 @@ def load_fingerprints():
 
 
 def save_fingerprints(data):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(FINGERPRINTS_FILE, 'w') as f:
+    fingerprints_file = _fingerprints_file()
+    os.makedirs(os.path.dirname(fingerprints_file) or ".", exist_ok=True)
+    with open(fingerprints_file, 'w') as f:
         json.dump(data or {}, f, indent=2, sort_keys=True)
 
 
 def load_device_evidence():
-    if not os.path.exists(DEVICE_EVIDENCE_FILE):
+    evidence_file = _device_evidence_file()
+    if not os.path.exists(evidence_file):
         return {}
 
     try:
-        with open(DEVICE_EVIDENCE_FILE) as f:
+        with open(evidence_file) as f:
             data = json.load(f)
         return data if isinstance(data, dict) else {}
     except Exception:
@@ -3214,8 +3394,9 @@ def load_device_evidence():
 
 
 def save_device_evidence(data):
-    os.makedirs(DATA_DIR, exist_ok=True)
-    with open(DEVICE_EVIDENCE_FILE, 'w') as f:
+    evidence_file = _device_evidence_file()
+    os.makedirs(os.path.dirname(evidence_file) or ".", exist_ok=True)
+    with open(evidence_file, 'w') as f:
         json.dump(data or {}, f, indent=2, sort_keys=True)
 
 
@@ -3229,7 +3410,7 @@ def _fingerprint_confidence_rank(value):
 
 def _normalize_identity_mac(value):
     mac = (value or "").strip().upper()
-    if not mac or mac in ("—", "-", "UNKNOWN"):
+    if not mac or mac in ("â€”", "-", "UNKNOWN"):
         return ""
     return mac
 
@@ -3237,7 +3418,7 @@ def _normalize_identity_mac(value):
 def _normalize_identity_hostname(value):
     hostname = re.sub(r"[\s\.,;:]+$", "", str(value or "").strip())
     lowered = hostname.lower()
-    if not hostname or lowered in ("unknown", "n/a", "none", "-", "—"):
+    if not hostname or lowered in ("unknown", "n/a", "none", "-", "â€”"):
         return ""
     if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", hostname):
         return ""
@@ -3878,7 +4059,7 @@ def _stable_fingerprint_key(device, result=None):
     evidence_mac = ((result.get("evidence") or {}).get("mac") or "").strip()
     candidate_mac = mac or evidence_mac
 
-    if candidate_mac and candidate_mac not in ("—", "-", "unknown"):
+    if candidate_mac and candidate_mac not in ("â€”", "-", "unknown"):
         return f"mac:{candidate_mac.upper()}"
 
     ip = (device.get("ip") or result.get("ip") or "").strip()
@@ -4027,7 +4208,7 @@ def update_fingerprint_store(entries):
     save_fingerprints(fingerprints)
 
 def save_run(results):
-    runs_dir = os.path.join(os.path.dirname(__file__), 'runs')
+    runs_dir = _runs_dir()
     os.makedirs(runs_dir, exist_ok=True)
 
     ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -4040,7 +4221,7 @@ def save_run(results):
 
 
 
-# ── Pages ──────────────────────────────────────────────
+# â”€â”€ Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _project_root():
@@ -4075,12 +4256,13 @@ def _is_safe_snapshot_member(name):
 
 def _rel_to_abs_project_path(relpath):
     rel = _normalize_snapshot_relpath(relpath)
-    return os.path.abspath(os.path.join(_project_root(), rel.replace("/", os.sep)))
+    return get_project_path(rel)
 
 
 def _is_within_project_root(path):
     try:
-        return os.path.commonpath([_project_root(), os.path.abspath(path)]) == _project_root()
+        active_root = _project_dir()
+        return os.path.commonpath([active_root, os.path.abspath(path)]) == active_root
     except Exception:
         return False
 
@@ -4132,7 +4314,7 @@ def _atomic_write_bytes(path, payload):
 
 
 def _create_pre_restore_backup():
-    backup_root = _rel_to_abs_project_path("data/project_backups")
+    backup_root = get_project_path(PROJECT_BACKUPS_DIRNAME, ensure_parent=True)
     os.makedirs(backup_root, exist_ok=True)
 
     timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
@@ -4304,7 +4486,7 @@ def _snapshot_device_identity_name(device):
     for key in ("name", "hostname", "stable_hostname"):
         value = str(device.get(key) or "").strip()
         lowered = value.lower()
-        if value and lowered not in {"unknown", "n/a", "none", "-", "—"}:
+        if value and lowered not in {"unknown", "n/a", "none", "-", "â€”"}:
             return lowered
     return ""
 
@@ -4701,7 +4883,7 @@ def settings():
         if request.accept_mimetypes.best == 'application/json':
             return jsonify({
                 "success": True,
-                "saved_to": SETTINGS_FILE,
+                "saved_to": _settings_file(),
                 "timestamp": utc_now_iso(),
             })
 
@@ -4773,13 +4955,13 @@ def ntp():
     return render_template('ntp.html', s=s, status=status)
 
 
-# ── API ────────────────────────────────────────────────
+# â”€â”€ API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 
 # --- Validation API (NetPi V3) ---
 # =========================
-# NetPi V5 — Auto Typing Helpers
+# NetPi V5 â€” Auto Typing Helpers
 # =========================
 
 def normalize_platform_name(value):
@@ -5802,10 +5984,75 @@ def api_project_name():
     s = load_settings()
     name = s.get('project_name', '')
     if s.get('job_number'):
-        name += ' — ' + s['job_number']
+        name += ' â€” ' + s['job_number']
     return jsonify({'name': name or ''})
 
 
+
+@app.route("/tools/api/projects", methods=["GET"])
+def api_projects_list():
+    return jsonify({
+        "ok": True,
+        "active_project_id": get_active_project_id(),
+        "projects": _list_project_ids(),
+    })
+
+
+@app.route("/tools/api/projects/create", methods=["POST"])
+def api_projects_create():
+    payload = request.get_json(silent=True) if request.is_json else {}
+    payload = payload if isinstance(payload, dict) else {}
+    project_id = (
+        payload.get("project_id")
+        or request.form.get("project_id")
+        or request.values.get("project_id")
+        or ""
+    )
+    normalized = _sanitize_project_id(project_id)
+    if not normalized:
+        return jsonify({
+            "ok": False,
+            "error": "Invalid project_id. Use letters, numbers, dot, underscore, or dash.",
+        }), 400
+
+    if normalized in _list_project_ids():
+        return jsonify({
+            "ok": False,
+            "error": f"Project '{normalized}' already exists.",
+        }), 400
+
+    _project_dir(normalized, ensure=True)
+    return jsonify({
+        "ok": True,
+        "project_id": normalized,
+        "active_project_id": get_active_project_id(),
+    })
+
+
+@app.route("/tools/api/projects/switch", methods=["POST"])
+def api_projects_switch():
+    payload = request.get_json(silent=True) if request.is_json else {}
+    payload = payload if isinstance(payload, dict) else {}
+    project_id = (
+        payload.get("project_id")
+        or request.form.get("project_id")
+        or request.values.get("project_id")
+        or ""
+    )
+    normalized = _sanitize_project_id(project_id)
+    if not normalized:
+        return jsonify({
+            "ok": False,
+            "error": "Invalid project_id. Use letters, numbers, dot, underscore, or dash.",
+        }), 400
+
+    _project_dir(normalized, ensure=True)
+    active = _set_active_project_id(normalized, persist=True)
+    return jsonify({
+        "ok": True,
+        "active_project_id": active,
+        "projects": _list_project_ids(),
+    })
 @app.route("/tools/api/project/snapshot", methods=["GET"])
 def api_project_snapshot():
     files, missing_optional, notes = _collect_snapshot_files()
@@ -6216,7 +6463,7 @@ def api_checks_run():
 
 @app.route("/tools/report/latest")
 def report_latest():
-    runs_dir = os.path.join(os.path.dirname(__file__), 'runs')
+    runs_dir = _runs_dir()
     files = sorted([f for f in os.listdir(runs_dir) if f.endswith('.json')], reverse=True)
     if not files:
         return "No saved runs found", 404
@@ -6255,7 +6502,7 @@ def report_latest():
 
 @app.route("/tools/api/checks/download_csv")
 def download_csv():
-    runs_dir = os.path.join(os.path.dirname(__file__), 'runs')
+    runs_dir = _runs_dir()
     files = sorted([f for f in os.listdir(runs_dir) if f.endswith('.csv')], reverse=True)
     if not files:
         return jsonify({"error": "no csv runs found"}), 404
@@ -6651,7 +6898,7 @@ def add_all_discovered_devices():
 
 @app.route("/tools/api/checks/export_csv")
 def export_csv():
-    runs_dir = os.path.join(os.path.dirname(__file__), 'runs')
+    runs_dir = _runs_dir()
     files = sorted(os.listdir(runs_dir), reverse=True)
     if not files:
         return jsonify({"error": "no runs found"})
@@ -7129,7 +7376,7 @@ def import_pasted_devices():
 
 
 # =========================
-# NetPi V5 — System Graph Builder
+# NetPi V5 â€” System Graph Builder
 # =========================
 
 def build_basic_type_groups(devices):
@@ -7269,10 +7516,10 @@ def build_detected_systems(devices, system_results):
             summary_parts = []
             if rels:
                 for e in rels:
-                    summary_parts.append(f'{e["from"]} → {e["to"]} ({e["type"]})')
+                    summary_parts.append(f'{e["from"]} â†’ {e["to"]} ({e["type"]})')
                 summary_chain = " | ".join(summary_parts)
             else:
-                summary_chain = " → ".join(names)
+                summary_chain = " â†’ ".join(names)
 
             systems.append({
                 "system_id": f"type_group_{idx}",
@@ -7324,11 +7571,11 @@ def build_detected_systems(devices, system_results):
 
         if comp_edges:
             summary_chain = " | ".join(
-                f'{e["from"]} → {e["to"]} ({e["type"]})'
+                f'{e["from"]} â†’ {e["to"]} ({e["type"]})'
                 for e in comp_edges
             )
         else:
-            summary_chain = " → ".join(comp_list)
+            summary_chain = " â†’ ".join(comp_list)
 
         systems.append({
             "system_id": f"system_{idx}",
@@ -8992,4 +9239,5 @@ def api_generate_firewall_plan():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)
+
 

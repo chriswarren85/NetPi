@@ -20,7 +20,7 @@
       </div>
     </div>
   </div>
-  <div class="panel">
+  <div class="panel" id="vlan-panel">
     <div class="panel-header">VLAN groups</div>
     <div class="panel-body">
       {% for v in s.vlans %}
@@ -50,6 +50,26 @@
     </div>
   </div>
   <div class="panel">
+    <div class="panel-header">Project workspace</div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Active project</label>
+          <select id="settings-project-switcher"></select>
+        </div>
+        <div class="form-group">
+          <label>Create new project</label>
+          <input id="settings-new-project-id" placeholder="e.g. site-west-level2">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="btn" onclick="switchProjectFromSettings()">Switch Project</button>
+        <button type="button" class="btn" onclick="createProjectFromSettings()">Create Project</button>
+      </div>
+      <div id="project-workspace-msg" style="margin-top:10px;font-size:12px;color:#9ca3af"></div>
+    </div>
+  </div>
+  <div class="panel">
     <div class="panel-header">Project snapshot</div>
     <div class="panel-body">
       <p style="margin:0 0 10px 0;color:#6b7280;font-size:13px">
@@ -65,7 +85,7 @@
   document.getElementById('success').style.display='block';
   {% endif %}
   function addVlan(){
-    const body = document.querySelector('.panel:last-of-type .panel-body');
+    const body = document.querySelector('#vlan-panel .panel-body');
     const idx = document.querySelectorAll('.vlan-card').length;
     const card = document.createElement('div');
     card.className = 'vlan-card';
@@ -91,5 +111,70 @@
       </div>`;
     body.insertBefore(card, body.lastElementChild);
   }
+
+  async function loadProjectWorkspaceState(){
+    const msg = document.getElementById('project-workspace-msg');
+    const select = document.getElementById('settings-project-switcher');
+    if(!msg || !select) return;
+    try{
+      const res = await fetch('/tools/api/projects');
+      const data = await res.json();
+      if(!res.ok || !data.ok){
+        msg.textContent = data.error || 'Failed to load projects';
+        return;
+      }
+      const projects = Array.isArray(data.projects) ? data.projects : [];
+      select.innerHTML = projects.map(p => `<option value="${p}">${p}</option>`).join('');
+      if(data.active_project_id) select.value = data.active_project_id;
+      msg.textContent = `Active project: ${data.active_project_id || ''}`;
+    }catch(e){
+      msg.textContent = 'Failed to load projects';
+    }
+  }
+
+  async function switchProjectFromSettings(){
+    const select = document.getElementById('settings-project-switcher');
+    const msg = document.getElementById('project-workspace-msg');
+    if(!select) return;
+    const project_id = String(select.value || '').trim();
+    if(!project_id) return;
+    const res = await fetch('/tools/api/projects/switch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({project_id})
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      msg.textContent = data.error || 'Failed to switch project';
+      return;
+    }
+    window.location.reload();
+  }
+
+  async function createProjectFromSettings(){
+    const input = document.getElementById('settings-new-project-id');
+    const msg = document.getElementById('project-workspace-msg');
+    if(!input) return;
+    const project_id = String(input.value || '').trim();
+    if(!project_id){
+      msg.textContent = 'Enter a project id first.';
+      return;
+    }
+    const res = await fetch('/tools/api/projects/create', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({project_id})
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      msg.textContent = data.error || 'Failed to create project';
+      return;
+    }
+    input.value = '';
+    msg.textContent = `Project created: ${data.project_id}`;
+    loadProjectWorkspaceState();
+  }
+
+  loadProjectWorkspaceState();
 </script>
 {% endblock %}

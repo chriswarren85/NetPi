@@ -11,6 +11,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .sidebar-logo{padding:0.75rem 1rem 1.25rem;font-size:15px;font-weight:600;color:#fff;border-bottom:1px solid #2d3148;margin-bottom:0.5rem}
 .sidebar-logo span{color:#60a5fa}
 .project-label{padding:0.25rem 1rem 0.75rem;font-size:11px;color:#6b7280;border-bottom:1px solid #2d3148;margin-bottom:0.5rem}
+.project-switch-wrap{padding:0 1rem 0.75rem;border-bottom:1px solid #2d3148;margin-bottom:0.5rem}
+.project-switch-wrap select{font-size:12px;padding:6px 8px}
 .nav-section{padding:0.5rem 1rem 0.25rem;font-size:10px;color:#4b5563;letter-spacing:0.08em;text-transform:uppercase;font-weight:600}
 .nav-item{display:flex;align-items:center;gap:10px;padding:7px 1rem;font-size:13px;color:#9ca3af;text-decoration:none;border-left:2px solid transparent;transition:all 0.1s}
 .nav-item:hover{color:#e2e8f0;background:#22263a}
@@ -63,6 +65,9 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 <div class="sidebar">
   <div class="sidebar-logo">Net<span>Pi</span></div>
   <div class="project-label" id="sidebar-project">No project loaded</div>
+  <div class="project-switch-wrap">
+    <select id="sidebar-project-switcher"></select>
+  </div>
   <div class="nav-section">Diagnostics</div>
   <a href="/tools/dashboard" class="nav-item {% if request.path == '/tools/dashboard' %}active{% endif %}"><span class="nav-dot blue"></span>Dashboard</a>
   <a href="/tools/diagnostics" class="nav-item {% if request.path == '/tools/diagnostics' %}active{% endif %}"><span class="nav-dot green"></span>Run checks</a>
@@ -90,6 +95,29 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 <script>
 fetch('/tools/api/project-name').then(r=>r.json()).then(d=>{
   if(d.name) document.getElementById('sidebar-project').textContent=d.name;
+});
+fetch('/tools/api/projects').then(r=>r.json()).then(d=>{
+  if(!d || !d.ok) return;
+  const select = document.getElementById('sidebar-project-switcher');
+  if(!select) return;
+  const projects = Array.isArray(d.projects) ? d.projects : [];
+  const active = d.active_project_id || '';
+  select.innerHTML = projects.map(p => `<option value="${p}">${p}</option>`).join('');
+  if(active) select.value = active;
+  select.onchange = async () => {
+    const project_id = select.value;
+    const res = await fetch('/tools/api/projects/switch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({project_id})
+    });
+    const payload = await res.json();
+    if(!res.ok || !payload.ok){
+      alert((payload && payload.error) || 'Failed to switch project');
+      return;
+    }
+    window.location.reload();
+  };
 });
 </script>
 </body>
