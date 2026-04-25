@@ -332,3 +332,18 @@
   - Added startup-safe legacy migration into `data/default/` for existing root-level devices/settings/fingerprints/evidence/topology/multicast files without overwriting existing project data
   - Added additive project management APIs (`GET /tools/api/projects`, `POST /tools/api/projects/create`, `POST /tools/api/projects/switch`) and minimal sidebar/settings UI controls for create/switch flows without restart
   - Updated W11.0/W11.1 data path resolution to operate against the active project context while preserving snapshot archive format and compare behavior
+### Last Update
+- Feature: W9.0-W9.5 Excel export and handover workbook system
+- Files modified:
+  - app.py
+  - templates/settings.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Implemented W9.0 Excel export foundation with reusable workbook helpers (`project_header_block`, `freeze_header`, `autofit_columns`, status/criticality/manual/missing fills, `safe_sheet_name`, `write_table`) and compatibility binary download handling for Flask 1.x/2.x `send_file`.
+  - Implemented W9.1 IP Schedule XLSX export (`GET /tools/api/export/xlsx/ip_schedule`) with VLAN/unassigned sheet split, active-project inventory usage, frozen headers, autofilter, autofit, and missing metadata highlighting.
+  - Implemented W9.2 Firewall Plan XLSX export (`GET /tools/api/export/xlsx/firewall_plan`) with separate minimum-required and recommended sheets plus summary rows and criticality highlighting.
+  - Implemented W9.3 Validation Results XLSX export (`GET /tools/api/export/xlsx/validation_results`) with validation-mode-aware sheets and PASS/WARN/FAIL/UNKNOWN result fills.
+  - Implemented W9.4 IT Change Request XLSX export (`GET /tools/api/export/xlsx/change_request`) with cover sheet and mapped change-request rows derived from firewall plan output.
+  - Implemented W9.5 Commissioning Workbook master export (`GET /tools/api/export/xlsx/commissioning_workbook`) containing cover, device register, per-VLAN IP schedule tabs, firewall tabs, validation, recommendations, and flow map.
+  - Added minimal Settings-page download links for the new XLSX exports.
+  - Exports are active-project aware and read-only (no project-state mutation).

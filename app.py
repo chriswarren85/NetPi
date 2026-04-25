@@ -23,6 +23,7 @@ from checks.devices import run_device_checks
 import io
 import ipaddress
 import re
+from collections import defaultdict
 from checks.validation import (
     SYSTEM_VALIDATION_RULES,
     run_validation,
@@ -32,6 +33,18 @@ from checks.validation import (
     summarize_connectivity_results,
     resolve_passive_mac,
 )
+try:
+    from openpyxl import Workbook, load_workbook
+    from openpyxl.styles import PatternFill, Font
+    from openpyxl.utils import get_column_letter
+    OPENPYXL_AVAILABLE = True
+except Exception:
+    Workbook = None
+    load_workbook = None
+    PatternFill = None
+    Font = None
+    get_column_letter = None
+    OPENPYXL_AVAILABLE = False
 from checks.flows import (
     generate_flows_from_system_results,
     generate_flows_from_connectivity_results,
@@ -145,6 +158,22 @@ SNAPSHOT_COMPARE_ARTIFACT_PATHS = {
     "firewall_plan": ["firewall_plan.json", "data/firewall_plan.json"],
     "report": ["report.json", "data/report.json"],
 }
+XLSX_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+XLSX_STATUS_COLORS = {
+    "pass": "C6EFCE",
+    "warn": "FFE699",
+    "warning": "FFE699",
+    "fail": "F4CCCC",
+    "error": "F4CCCC",
+    "unknown": "D9D9D9",
+    "": "D9D9D9",
+}
+XLSX_FILL_MISSING = "FFE699"
+XLSX_FILL_MANUAL_OVERRIDE = "E6E0F8"
+XLSX_FILL_CRITICAL = "F4CCCC"
+XLSX_FILL_HIGH = "FFE699"
+XLSX_FILL_UNKNOWN = "D9D9D9"
+XLSX_EXPORT_ROUTE_NOTES = "Install openpyxl to use Excel export routes."
 
 
 def _sanitize_project_id(value):
@@ -4374,6 +4403,290 @@ def _get_uploaded_snapshot_file():
     return None
 
 
+def _xlsx_fill(hex_color):
+    if not PatternFill:
+        return None
+    return PatternFill(fill_type="solid", start_color=hex_color, end_color=hex_color)
+
+
+def status_fill(result):
+    token = str(result or "").strip().lower()
+    color = XLSX_STATUS_COLORS.get(token, XLSX_STATUS_COLORS["unknown"])
+    return _xlsx_fill(color)
+
+
+def criticality_fill(criticality):
+    token = str(criticality or "").strip().lower()
+    if token == "critical":
+        return _xlsx_fill(XLSX_FILL_CRITICAL)
+    if token == "high":
+        return _xlsx_fill(XLSX_FILL_HIGH)
+    return None
+
+
+def missing_field_fill():
+    return _xlsx_fill(XLSX_FILL_MISSING)
+
+
+def manual_override_fill():
+    return _xlsx_fill(XLSX_FILL_MANUAL_OVERRIDE)
+
+
+def safe_sheet_name(name):
+    text = str(name or "").strip()
+    text = re.sub(r"[\[\]\*\?/\\:]", "_", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        text = "Sheet"
+    return text[:31]
+
+
+def project_header_block(ws, project_settings, title):
+    settings = project_settings if isinstance(project_settings, dict) else {}
+    ws["A1"] = str(title or "NetPi Export")
+    ws["A1"].font = Font(bold=True, size=14) if Font else ws["A1"].font
+    ws["A2"] = f"Project: {settings.get('project_name') or ''}"
+    ws["A3"] = f"Job: {settings.get('job_number') or ''}"
+    ws["A4"] = f"Exported (UTC): {utc_now_iso()}"
+    ws["A5"] = f"Active Project ID: {get_active_project_id()}"
+    return 7
+
+
+def freeze_header(ws, row):
+    freeze_at = max(2, int(row or 1) + 1)
+    ws.freeze_panes = f"A{freeze_at}"
+
+
+def autofit_columns(ws):
+    if not get_column_letter:
+        return
+    for col_cells in ws.columns:
+        max_len = 0
+        for cell in col_cells:
+            value = "" if cell.value is None else str(cell.value)
+            if len(value) > max_len:
+                max_len = len(value)
+        width = min(64, max(10, max_len + 2))
+        ws.column_dimensions[get_column_letter(col_cells[0].column)].width = width
+
+
+def write_table(ws, headers, rows, start_row):
+    header_row = max(1, int(start_row or 1))
+    headers = list(headers or [])
+    rows = list(rows or [])
+
+    for col, header in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col, value=header)
+        if Font:
+            cell.font = Font(bold=True)
+        header_fill = _xlsx_fill("E2E8F0")
+        if header_fill:
+            cell.fill = header_fill
+
+    for row_idx, row_data in enumerate(rows, start=header_row + 1):
+        if isinstance(row_data, dict):
+            values = [row_data.get(header, "") for header in headers]
+        elif isinstance(row_data, (list, tuple)):
+            values = list(row_data)
+        else:
+            values = [row_data]
+        for col, value in enumerate(values, start=1):
+            if isinstance(value, (dict, list, tuple, set)):
+                try:
+                    value = json.dumps(value, ensure_ascii=False)
+                except Exception:
+                    value = str(value)
+            ws.cell(row=row_idx, column=col, value=value)
+
+    last_row = header_row + len(rows)
+    if headers:
+        ws.auto_filter.ref = f"A{header_row}:{get_column_letter(len(headers))}{max(last_row, header_row)}"
+
+    return {
+        "header_row": header_row,
+        "data_start_row": header_row + 1,
+        "last_row": last_row,
+        "headers": headers,
+        "column_map": {header: idx + 1 for idx, header in enumerate(headers)},
+    }
+
+
+def _send_bytesio_attachment(buffer, filename, mimetype=XLSX_MIMETYPE):
+    buffer.seek(0)
+    try:
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=filename,
+            mimetype=mimetype,
+        )
+    except TypeError:
+        buffer.seek(0)
+        return send_file(
+            buffer,
+            as_attachment=True,
+            attachment_filename=filename,
+            mimetype=mimetype,
+        )
+
+
+def _xlsx_response(workbook, filename):
+    payload = io.BytesIO()
+    workbook.save(payload)
+    return _send_bytesio_attachment(payload, filename, mimetype=XLSX_MIMETYPE)
+
+
+def _ensure_openpyxl_response():
+    if OPENPYXL_AVAILABLE:
+        return None
+    return jsonify({
+        "ok": False,
+        "error": XLSX_EXPORT_ROUTE_NOTES,
+    }), 500
+
+
+def _load_project_json_artifact(candidates):
+    for rel in candidates:
+        try:
+            path = get_project_path(rel)
+        except Exception:
+            continue
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            return payload, rel
+        except Exception:
+            continue
+    return None, ""
+
+
+def _normalize_validation_status(value):
+    token = str(value or "").strip().lower()
+    if token in {"pass", "ok"}:
+        return "PASS"
+    if token in {"warn", "warning"}:
+        return "WARN"
+    if token in {"fail", "error"}:
+        return "FAIL"
+    return "UNKNOWN"
+
+
+def _vlan_lookup(settings):
+    lookup = {}
+    for vlan in (settings or {}).get("vlans") or []:
+        if not isinstance(vlan, dict):
+            continue
+        name = str(vlan.get("name") or "").strip()
+        vlan_id = str(vlan.get("vlan_id") or vlan.get("id") or "").strip()
+        if name:
+            lookup[name.lower()] = vlan
+        if vlan_id:
+            lookup[vlan_id.lower()] = vlan
+    return lookup
+
+
+def _device_vlan_bucket(device):
+    text = str((device or {}).get("vlan") or "").strip()
+    return text or "Unassigned"
+
+
+def _detect_manual_override(device, field_name):
+    item = device if isinstance(device, dict) else {}
+    field = str(field_name or "").strip().lower()
+    source_key = f"{field}_source"
+    source_text = str(item.get(source_key) or "").strip().lower()
+    if source_text in {"manual", "user", "user-entered", "operator"}:
+        return True
+
+    overrides = item.get("overrides")
+    if isinstance(overrides, dict):
+        marker = str(overrides.get(field) or "").strip().lower()
+        if marker in {"manual", "user", "user-entered", "operator"}:
+            return True
+
+    manual_overrides = item.get("manual_overrides")
+    if isinstance(manual_overrides, dict) and field in manual_overrides:
+        return True
+
+    return False
+
+
+def _device_addressing_mode(device):
+    item = device if isinstance(device, dict) else {}
+    explicit = str(item.get("addressing_mode") or "").strip().lower()
+    if explicit in {"dhcp", "reserved", "static"}:
+        return explicit
+    if item.get("dhcp_reservation") in {True, "true", "1", 1}:
+        return "reserved"
+    if item.get("static_ip") in {True, "true", "1", 1}:
+        return "static"
+    return "unknown"
+
+
+def _build_firewall_plan_for_export(settings):
+    persisted, _ = _load_project_json_artifact(["firewall_plan.json", "data/firewall_plan.json"])
+    if isinstance(persisted, dict):
+        if isinstance(persisted.get("firewall_plan"), dict):
+            return persisted.get("firewall_plan") or {}
+        if isinstance(persisted.get("rules"), list):
+            return persisted
+
+    system_requirements = _build_system_requirements_payload({})
+    return _compose_firewall_plan(system_requirements.get("results") or [], settings=settings)
+
+
+def _build_recommendations_for_export():
+    persisted, _ = _load_project_json_artifact(["recommendations.json", "data/recommendations.json"])
+    if isinstance(persisted, dict):
+        if isinstance(persisted.get("recommendations"), list):
+            return persisted
+        if isinstance(persisted.get("result"), dict) and isinstance((persisted.get("result") or {}).get("recommendations"), list):
+            return persisted.get("result") or {}
+
+    context = _build_recommendation_context({})
+    result = _build_recommendations(context)
+    return {
+        "recommendations": result.get("recommendations") or [],
+        "summary": result.get("summary") or {},
+    }
+
+
+def _build_flows_for_export():
+    persisted, _ = _load_project_json_artifact(["flows.json", "data/flows.json"])
+    if isinstance(persisted, dict):
+        if isinstance(persisted.get("results"), list):
+            return persisted
+        if isinstance(persisted.get("flows"), list):
+            return {"results": persisted.get("flows") or [], "summary": persisted.get("summary") or {}}
+
+    payload = _build_system_requirements_payload({})
+    flow_rows = []
+    for row in payload.get("results") or []:
+        for category, entries in ((row or {}).get("categories") or {}).items():
+            for entry in entries or []:
+                if not isinstance(entry, dict):
+                    continue
+                devices = entry.get("devices") or []
+                src = devices[0] if len(devices) > 0 and isinstance(devices[0], dict) else {}
+                dst = devices[1] if len(devices) > 1 and isinstance(devices[1], dict) else {}
+                for port in entry.get("ports") or [None]:
+                    flow_rows.append({
+                        "system_id": row.get("system_id") or "",
+                        "category": category,
+                        "src_device": src.get("name") or "",
+                        "src_ip": src.get("ip") or "",
+                        "dst_device": dst.get("name") or "",
+                        "dst_ip": dst.get("ip") or "",
+                        "protocol": entry.get("protocol") or "",
+                        "port": port,
+                        "direction": entry.get("direction") or "",
+                        "purpose": entry.get("purpose") or "",
+                        "confidence": entry.get("confidence") or "",
+                    })
+    return {"results": flow_rows, "summary": {"flows": len(flow_rows)}}
+
 def _read_uploaded_snapshot_archive(uploaded, label):
     if uploaded is None or not getattr(uploaded, "filename", ""):
         raise ValueError(f"{label}: snapshot file is required.")
@@ -6001,6 +6314,594 @@ def api_project_name():
         name += ' â€” ' + s['job_number']
     return jsonify({'name': name or ''})
 
+
+
+def _export_filename(stem):
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    project_id = safe_sheet_name(get_active_project_id()).replace(" ", "_")
+    return f"netpi_{stem}_{project_id}_{ts}.xlsx"
+
+
+def _build_ip_schedule_rows(devices, settings):
+    rows = []
+    vlan_map = _vlan_lookup(settings)
+    default_gateway = str(settings.get("gateway") or "").strip()
+    dns_value = (
+        settings.get("dns_server")
+        or settings.get("dns")
+        or settings.get("dns_primary")
+        or settings.get("dns_suffix")
+        or ""
+    )
+    for device in devices:
+        item = device if isinstance(device, dict) else {}
+        vlan = _device_vlan_bucket(item)
+        vlan_info = vlan_map.get(vlan.lower(), {})
+        row = {
+            "name": item.get("name") or "",
+            "hostname": item.get("hostname") or "",
+            "IP": item.get("ip") or "",
+            "MAC": item.get("mac") or item.get("mac_address") or "",
+            "mac_source": item.get("mac_source") or "",
+            "serial": item.get("serial") or "",
+            "VLAN": vlan if vlan != "Unassigned" else "",
+            "gateway": vlan_info.get("gateway") or default_gateway,
+            "DNS": dns_value,
+            "vendor": item.get("vendor") or "",
+            "model": item.get("model") or "",
+            "type": item.get("effective_type") or item.get("_resolved_type") or item.get("type") or "",
+            "room/zone": item.get("room") or item.get("zone") or "",
+            "addressing mode: DHCP/reserved/static": _device_addressing_mode(item),
+            "last seen": item.get("last_reachable") or item.get("last_seen") or item.get("first_seen") or "",
+            "notes": item.get("notes") or "",
+        }
+        rows.append((vlan, row, item))
+    return rows
+
+
+def _build_ip_schedule_sheet(ws, settings, title, sheet_rows):
+    start = project_header_block(ws, settings, title)
+    headers = [
+        "name",
+        "hostname",
+        "IP",
+        "MAC",
+        "mac_source",
+        "serial",
+        "VLAN",
+        "gateway",
+        "DNS",
+        "vendor",
+        "model",
+        "type",
+        "room/zone",
+        "addressing mode: DHCP/reserved/static",
+        "last seen",
+        "notes",
+    ]
+    table_rows = [entry[1] for entry in sheet_rows]
+    meta = write_table(ws, headers, table_rows, start)
+    freeze_header(ws, meta["header_row"])
+
+    missing_fill = missing_field_fill()
+    override_fill = manual_override_fill()
+    col_map = meta["column_map"]
+    for idx, (_, _, device) in enumerate(sheet_rows, start=meta["data_start_row"]):
+        if not str(device.get("mac") or device.get("mac_address") or "").strip():
+            if missing_fill:
+                ws.cell(row=idx, column=col_map["MAC"]).fill = missing_fill
+        if not str(device.get("serial") or "").strip():
+            if missing_fill:
+                ws.cell(row=idx, column=col_map["serial"]).fill = missing_fill
+        if not str(device.get("vlan") or "").strip():
+            if missing_fill:
+                ws.cell(row=idx, column=col_map["VLAN"]).fill = missing_fill
+
+        manual_targets = {
+            "name": "name",
+            "hostname": "hostname",
+            "IP": "ip",
+            "MAC": "mac",
+            "serial": "serial",
+            "VLAN": "vlan",
+            "notes": "notes",
+        }
+        for column_name, field_name in manual_targets.items():
+            if _detect_manual_override(device, field_name) and override_fill:
+                ws.cell(row=idx, column=col_map[column_name]).fill = override_fill
+
+    autofit_columns(ws)
+
+
+def _firewall_rule_criticality(rule):
+    explicit = str((rule or {}).get("criticality") or "").strip().lower()
+    if explicit in {"critical", "high", "standard"}:
+        return explicit
+    if str((rule or {}).get("requirement_level") or "").strip().lower() == "min_required":
+        return "critical"
+    confidence = int((rule or {}).get("confidence") or 0)
+    if confidence >= 75:
+        return "high"
+    return "standard"
+
+
+def _build_firewall_sheet(ws, settings, title, rules):
+    start = project_header_block(ws, settings, title)
+    rules = list(rules or [])
+    pairs = sorted({
+        f"{str(r.get('source_zone') or '')}->{str(r.get('destination_zone') or '')}"
+        for r in rules
+    })
+    confidence_bins = {"high": 0, "medium": 0, "low": 0}
+    for rule in rules:
+        confidence = int(rule.get("confidence") or 0)
+        if confidence >= 75:
+            confidence_bins["high"] += 1
+        elif confidence >= 50:
+            confidence_bins["medium"] += 1
+        else:
+            confidence_bins["low"] += 1
+
+    ws.cell(row=start, column=1, value=f"Rule count: {len(rules)}")
+    ws.cell(row=start + 1, column=1, value=f"VLAN pairs covered: {len(pairs)}")
+    ws.cell(
+        row=start + 2,
+        column=1,
+        value=f"Confidence distribution (high/medium/low): {confidence_bins['high']}/{confidence_bins['medium']}/{confidence_bins['low']}",
+    )
+
+    headers = [
+        "source zone",
+        "destination zone",
+        "port",
+        "protocol",
+        "direction",
+        "purpose",
+        "business justification",
+        "AV justification",
+        "confidence",
+        "criticality",
+        "notes",
+    ]
+    table_rows = []
+    for rule in rules:
+        table_rows.append({
+            "source zone": rule.get("source_zone") or "",
+            "destination zone": rule.get("destination_zone") or "",
+            "port": "" if rule.get("port") is None else rule.get("port"),
+            "protocol": rule.get("protocol") or "",
+            "direction": rule.get("direction") or "",
+            "purpose": rule.get("purpose") or "",
+            "business justification": rule.get("business_justification") or "",
+            "AV justification": rule.get("av_justification") or "",
+            "confidence": rule.get("confidence") or "",
+            "criticality": _firewall_rule_criticality(rule),
+            "notes": "; ".join(rule.get("evidence") or []),
+        })
+
+    meta = write_table(ws, headers, table_rows, start + 4)
+    freeze_header(ws, meta["header_row"])
+    crit_col = meta["column_map"]["criticality"]
+    for row in range(meta["data_start_row"], meta["last_row"] + 1):
+        fill = criticality_fill(ws.cell(row=row, column=crit_col).value)
+        if fill:
+            ws.cell(row=row, column=crit_col).fill = fill
+    autofit_columns(ws)
+
+
+def _validation_recommended_action(status):
+    token = str(status or "").strip().upper()
+    if token == "PASS":
+        return "No action required."
+    if token == "WARN":
+        return "Review finding and confirm expected behavior."
+    if token == "FAIL":
+        return "Investigate and remediate before sign-off."
+    return "Collect additional evidence."
+
+
+def _build_validation_rows(devices):
+    devices = list(devices or [])
+    validate_all_results = []
+    validate_system_results = []
+
+    try:
+        validate_all_results = run_validation_for_all(devices)
+    except Exception:
+        validate_all_results = []
+
+    try:
+        enriched_devices = [enrich_device_runtime(device) for device in devices]
+        validations_by_ip = {}
+        for item in enriched_devices:
+            result = dict(item.get("_validation_result") or {})
+            ip = str(result.get("ip") or item.get("ip") or "").strip()
+            if ip:
+                validations_by_ip[ip] = result
+        validate_system_results = run_system_validation(enriched_devices, validations_by_ip)
+    except Exception:
+        validate_system_results = []
+
+    return validate_all_results, validate_system_results
+
+
+def _write_validation_sheet(ws, settings, title, rows):
+    start = project_header_block(ws, settings, title)
+    headers = [
+        "system",
+        "device",
+        "target",
+        "expected requirement",
+        "result",
+        "method used",
+        "confidence",
+        "recommended action",
+        "evidence source",
+        "sign-off",
+    ]
+    meta = write_table(ws, headers, rows, start)
+    freeze_header(ws, meta["header_row"])
+    result_col = meta["column_map"]["result"]
+    for row in range(meta["data_start_row"], meta["last_row"] + 1):
+        fill = status_fill(ws.cell(row=row, column=result_col).value)
+        if fill:
+            ws.cell(row=row, column=result_col).fill = fill
+    autofit_columns(ws)
+
+
+def _build_validation_export_rows(validate_all_results, validate_system_results):
+    device_rows = []
+    for row in validate_all_results or []:
+        device_name = row.get("name") or row.get("ip") or ""
+        checks = list(row.get("results") or [])
+        if checks:
+            for check in checks:
+                status = _normalize_validation_status(check.get("status"))
+                device_rows.append({
+                    "system": "",
+                    "device": device_name,
+                    "target": row.get("ip") or "",
+                    "expected requirement": check.get("check") or "",
+                    "result": status,
+                    "method used": check.get("check") or "",
+                    "confidence": row.get("confidence_score") or "",
+                    "recommended action": _validation_recommended_action(status),
+                    "evidence source": "validate_all.results",
+                    "sign-off": "",
+                })
+        else:
+            status = _normalize_validation_status(row.get("overall"))
+            device_rows.append({
+                "system": "",
+                "device": device_name,
+                "target": row.get("ip") or "",
+                "expected requirement": "overall device validation",
+                "result": status,
+                "method used": "overall",
+                "confidence": row.get("confidence_score") or "",
+                "recommended action": _validation_recommended_action(status),
+                "evidence source": "validate_all.results",
+                "sign-off": "",
+            })
+
+    system_rows = []
+    for row in validate_system_results or []:
+        status = _normalize_validation_status(row.get("status"))
+        system_rows.append({
+            "system": row.get("system_check") or "",
+            "device": row.get("from_device") or row.get("from_ip") or "",
+            "target": row.get("to_device") or row.get("to_ip") or "",
+            "expected requirement": row.get("expected") or row.get("reason") or row.get("required_target_ports") or "",
+            "result": status,
+            "method used": row.get("relationship_type") or "system_validation",
+            "confidence": row.get("confidence") or "",
+            "recommended action": _validation_recommended_action(status),
+            "evidence source": "validate_systems.results",
+            "sign-off": "",
+        })
+    return device_rows, system_rows
+
+
+def _build_change_request_rows(firewall_rules, settings):
+    requestor = (
+        settings.get("requestor")
+        or settings.get("point_of_contact")
+        or settings.get("client_name")
+        or ""
+    )
+    rows = []
+    for rule in firewall_rules or []:
+        criticality = _firewall_rule_criticality(rule)
+        risk_rating = "Low"
+        if criticality == "critical":
+            risk_rating = "High"
+        elif criticality == "high":
+            risk_rating = "Medium"
+        change_title = f"{rule.get('purpose') or 'AV rule'} ({rule.get('source_zone') or 'Unknown'} -> {rule.get('destination_zone') or 'Unknown'})"
+        rows.append({
+            "change title": change_title,
+            "requestor": requestor,
+            "business justification": rule.get("av_justification") or rule.get("business_justification") or "",
+            "risk rating": risk_rating,
+            "implementation notes": "",
+            "affected systems": ", ".join(rule.get("source_systems") or []),
+            "rollback notes": "",
+            "source zone": rule.get("source_zone") or "",
+            "destination zone": rule.get("destination_zone") or "",
+            "port": "" if rule.get("port") is None else rule.get("port"),
+            "protocol": rule.get("protocol") or "",
+            "direction": rule.get("direction") or "",
+        })
+    return rows
+
+
+@app.route("/tools/api/export/xlsx", methods=["GET"])
+def api_export_xlsx_foundation():
+    availability = _ensure_openpyxl_response()
+    if availability:
+        return availability
+
+    settings = load_settings()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "NetPi Export"
+    start = project_header_block(ws, settings, "NetPi Excel Export Foundation")
+    write_table(
+        ws,
+        ["check", "status", "notes"],
+        [{"check": "xlsx_foundation", "status": "ok", "notes": "Workbook generation operational."}],
+        start,
+    )
+    freeze_header(ws, start)
+    autofit_columns(ws)
+    return _xlsx_response(wb, _export_filename("xlsx_foundation"))
+
+
+@app.route("/tools/api/export/xlsx/ip_schedule", methods=["GET"])
+def api_export_xlsx_ip_schedule():
+    availability = _ensure_openpyxl_response()
+    if availability:
+        return availability
+
+    settings = load_settings()
+    devices = _devices_with_freshness_view(load_devices())
+    wb = Workbook()
+    wb.remove(wb.active)
+    grouped = defaultdict(list)
+    for vlan, row, device in _build_ip_schedule_rows(devices, settings):
+        grouped[vlan].append((vlan, row, device))
+
+    ordered_vlans = sorted([v for v in grouped.keys() if v != "Unassigned"], key=lambda x: str(x).lower())
+    if "Unassigned" in grouped or not ordered_vlans:
+        ordered_vlans.append("Unassigned")
+
+    for vlan in ordered_vlans:
+        ws = wb.create_sheet(title=safe_sheet_name(vlan))
+        _build_ip_schedule_sheet(ws, settings, f"IP Schedule - {vlan}", grouped.get(vlan, []))
+
+    return _xlsx_response(wb, _export_filename("ip_schedule"))
+
+
+@app.route("/tools/api/export/xlsx/firewall_plan", methods=["GET"])
+def api_export_xlsx_firewall_plan():
+    availability = _ensure_openpyxl_response()
+    if availability:
+        return availability
+
+    settings = load_settings()
+    firewall_plan = _build_firewall_plan_for_export(settings)
+    rules = list((firewall_plan or {}).get("rules") or [])
+    min_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() == "min_required"]
+    rec_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() != "min_required"]
+
+    wb = Workbook()
+    ws_min = wb.active
+    ws_min.title = safe_sheet_name("Firewall - Min Required")
+    _build_firewall_sheet(ws_min, settings, "Firewall - Min Required", min_rules)
+    ws_rec = wb.create_sheet(title=safe_sheet_name("Firewall - Recommended"))
+    _build_firewall_sheet(ws_rec, settings, "Firewall - Recommended", rec_rules)
+
+    return _xlsx_response(wb, _export_filename("firewall_plan"))
+
+
+@app.route("/tools/api/export/xlsx/validation_results", methods=["GET"])
+def api_export_xlsx_validation_results():
+    availability = _ensure_openpyxl_response()
+    if availability:
+        return availability
+
+    settings = load_settings()
+    devices = load_devices()
+    validate_all_results, validate_system_results = _build_validation_rows(devices)
+    device_rows, system_rows = _build_validation_export_rows(validate_all_results, validate_system_results)
+
+    wb = Workbook()
+    if device_rows and system_rows:
+        ws_devices = wb.active
+        ws_devices.title = safe_sheet_name("Validation - Devices")
+        _write_validation_sheet(ws_devices, settings, "Validation Results - Device Checks", device_rows)
+        ws_systems = wb.create_sheet(title=safe_sheet_name("Validation - Systems"))
+        _write_validation_sheet(ws_systems, settings, "Validation Results - System Checks", system_rows)
+    elif system_rows:
+        ws = wb.active
+        ws.title = safe_sheet_name("Validation Results")
+        _write_validation_sheet(ws, settings, "Validation Results", system_rows)
+    else:
+        ws = wb.active
+        ws.title = safe_sheet_name("Validation Results")
+        _write_validation_sheet(ws, settings, "Validation Results", device_rows)
+
+    return _xlsx_response(wb, _export_filename("validation_results"))
+
+
+@app.route("/tools/api/export/xlsx/change_request", methods=["GET"])
+def api_export_xlsx_change_request():
+    availability = _ensure_openpyxl_response()
+    if availability:
+        return availability
+
+    settings = load_settings()
+    firewall_plan = _build_firewall_plan_for_export(settings)
+    rules = list((firewall_plan or {}).get("rules") or [])
+    wb = Workbook()
+
+    cover = wb.active
+    cover.title = "Cover"
+    cover["A1"] = "IT Change Request Export"
+    if Font:
+        cover["A1"].font = Font(bold=True, size=14)
+    cover["A3"] = f"Project: {settings.get('project_name') or ''}"
+    cover["A4"] = f"Job: {settings.get('job_number') or ''}"
+    cover["A5"] = f"Exported (UTC): {utc_now_iso()}"
+    cover["A6"] = f"Requestor: {settings.get('requestor') or settings.get('point_of_contact') or settings.get('client_name') or ''}"
+    cover["A8"] = "Note: ITSM field names may require client-specific adjustment."
+    autofit_columns(cover)
+
+    ws = wb.create_sheet(title=safe_sheet_name("Change Request"))
+    start = project_header_block(ws, settings, "Change Request")
+    headers = [
+        "change title",
+        "requestor",
+        "business justification",
+        "risk rating",
+        "implementation notes",
+        "affected systems",
+        "rollback notes",
+        "source zone",
+        "destination zone",
+        "port",
+        "protocol",
+        "direction",
+    ]
+    rows = _build_change_request_rows(rules, settings)
+    meta = write_table(ws, headers, rows, start)
+    freeze_header(ws, meta["header_row"])
+    autofit_columns(ws)
+
+    return _xlsx_response(wb, _export_filename("change_request"))
+
+
+@app.route("/tools/api/export/xlsx/commissioning_workbook", methods=["GET"])
+def api_export_xlsx_commissioning_workbook():
+    availability = _ensure_openpyxl_response()
+    if availability:
+        return availability
+
+    settings = load_settings()
+    devices = _devices_with_freshness_view(load_devices())
+    firewall_plan = _build_firewall_plan_for_export(settings)
+    recommendations = _build_recommendations_for_export()
+    flows = _build_flows_for_export()
+    validate_all_results, validate_system_results = _build_validation_rows(devices)
+    validation_device_rows, validation_system_rows = _build_validation_export_rows(validate_all_results, validate_system_results)
+
+    wb = Workbook()
+    cover = wb.active
+    cover.title = "Cover"
+    cover["A1"] = "Commissioning Workbook"
+    if Font:
+        cover["A1"].font = Font(bold=True, size=14)
+    cover["A3"] = f"Project: {settings.get('project_name') or ''}"
+    cover["A4"] = f"Job: {settings.get('job_number') or ''}"
+    cover["A5"] = f"Exported (UTC): {utc_now_iso()}"
+    cover["A6"] = f"Active project_id: {get_active_project_id()}"
+    cover["A7"] = f"Operator/requestor: {settings.get('requestor') or settings.get('point_of_contact') or settings.get('client_name') or ''}"
+    cover["A9"] = "Sheet index:"
+    cover["A10"] = "Device Register - inventory device list"
+    cover["A11"] = "IP Schedule tabs - VLAN scoped addressing view"
+    cover["A12"] = "Firewall sheets - minimum and recommended policy"
+    cover["A13"] = "Validation Results - current validation summaries"
+    cover["A14"] = "Recommendations - consultant recommendations"
+    cover["A15"] = "Flow Map - observed/inferred flow rows"
+    autofit_columns(cover)
+
+    register = wb.create_sheet(title=safe_sheet_name("Device Register"))
+    register_headers = ["name", "hostname", "IP", "MAC", "type", "vendor", "model", "VLAN", "room", "zone", "last_seen", "notes"]
+    register_rows = []
+    for d in devices:
+        register_rows.append({
+            "name": d.get("name") or "",
+            "hostname": d.get("hostname") or "",
+            "IP": d.get("ip") or "",
+            "MAC": d.get("mac") or d.get("mac_address") or "",
+            "type": d.get("effective_type") or d.get("type") or "",
+            "vendor": d.get("vendor") or "",
+            "model": d.get("model") or "",
+            "VLAN": d.get("vlan") or "",
+            "room": d.get("room") or "",
+            "zone": d.get("zone") or "",
+            "last_seen": d.get("last_reachable") or d.get("last_seen") or "",
+            "notes": d.get("notes") or "",
+        })
+    reg_start = project_header_block(register, settings, "Device Register")
+    reg_meta = write_table(register, register_headers, register_rows, reg_start)
+    freeze_header(register, reg_meta["header_row"])
+    autofit_columns(register)
+
+    vlan_grouped = defaultdict(list)
+    for vlan, row, device in _build_ip_schedule_rows(devices, settings):
+        vlan_grouped[vlan].append((vlan, row, device))
+    ordered_vlans = sorted([v for v in vlan_grouped.keys() if v != "Unassigned"], key=lambda x: str(x).lower())
+    if "Unassigned" in vlan_grouped or not ordered_vlans:
+        ordered_vlans.append("Unassigned")
+    for vlan in ordered_vlans:
+        ws = wb.create_sheet(title=safe_sheet_name(f"IP - {vlan}"))
+        _build_ip_schedule_sheet(ws, settings, f"IP Schedule - {vlan}", vlan_grouped.get(vlan, []))
+
+    rules = list((firewall_plan or {}).get("rules") or [])
+    min_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() == "min_required"]
+    rec_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() != "min_required"]
+    ws_fw_min = wb.create_sheet(title=safe_sheet_name("Firewall - Min Required"))
+    _build_firewall_sheet(ws_fw_min, settings, "Firewall - Min Required", min_rules)
+    ws_fw_rec = wb.create_sheet(title=safe_sheet_name("Firewall - Recommended"))
+    _build_firewall_sheet(ws_fw_rec, settings, "Firewall - Recommended", rec_rules)
+
+    ws_validation = wb.create_sheet(title=safe_sheet_name("Validation Results"))
+    combined_validation_rows = list(validation_device_rows or []) + list(validation_system_rows or [])
+    _write_validation_sheet(ws_validation, settings, "Validation Results", combined_validation_rows)
+
+    ws_recs = wb.create_sheet(title=safe_sheet_name("Recommendations"))
+    rec_start = project_header_block(ws_recs, settings, "Recommendations")
+    rec_headers = ["severity", "category", "title", "finding", "impact", "suggested_action", "evidence_source", "affected_devices"]
+    rec_rows = []
+    for rec in (recommendations or {}).get("recommendations") or []:
+        rec_rows.append({
+            "severity": rec.get("severity") or "",
+            "category": rec.get("category") or "",
+            "title": rec.get("title") or "",
+            "finding": rec.get("finding") or "",
+            "impact": rec.get("impact") or "",
+            "suggested_action": rec.get("suggested_action") or "",
+            "evidence_source": ", ".join(rec.get("evidence_source") or []),
+            "affected_devices": ", ".join(rec.get("affected_devices") or []),
+        })
+    rec_meta = write_table(ws_recs, rec_headers, rec_rows, rec_start)
+    freeze_header(ws_recs, rec_meta["header_row"])
+    autofit_columns(ws_recs)
+
+    ws_flows = wb.create_sheet(title=safe_sheet_name("Flow Map"))
+    flow_start = project_header_block(ws_flows, settings, "Flow Map")
+    flow_headers = ["system_id", "src_device", "src_ip", "dst_device", "dst_ip", "protocol", "port", "direction", "category", "purpose", "confidence"]
+    flow_rows = []
+    for flow in (flows or {}).get("results") or []:
+        flow_rows.append({
+            "system_id": flow.get("system_id") or "",
+            "src_device": flow.get("src_device") or flow.get("source") or "",
+            "src_ip": flow.get("src_ip") or "",
+            "dst_device": flow.get("dst_device") or flow.get("target") or "",
+            "dst_ip": flow.get("dst_ip") or "",
+            "protocol": flow.get("protocol") or "",
+            "port": flow.get("port") or "",
+            "direction": flow.get("direction") or "",
+            "category": flow.get("category") or "",
+            "purpose": flow.get("purpose") or "",
+            "confidence": flow.get("confidence") or "",
+        })
+    flow_meta = write_table(ws_flows, flow_headers, flow_rows, flow_start)
+    freeze_header(ws_flows, flow_meta["header_row"])
+    autofit_columns(ws_flows)
+
+    return _xlsx_response(wb, _export_filename("commissioning_workbook"))
 
 
 @app.route("/tools/api/projects", methods=["GET"])
