@@ -591,5 +591,110 @@ function loadValidationMode(mode){
 
 loadMulticastGroups();
 loadValidationMode('Live');
+
+// ── W13.4 Anomaly Detection ───────────────────────────────────────────────
+</script>
+
+<div class="panel" style="margin-top:16px;">
+  <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;">
+    <span>Network Anomalies <span style="font-size:11px;font-weight:400;color:#9ca3af">Compared against recorded baseline</span></span>
+    <div style="display:flex;gap:8px;">
+      <button onclick="recordBaseline()" style="font-size:11px;padding:4px 10px;background:#1c1917;color:#a8a29e;border:1px solid #44403c;border-radius:4px;cursor:pointer;" id="baseline-btn">Record Baseline</button>
+      <button onclick="loadAnomalies()" style="font-size:11px;padding:4px 12px;background:#1e1b4b;color:#818cf8;border:1px solid #4338ca;border-radius:4px;cursor:pointer;" id="anomaly-btn">Check for Anomalies</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="anomaly-status" style="font-size:12px;color:#9ca3af;">Record a baseline scan, then re-run later to detect network drift.</div>
+    <div id="anomaly-cards" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<script>
+function recordBaseline() {
+  const btn = document.getElementById('baseline-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Recording...'; }
+  document.getElementById('anomaly-status').textContent = 'Recording current state as baseline...';
+
+  fetch('/tools/api/ai/baseline/record', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) throw new Error(data.error || 'failed');
+      document.getElementById('anomaly-status').textContent =
+        'Baseline recorded at ' + (data.recorded_at || 'unknown time') + ' — ' + (data.device_count || 0) + ' devices.';
+      if (btn) { btn.disabled = false; btn.textContent = 'Re-record Baseline'; }
+    })
+    .catch(err => {
+      document.getElementById('anomaly-status').textContent = 'Error: ' + (err.message || 'unknown');
+      document.getElementById('anomaly-status').style.color = '#f87171';
+      if (btn) { btn.disabled = false; btn.textContent = 'Record Baseline'; }
+    });
+}
+
+function loadAnomalies() {
+  const btn = document.getElementById('anomaly-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Analysing...'; }
+  const statusEl = document.getElementById('anomaly-status');
+  statusEl.style.color = '#9ca3af';
+  statusEl.textContent = 'Comparing current state against baseline...';
+
+  fetch('/tools/api/ai/anomalies', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) throw new Error(data.error || 'failed');
+      if (!data.has_baseline) {
+        statusEl.textContent = 'No baseline recorded yet — use Record Baseline first.';
+        document.getElementById('anomaly-cards').innerHTML = '';
+        if (btn) { btn.disabled = false; btn.textContent = 'Check for Anomalies'; }
+        return;
+      }
+      const anomalies = data.anomalies || [];
+      const s = data.summary || {};
+      statusEl.textContent = anomalies.length
+        ? anomalies.length + ' anomalie(s) detected — ' + (s.high||0) + ' high, ' + (s.medium||0) + ' medium, ' + (s.low||0) + ' low.'
+        : 'No anomalies detected — network state matches baseline.';
+      renderAnomalyCards(anomalies, data.baseline_recorded_at);
+      if (btn) { btn.disabled = false; btn.textContent = 'Re-check Anomalies'; }
+    })
+    .catch(err => {
+      statusEl.textContent = 'Error: ' + (err.message || 'unknown');
+      statusEl.style.color = '#f87171';
+      if (btn) { btn.disabled = false; btn.textContent = 'Check for Anomalies'; }
+    });
+}
+
+function renderAnomalyCards(anomalies, baselineAt) {
+  const root = document.getElementById('anomaly-cards');
+  if (!root) return;
+  if (!anomalies.length) {
+    root.innerHTML = '<div style="font-size:12px;color:#4ade80">No anomalies — current state matches baseline.</div>';
+    return;
+  }
+  const sevColors = {high:'#f87171', medium:'#fbbf24', low:'#4ade80', info:'#93c5fd'};
+  const typeIcons = {
+    vlan_change: '⚡', new_ports: '🔌', ports_disappeared: '⚠',
+    multicast_spike: '📡', device_offline: '✕', device_disappeared: '✕', new_device: '✦'
+  };
+  root.innerHTML = (baselineAt ? '<div style="font-size:10px;color:#6b7280;margin-bottom:8px">Baseline from: ' + escapeHtml(baselineAt) + '</div>' : '')
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:8px;">'
+    + anomalies.map(a => {
+      const col = sevColors[a.severity] || '#9ca3af';
+      const icon = typeIcons[a.anomaly_type] || '●';
+      const before = a.before ? JSON.stringify(a.before) : '—';
+      const after = a.after ? JSON.stringify(a.after) : '—';
+      return '<div style="border:1px solid #374151;border-radius:7px;padding:9px;background:#0f172a;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">'
+        + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;">' + icon + ' ' + escapeHtml(a.device_name) + ' <span style="font-size:11px;color:#6b7280;font-weight:400">(' + escapeHtml(a.ip) + ')</span></div>'
+        + '<span style="font-size:10px;color:' + col + ';background:#1f2937;padding:1px 6px;border-radius:3px;">' + escapeHtml(a.severity) + '</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(a.description) + '</div>'
+        + '<details style="font-size:11px;color:#6b7280;border:1px solid #1f2937;border-radius:4px;padding:3px 7px;">'
+        + '<summary style="cursor:pointer;color:#9ca3af;">Before / After</summary>'
+        + '<div style="margin-top:4px;font-family:monospace;white-space:pre-wrap;word-break:break-all">'
+        + 'Before: ' + escapeHtml(before) + '\nAfter:  ' + escapeHtml(after) + '</div>'
+        + '</details>'
+        + '</div>';
+    }).join('')
+    + '</div>';
+}
 </script>
 {% endblock %}

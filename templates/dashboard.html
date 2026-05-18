@@ -82,6 +82,32 @@
   </div>
 </div>
 
+<div class="panel" id="ai-query-panel">
+  <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleQueryPanel()">
+    <span>
+      <span style="font-size:10px;background:#1e3a8a;color:#93c5fd;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;margin-right:6px;">AI</span>
+      Network Query
+      <span style="font-size:11px;font-weight:400;color:#9ca3af;margin-left:6px">Ask questions about this project in plain English</span>
+    </span>
+    <span id="query-panel-toggle" style="font-size:12px;color:#6b7280;">▶ expand</span>
+  </div>
+  <div id="query-panel-body" style="display:none;" class="panel-body">
+    <div id="query-backend-warning" style="display:none;font-size:12px;color:#fbbf24;background:#1c1700;border:1px solid #92400e;border-radius:5px;padding:8px 12px;margin-bottom:10px;">
+      AI query backend not configured. To enable, add <code>"ai_query": {"backend": "ollama"}</code> or <code>{"backend": "anthropic", "anthropic_api_key": "..."}</code> to project Settings.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input id="ai-query-input" type="text" placeholder="e.g. Which switches are missing QoS for Dante? / Why is audio failing in Room 3?" style="flex:1;background:#1f2937;border:1px solid #374151;color:#e5e7eb;border-radius:5px;padding:6px 10px;font-size:13px;" onkeydown="if(event.key==='Enter')submitAiQuery()"/>
+      <button onclick="submitAiQuery()" id="ai-query-btn" style="padding:6px 14px;background:#1e3a8a;color:#93c5fd;border:1px solid #2563eb;border-radius:5px;font-size:12px;cursor:pointer;">Ask</button>
+    </div>
+    <div style="font-size:11px;color:#4b5563;margin-bottom:8px">
+      Example: "Show all devices on VLAN 40 that failed validation" · "Which devices have no QoS config?" · "Generate Aruba ACL hints for this deployment"
+    </div>
+    <div id="ai-query-status" style="font-size:12px;color:#9ca3af;display:none;"></div>
+    <div id="ai-query-answer" style="display:none;background:#0b1120;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;font-size:13px;color:#e5e7eb;line-height:1.55;white-space:pre-wrap;word-break:break-word;"></div>
+    <div id="ai-query-sources" style="font-size:11px;color:#4b5563;margin-top:6px;display:none;"></div>
+  </div>
+</div>
+
 <script>
 const weakTypes = new Set([
   '', 'unknown', 'generic', 'web-device', 'linux-web-device', 'network-device'
@@ -245,5 +271,120 @@ function loadDashboard(){
 }
 
 loadDashboard();
+
+// ── W13.5 Topology Pattern Recognition ───────────────────────────────────
+
+(function loadTopologyMatch() {
+  fetch('/tools/api/ai/topology-match', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'})
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok || !data.matched) return;
+      const conf = Math.round((data.confidence_score || 0) * 100);
+      const banner = document.createElement('div');
+      banner.id = 'topology-match-banner';
+      banner.style.cssText = 'margin-bottom:14px;padding:12px 16px;border:1px solid #1e40af;border-radius:8px;background:#0f172a;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;';
+      banner.innerHTML =
+        '<div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+        + '<span style="font-size:10px;background:#1e3a8a;color:#93c5fd;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
+        + '<span style="font-size:14px;font-weight:600;color:#e5e7eb">Topology Match: ' + escapeHtml(data.pattern_name) + '</span>'
+        + '<span style="font-size:11px;color:#818cf8;background:#1e1b4b;padding:1px 7px;border-radius:3px;">' + data.confidence_label + ' (' + conf + '%)</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#9ca3af;">' + escapeHtml(data.pattern_description || '') + '</div>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;flex-shrink:0;">'
+        + '<button onclick="applyTopologyBaseline()" style="font-size:11px;padding:4px 12px;background:#1e3a8a;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;" id="apply-topology-btn">Apply Baseline Config</button>'
+        + '<button onclick="dismissTopologyBanner()" style="font-size:11px;padding:4px 8px;background:transparent;color:#6b7280;border:1px solid #374151;border-radius:4px;cursor:pointer;">Dismiss</button>'
+        + '</div>';
+      window._topologySuggestions = data.suggestions;
+
+      const firstPanel = document.querySelector('.panel');
+      if (firstPanel) {
+        firstPanel.parentNode.insertBefore(banner, firstPanel);
+      } else {
+        document.querySelector('.page-sub').after(banner);
+      }
+    })
+    .catch(() => {});
+})();
+
+// ── W13.6 Query Panel ────────────────────────────────────────────────────
+
+let queryPanelOpen = false;
+function toggleQueryPanel() {
+  queryPanelOpen = !queryPanelOpen;
+  document.getElementById('query-panel-body').style.display = queryPanelOpen ? 'block' : 'none';
+  document.getElementById('query-panel-toggle').textContent = queryPanelOpen ? '▼ collapse' : '▶ expand';
+}
+
+function submitAiQuery() {
+  const input = document.getElementById('ai-query-input');
+  const question = (input && input.value || '').trim();
+  if (!question) return;
+
+  const btn = document.getElementById('ai-query-btn');
+  const statusEl = document.getElementById('ai-query-status');
+  const answerEl = document.getElementById('ai-query-answer');
+  const sourcesEl = document.getElementById('ai-query-sources');
+
+  if (btn) btn.disabled = true;
+  statusEl.style.display = 'block';
+  statusEl.style.color = '#9ca3af';
+  statusEl.textContent = 'Analysing project data...';
+  answerEl.style.display = 'none';
+  sourcesEl.style.display = 'none';
+
+  fetch('/tools/api/ai/query', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({question}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (btn) btn.disabled = false;
+      if (!data.ok) {
+        const warn = document.getElementById('query-backend-warning');
+        if (data.error && data.error.includes('not configured') && warn) {
+          warn.style.display = 'block';
+        }
+        statusEl.textContent = 'Error: ' + (data.error || 'unknown');
+        statusEl.style.color = '#f87171';
+        return;
+      }
+      statusEl.style.display = 'none';
+      answerEl.style.display = 'block';
+      answerEl.textContent = data.answer || '';
+      if ((data.sources_used || []).length) {
+        sourcesEl.style.display = 'block';
+        sourcesEl.textContent = 'Sources: ' + data.sources_used.join(', ') + ' · ' + (data.backend || '');
+      }
+    })
+    .catch(err => {
+      if (btn) btn.disabled = false;
+      statusEl.textContent = 'Request failed: ' + (err.message || 'unknown');
+      statusEl.style.color = '#f87171';
+    });
+}
+
+function dismissTopologyBanner() {
+  const b = document.getElementById('topology-match-banner');
+  if (b) b.remove();
+}
+
+function applyTopologyBaseline() {
+  const s = window._topologySuggestions;
+  if (!s) { alert('No suggestions available.'); return; }
+  const vlans = (s.vlans || []).map(v => v.id + ' — ' + v.name + ': ' + v.purpose).join('\n');
+  const qos = (s.qos || []).join('\n');
+  const mc = (s.multicast || []).join('\n');
+  const fw = (s.firewall_hints || []).join('\n');
+  alert(
+    'Baseline configuration for this topology pattern:\n\n'
+    + '── VLANs ──\n' + (vlans || 'None') + '\n\n'
+    + '── QoS ──\n' + (qos || 'None') + '\n\n'
+    + '── Multicast ──\n' + (mc || 'None') + '\n\n'
+    + '── Firewall hints ──\n' + (fw || 'None')
+  );
+}
 </script>
 {% endblock %}

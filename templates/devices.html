@@ -1732,6 +1732,9 @@ function renderTable(){
           + '</details>'
           + '</div>'
           + '</div>'
+          + '<div id="ai-suggest-' + escapeHtml(String(row.ip || row.name || '')) + '" style="margin-top:8px;">'
+          + buildAiSuggestionPanelHtml(row)
+          + '</div>'
           + '</div>'
           + '</td>';
         if(freshness.label === 'stale'){
@@ -1742,6 +1745,111 @@ function renderTable(){
     });
   });
 }
+
+// ── W13.1 AI Suggestion Panel ─────────────────────────────────────────────
+
+function buildAiSuggestionPanelHtml(row) {
+  const deviceId = encodeURIComponent(row.ip || row.name || '');
+  if (!deviceId) return '';
+  return '<details style="border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;background:#0a1628;">'
+    + '<summary style="cursor:pointer;color:#60a5fa;font-size:12px;display:flex;align-items:center;gap:6px;">'
+    + '<span style="font-size:10px;background:#1e3a5f;color:#93c5fd;padding:1px 6px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
+    + 'AI Type Suggestion'
+    + '</summary>'
+    + '<div id="ai-result-' + escapeHtml(row.ip || row.name || '') + '" style="margin-top:8px;">'
+    + '<button onclick="runAiClassify(' + JSON.stringify(row.ip || row.name || '') + ', event)" '
+    + 'style="font-size:11px;padding:3px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;">'
+    + 'Classify with AI</button>'
+    + '<div style="font-size:11px;color:#6b7280;margin-top:4px">Analyses observed attributes to suggest a device type.</div>'
+    + '</div>'
+    + '</details>';
+}
+
+function runAiClassify(deviceId, event) {
+  event && event.stopPropagation();
+  const safeId = deviceId;
+  const resultEl = document.getElementById('ai-result-' + safeId);
+  if (!resultEl) return;
+  resultEl.innerHTML = '<div style="font-size:11px;color:#9ca3af">Classifying...</div>';
+
+  fetch('/tools/api/devices/' + encodeURIComponent(safeId) + '/classify', {method:'POST'})
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        resultEl.innerHTML = '<div style="font-size:11px;color:#f87171">Error: ' + escapeHtml(data.error || 'unknown') + '</div>';
+        return;
+      }
+      const c = data.classification;
+      const confColors = {high:'#4ade80', medium:'#fbbf24', low:'#f97316', very_low:'#f87171'};
+      const confColor = confColors[c.confidence_label] || '#9ca3af';
+      const pct = Math.round((c.confidence_score || 0) * 100);
+      const type = c.predicted_type || 'Unknown';
+      const reasoning = (c.reasoning || []).map(r => '<li>' + escapeHtml(r) + '</li>').join('');
+
+      let html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+        + '<span style="font-size:13px;color:#e5e7eb;font-weight:600">' + escapeHtml(type) + '</span>'
+        + '<span style="font-size:11px;color:' + confColor + ';background:#1f2937;padding:1px 6px;border-radius:3px;">'
+        + escapeHtml(c.confidence_label) + ' (' + pct + '%)</span>'
+        + '</div>';
+
+      if (reasoning) {
+        html += '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em;margin-bottom:2px">Evidence</div>'
+          + '<ul style="font-size:11px;color:#d1d5db;margin:0 0 8px 14px;padding:0">' + reasoning + '</ul>';
+      }
+
+      if (c.predicted_type) {
+        html += '<div style="display:flex;gap:6px;margin-top:6px;">'
+          + '<button onclick="confirmAiClassify(' + JSON.stringify(safeId) + ',' + JSON.stringify(c.predicted_type) + ',' + JSON.stringify(c.label || type) + ',this)" '
+          + 'style="font-size:11px;padding:3px 10px;background:#14532d;color:#4ade80;border:1px solid #16a34a;border-radius:4px;cursor:pointer;">Confirm</button>'
+          + '<button onclick="rejectAiClassify(' + JSON.stringify(safeId) + ',' + JSON.stringify(c.predicted_type) + ',this)" '
+          + 'style="font-size:11px;padding:3px 10px;background:#450a0a;color:#f87171;border:1px solid #b91c1c;border-radius:4px;cursor:pointer;">Reject</button>'
+          + '</div>';
+      }
+
+      resultEl.innerHTML = html;
+    })
+    .catch(err => {
+      resultEl.innerHTML = '<div style="font-size:11px;color:#f87171">Request failed</div>';
+    });
+}
+
+function confirmAiClassify(deviceId, confirmedType, label, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  fetch('/tools/api/fingerprints/confirm', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: deviceId, confirmed_type: confirmedType, label: label})
+  }).then(r => r.json()).then(data => {
+    const parent = btn.closest('div[style*="display:flex"]');
+    if (data.ok) {
+      if (parent) parent.innerHTML = '<div style="font-size:11px;color:#4ade80">' + escapeHtml(data.message || 'Fingerprint saved') + '</div>';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Confirm';
+      alert('Error: ' + (data.error || 'unknown'));
+    }
+  }).catch(() => {
+    btn.disabled = false;
+    btn.textContent = 'Confirm';
+  });
+}
+
+function rejectAiClassify(deviceId, rejectedType, btn) {
+  btn.disabled = true;
+  fetch('/tools/api/fingerprints/reject', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: deviceId, rejected_type: rejectedType})
+  }).then(r => r.json()).then(data => {
+    const parent = btn.closest('div[style*="display:flex"]');
+    if (parent) parent.innerHTML = '<div style="font-size:11px;color:#9ca3af">Suggestion rejected</div>';
+  }).catch(() => {
+    btn.disabled = false;
+  });
+}
+
+// ── End W13.1 ─────────────────────────────────────────────────────────────
 
 function focusAddDevice(){
   window.location.href = '/tools/intake#manual-add-panel';

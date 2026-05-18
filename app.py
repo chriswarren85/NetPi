@@ -7672,6 +7672,194 @@ def fingerprint_host():
 
 
 
+@app.route("/tools/api/devices/<device_id>/classify", methods=["POST"])
+def api_classify_device(device_id):
+    """W13.1 — AI device fingerprint classifier."""
+    try:
+        from ai.fingerprinting.classifier import (
+            load_patterns, classify_device, build_device_attrs_from_evidence,
+        )
+        devices = load_devices()
+        device = next(
+            (d for d in devices if str(d.get("id") or d.get("name") or d.get("ip") or "") == str(device_id)),
+            None,
+        )
+        if device is None:
+            device = next(
+                (d for d in devices if (d.get("ip") or "").strip() == device_id.strip()),
+                None,
+            )
+        if device is None:
+            return jsonify({"ok": False, "error": "Device not found"}), 404
+
+        evidence_store = load_device_evidence()
+        ip = device.get("ip") or ""
+        hostname = device.get("hostname") or device.get("name") or ""
+        evidence = (
+            evidence_store.get(f"ip:{ip}")
+            or evidence_store.get(f"hostname:{hostname}")
+            or {}
+        )
+
+        device_attrs = build_device_attrs_from_evidence(device, evidence)
+        patterns_data = load_patterns()
+        result = classify_device(device_attrs, patterns_data)
+
+        return jsonify({
+            "ok": True,
+            "device_id": device_id,
+            "current_type": device.get("type") or device.get("effective_type") or "unknown",
+            "classification": result,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/fingerprints/confirm", methods=["POST"])
+def api_fingerprint_confirm():
+    """W13.2 — Store a confirmed AI classification back to the pattern library."""
+    try:
+        from ai.fingerprinting.classifier import (
+            load_patterns, build_device_attrs_from_evidence,
+        )
+        payload = request.get_json(silent=True) or {}
+        device_id = str(payload.get("device_id") or "").strip()
+        confirmed_type = str(payload.get("confirmed_type") or "").strip()
+        label = str(payload.get("label") or confirmed_type).strip()
+
+        if not device_id or not confirmed_type:
+            return jsonify({"ok": False, "error": "device_id and confirmed_type required"}), 400
+
+        devices = load_devices()
+        device = next(
+            (d for d in devices if str(d.get("id") or d.get("name") or d.get("ip") or "") == device_id),
+            None,
+        )
+        if device is None:
+            device = next(
+                (d for d in devices if (d.get("ip") or "").strip() == device_id),
+                None,
+            )
+
+        evidence_store = load_device_evidence()
+        ip = (device or {}).get("ip") or ""
+        hostname = (device or {}).get("hostname") or (device or {}).get("name") or ""
+        evidence = (
+            evidence_store.get(f"ip:{ip}")
+            or evidence_store.get(f"hostname:{hostname}")
+            or {}
+        )
+
+        device_attrs = build_device_attrs_from_evidence(device or {}, evidence)
+
+        ai_patterns_file = os.path.join(BASE_DIR, "ai", "fingerprinting", "fingerprint_patterns.json")
+        try:
+            with open(ai_patterns_file, "r", encoding="utf-8") as f:
+                patterns_data = json.load(f)
+        except Exception:
+            patterns_data = {"patterns": [], "confirmed": [], "_meta": {}}
+
+        confirmed_list = patterns_data.get("confirmed") or []
+        existing_ids = {p.get("id") for p in confirmed_list}
+
+        import hashlib
+        uid = hashlib.md5(f"{device_id}:{confirmed_type}".encode()).hexdigest()[:8]
+        pattern_id = f"confirmed-{uid}"
+
+        if pattern_id not in existing_ids:
+            rules = []
+            for field, value in device_attrs.items():
+                if not value:
+                    continue
+                if isinstance(value, list):
+                    for item in value[:3]:
+                        rules.append({"field": field, "contains": item, "weight": 2})
+                elif isinstance(value, str) and len(value) > 2:
+                    rules.append({"field": field, "icontains": value[:64], "weight": 2})
+            if rules:
+                confirmed_list.append({
+                    "id": pattern_id,
+                    "predicted_type": confirmed_type,
+                    "label": label,
+                    "source": "operator-confirmed",
+                    "device_id": device_id,
+                    "confirmed_at": datetime.utcnow().isoformat() + "Z",
+                    "rules": rules,
+                    "min_score": 2,
+                })
+
+        meta = patterns_data.get("_meta") or {}
+        meta["confirmed_count"] = len(confirmed_list)
+        meta["last_improved"] = datetime.utcnow().isoformat() + "Z"
+        patterns_data["confirmed"] = confirmed_list
+        patterns_data["_meta"] = meta
+
+        with open(ai_patterns_file, "w", encoding="utf-8") as f:
+            json.dump(patterns_data, f, indent=2)
+
+        return jsonify({
+            "ok": True,
+            "message": "Fingerprint saved — future scans will recognise this device",
+            "pattern_id": pattern_id,
+            "confirmed_count": len(confirmed_list),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/fingerprints/reject", methods=["POST"])
+def api_fingerprint_reject():
+    """W13.2 — Log a rejected AI classification for future down-weighting."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        device_id = str(payload.get("device_id") or "").strip()
+        rejected_type = str(payload.get("rejected_type") or "").strip()
+
+        if not device_id or not rejected_type:
+            return jsonify({"ok": False, "error": "device_id and rejected_type required"}), 400
+
+        ai_patterns_file = os.path.join(BASE_DIR, "ai", "fingerprinting", "fingerprint_patterns.json")
+        try:
+            with open(ai_patterns_file, "r", encoding="utf-8") as f:
+                patterns_data = json.load(f)
+        except Exception:
+            patterns_data = {"patterns": [], "confirmed": [], "rejected": [], "_meta": {}}
+
+        rejected_list = patterns_data.get("rejected") or []
+        rejected_list.append({
+            "device_id": device_id,
+            "rejected_type": rejected_type,
+            "rejected_at": datetime.utcnow().isoformat() + "Z",
+        })
+        patterns_data["rejected"] = rejected_list
+
+        with open(ai_patterns_file, "w", encoding="utf-8") as f:
+            json.dump(patterns_data, f, indent=2)
+
+        return jsonify({"ok": True, "message": "Rejection logged"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/fingerprints/stats", methods=["GET"])
+def api_fingerprint_stats():
+    """Return confirmed fingerprint count and last-improved date for the Dashboard."""
+    try:
+        ai_patterns_file = os.path.join(BASE_DIR, "ai", "fingerprinting", "fingerprint_patterns.json")
+        if not os.path.exists(ai_patterns_file):
+            return jsonify({"ok": True, "confirmed_count": 0, "last_improved": None})
+        with open(ai_patterns_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        meta = data.get("_meta") or {}
+        return jsonify({
+            "ok": True,
+            "confirmed_count": meta.get("confirmed_count", 0),
+            "last_improved": meta.get("last_improved"),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/tools/api/devices/add_bulk", methods=["POST"])
 def add_bulk_devices():
     data = request.json or {}
@@ -10237,6 +10425,154 @@ def api_recommendations():
             "ok": False,
             "error": str(e),
         }), 500
+
+
+@app.route("/tools/api/ai/baseline/record", methods=["POST"])
+def api_ai_baseline_record():
+    """W13.4 — Record current scan state to rolling baseline."""
+    try:
+        from ai.anomaly_detection.baseline import snapshot_from_context, update_baseline
+
+        devices = load_devices()
+        validation_results = run_validation_for_all(devices)
+        multicast_snapshot = load_multicast_groups_snapshot()
+        multicast_groups = list(multicast_snapshot.get("groups") or [])
+
+        snapshot = snapshot_from_context(devices, validation_results, multicast_groups)
+
+        baseline_file = get_project_path("data/baseline.json", ensure_parent=True)
+        existing = {}
+        if os.path.exists(baseline_file):
+            try:
+                with open(baseline_file) as f:
+                    existing = json.load(f)
+            except Exception:
+                existing = {}
+
+        updated = update_baseline(existing, snapshot)
+        with open(baseline_file, "w") as f:
+            json.dump(updated, f, indent=2)
+
+        return jsonify({
+            "ok": True,
+            "message": "Baseline recorded",
+            "device_count": len(snapshot.get("devices") or {}),
+            "recorded_at": snapshot.get("recorded_at"),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/ai/anomalies", methods=["POST"])
+def api_ai_anomalies():
+    """W13.4 — Compare current state against stored baseline and return anomalies."""
+    try:
+        from ai.anomaly_detection.baseline import snapshot_from_context, compare_snapshots
+
+        devices = load_devices()
+        validation_results = run_validation_for_all(devices)
+        multicast_snapshot = load_multicast_groups_snapshot()
+        multicast_groups = list(multicast_snapshot.get("groups") or [])
+
+        current_snapshot = snapshot_from_context(devices, validation_results, multicast_groups)
+
+        baseline_file = get_project_path("data/baseline.json")
+        if not os.path.exists(baseline_file):
+            return jsonify({
+                "ok": True,
+                "anomalies": [],
+                "message": "No baseline recorded yet. Run a baseline scan first.",
+                "has_baseline": False,
+            })
+
+        try:
+            with open(baseline_file) as f:
+                baseline_data = json.load(f)
+        except Exception:
+            return jsonify({"ok": False, "error": "Failed to load baseline"}), 500
+
+        baseline_snapshot = baseline_data.get("current") or {}
+        anomalies = compare_snapshots(baseline_snapshot, current_snapshot)
+
+        return jsonify({
+            "ok": True,
+            "anomalies": anomalies,
+            "has_baseline": True,
+            "baseline_recorded_at": baseline_snapshot.get("recorded_at"),
+            "current_recorded_at": current_snapshot.get("recorded_at"),
+            "summary": {
+                "total": len(anomalies),
+                "high": sum(1 for a in anomalies if a.get("severity") == "high"),
+                "medium": sum(1 for a in anomalies if a.get("severity") == "medium"),
+                "low": sum(1 for a in anomalies if a.get("severity") == "low"),
+                "info": sum(1 for a in anomalies if a.get("severity") == "info"),
+            },
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/ai/query", methods=["POST"])
+def api_ai_query():
+    """W13.6 — Conversational network query interface."""
+    try:
+        from ai.query.interface import answer_query, build_query_context
+        payload = request.get_json(silent=True) or {}
+        question = str(payload.get("question") or "").strip()
+        if not question:
+            return jsonify({"ok": False, "error": "question is required"}), 400
+
+        settings = load_settings()
+        ai_settings = settings.get("ai_query") or {}
+
+        devices = load_devices()
+        validation_results = run_validation_for_all(devices)
+        multicast_snapshot = load_multicast_groups_snapshot()
+        multicast_groups = list(multicast_snapshot.get("groups") or [])
+
+        rec_result = _build_recommendations({"devices": devices})
+        recommendations = rec_result.get("recommendations") or []
+
+        firewall_result = _compose_firewall_plan([], settings=settings)
+
+        context = {
+            "devices": devices,
+            "validation_results": validation_results,
+            "multicast_groups": multicast_groups,
+            "recommendations": recommendations,
+            "firewall_plan": firewall_result,
+            "settings": settings,
+        }
+
+        result = answer_query(question, context, ai_settings)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/ai/topology-match", methods=["POST"])
+def api_ai_topology_match():
+    """W13.5 — Score current project against known AV topology patterns."""
+    try:
+        from ai.models.topology_patterns import match_topology
+        devices = load_devices()
+        result = match_topology(devices)
+        return jsonify({"ok": True, **result})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/ai/recommendations", methods=["POST"])
+def api_ai_recommendations():
+    """W13.3 — AI-assisted recommendations engine."""
+    try:
+        from ai.recommendations.engine import generate_recommendations
+        payload = request.get_json(silent=True) or {}
+        context = _build_recommendation_context(payload)
+        result = generate_recommendations(context)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/tools/api/generate_firewall_plan", methods=["POST"])
