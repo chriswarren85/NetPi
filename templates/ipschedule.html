@@ -166,9 +166,9 @@ function cell(value, opts){
   const manual = (opts && opts.manual) || false;
   let style = '';
   if(!text && missingState === 'high'){
-    style = 'background:#7f1d1d;color:#fee2e2;';
+    style = 'background:#7f1d1d;color:#e5e7eb;';
   } else if(!text && missingState === 'advisory'){
-    style = 'background:#3f2a16;color:#fde68a;';
+    style = 'background:#3f2a16;color:#e5e7eb;';
   }
   const display = text || '-';
   return '<td style="' + style + '">' + escapeHtml(display) + manualBadge(manual) + '</td>';
@@ -287,7 +287,7 @@ function loadIpSchedule(){
     .catch(err => {
       ipScheduleRows = [];
       renderIpSchedule();
-      setStatus('Unable to load IP schedule: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+      setStatus('Unable to load IP schedule: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
     });
 }
 

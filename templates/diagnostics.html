@@ -21,15 +21,15 @@
   </div>
   <div class="card">
     <div class="card-label">Checks passed</div>
-    <div class="card-value" id="checks-passed" style="color:#4ade80">-</div>
+    <div class="card-value" id="checks-passed" style="color:#9ca3af">-</div>
   </div>
   <div class="card">
     <div class="card-label">Warnings</div>
-    <div class="card-value" id="checks-warn" style="color:#fbbf24">-</div>
+    <div class="card-value" id="checks-warn" style="color:#d1d5db">-</div>
   </div>
   <div class="card">
     <div class="card-label">Failed</div>
-    <div class="card-value" id="checks-fail" style="color:#f87171">-</div>
+    <div class="card-value" id="checks-fail" style="color:#d1d5db">-</div>
   </div>
   <div class="card">
     <div class="card-label">Devices checked</div>
@@ -58,7 +58,7 @@
   Running checks - this may take up to 60 seconds...
 </div>
 
-<div id="validation-status-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
+<div id="validation-status-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
 
 <div class="panel" id="base-panel" style="display:none">
   <div class="panel-header">Network checks</div>
@@ -152,9 +152,9 @@ function setDiscoveryUiState(state, message){
     summary.textContent = message;
     summary.style.display = 'block';
     if(state === 'failed'){
-      summary.style.color = '#f87171';
+      summary.style.color = '#d1d5db';
     } else if(state === 'completed' && latestDiscoveredDevices.length > 0){
-      summary.style.color = '#4ade80';
+      summary.style.color = '#9ca3af';
     } else if(isRunning){
       summary.style.color = '#9ca3af';
     } else {
@@ -376,7 +376,7 @@ function runChecks(){
       const warned = allChecks.filter(c => c.status === 'warn').length;
       const failed = allChecks.filter(c => c.status === 'fail' || c.status === 'error').length;
       const overall = failed > 0 ? 'FAIL' : warned > 0 ? 'WARN' : 'READY';
-      const overallColor = failed > 0 ? '#f87171' : warned > 0 ? '#fbbf24' : '#4ade80';
+      const overallColor = failed > 0 ? '#d1d5db' : warned > 0 ? '#d1d5db' : '#9ca3af';
 
       document.getElementById('overall-status').textContent = overall;
       document.getElementById('overall-status').style.color = overallColor;
@@ -403,7 +403,7 @@ function runChecks(){
       const devBody = document.getElementById('device-results');
       devBody.innerHTML = '';
       if(data.devices.length === 0){
-        devBody.innerHTML = '<tr><td colspan="5" style="color:#4b5563;text-align:center;padding:1rem">No saved devices matched this VLAN - use Discover Hosts or <a href="/tools/devices" style="color:#60a5fa">manage devices</a></td></tr>';
+        devBody.innerHTML = '<tr><td colspan="5" style="color:#4b5563;text-align:center;padding:1rem">No saved devices matched this VLAN - use Discover Hosts or <a href="/tools/devices" style="color:#9ca3af">manage devices</a></td></tr>';
       } else {
         data.devices.forEach(d => {
           const tr = document.createElement('tr');
@@ -447,20 +447,20 @@ function showValidationResult(message, tone){
   box.style.display = message ? 'block' : 'none';
 
   if(tone === 'error'){
-    box.style.background = '#3b0d0d';
-    box.style.color = '#fecaca';
+    box.style.background = '#1a1a1a';
+    box.style.color = '#e5e7eb';
     box.style.borderColor = '#7f1d1d';
     return;
   }
 
   if(tone === 'success'){
-    box.style.background = '#0f2f1f';
-    box.style.color = '#bbf7d0';
-    box.style.borderColor = '#166534';
+    box.style.background = '#1a1a1a';
+    box.style.color = '#d1d5db';
+    box.style.borderColor = '#2a2a2a';
     return;
   }
 
-  box.style.background = '#111827';
+  box.style.background = '#141414';
   box.style.color = '#d1d5db';
   box.style.borderColor = '#374151';
 }
@@ -589,7 +589,7 @@ function discoverHosts(){
     .then(data => {
       if(data.error){
         latestDiscoveredSubnet = data.subnet || '';
-        document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#f87171;text-align:center;padding:1rem">${escapeHtml(data.error)}</td></tr>`;
+        document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#d1d5db;text-align:center;padding:1rem">${escapeHtml(data.error)}</td></tr>`;
         setDiscoveryUiState('failed', `Discovery failed${latestDiscoveredSubnet ? ' on ' + latestDiscoveredSubnet : ''}: ${data.error}`);
         alert(data.error);
         return;
@@ -604,7 +604,7 @@ function discoverHosts(){
       pollDiscoveryStatus();
     })
     .catch(e => {
-      document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#f87171;text-align:center;padding:1rem">Error discovering hosts: ${escapeHtml(String(e))}</td></tr>`;
+      document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#d1d5db;text-align:center;padding:1rem">Error discovering hosts: ${escapeHtml(String(e))}</td></tr>`;
       setDiscoveryUiState('failed', 'Discovery failed. See error details and try again.');
       alert('Error discovering hosts: ' + e);
     });
@@ -623,7 +623,7 @@ function pollDiscoveryStatus(){
         stopDiscoveryPolling();
         setDiscoveryUiState('failed', data.error);
         document.getElementById('discover-panel').style.display = 'block';
-        document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#f87171;text-align:center;padding:1rem">${escapeHtml(data.error)}</td></tr>`;
+        document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#d1d5db;text-align:center;padding:1rem">${escapeHtml(data.error)}</td></tr>`;
         return;
       }
 
@@ -644,7 +644,7 @@ function pollDiscoveryStatus(){
       stopDiscoveryPolling();
       setDiscoveryUiState('failed', 'Discovery monitoring failed. Try starting discovery again.');
       document.getElementById('discover-panel').style.display = 'block';
-      document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#f87171;text-align:center;padding:1rem">Error polling discovery status: ${escapeHtml(String(e))}</td></tr>`;
+      document.getElementById('discover-results').innerHTML = `<tr><td colspan="7" style="color:#d1d5db;text-align:center;padding:1rem">Error polling discovery status: ${escapeHtml(String(e))}</td></tr>`;
     });
 }
 

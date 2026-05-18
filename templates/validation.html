@@ -22,17 +22,17 @@
 <div class="cards">
   <div class="card">
     <div class="card-label">Pass</div>
-    <div class="card-value" id="validation-pass" style="color:#4ade80">0</div>
+    <div class="card-value" id="validation-pass" style="color:#9ca3af">0</div>
     <div class="card-sub">Current mode</div>
   </div>
   <div class="card">
     <div class="card-label">Warn</div>
-    <div class="card-value" id="validation-warn" style="color:#fbbf24">0</div>
+    <div class="card-value" id="validation-warn" style="color:#d1d5db">0</div>
     <div class="card-sub">Current mode</div>
   </div>
   <div class="card">
     <div class="card-label">Fail</div>
-    <div class="card-value" id="validation-fail" style="color:#f87171">0</div>
+    <div class="card-value" id="validation-fail" style="color:#d1d5db">0</div>
     <div class="card-sub">Current mode</div>
   </div>
   <div class="card">
@@ -434,7 +434,7 @@ function generateMulticastGroups(){
       return data;
     })
     .catch(err => {
-      setStatus('Unable to generate multicast discovery: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+      setStatus('Unable to generate multicast discovery: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
       return null;
     });
 }
@@ -477,7 +477,7 @@ function renderValidationRows(){
       const detailTr = document.createElement('tr');
       detailTr.innerHTML =
         '<td colspan="6" style="padding:0;border-top:none;">'
-        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
+        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#111111;color:#d1d5db;">'
         + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Validation Explanation</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Why required</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.why_required) + '</div></div>'
@@ -550,7 +550,7 @@ function loadValidationMode(mode){
       .catch(err => {
         modeData[mode] = { validateAll: {results: []}, validateSystems: {results: [], connectivity: [], system_group_results: [], detected_systems: {systems: []}} };
         renderValidationRows();
-        setStatus('Unable to load Logical mode: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+        setStatus('Unable to load Logical mode: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
       });
     return;
   }
@@ -585,7 +585,7 @@ function loadValidationMode(mode){
     .catch(err => {
       modeData[mode] = { validateAll: {results: []}, validateSystems: {results: [], connectivity: [], system_group_results: [], detected_systems: {systems: []}} };
       renderValidationRows();
-      setStatus('Unable to load ' + mode + ' mode: ' + (err && err.message ? err.message : 'unknown error'), '#b91c1c');
+      setStatus('Unable to load ' + mode + ' mode: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
     });
 }
 
@@ -600,7 +600,7 @@ loadValidationMode('Live');
     <span>Network Anomalies <span style="font-size:11px;font-weight:400;color:#9ca3af">Compared against recorded baseline</span></span>
     <div style="display:flex;gap:8px;">
       <button onclick="recordBaseline()" style="font-size:11px;padding:4px 10px;background:#1c1917;color:#a8a29e;border:1px solid #44403c;border-radius:4px;cursor:pointer;" id="baseline-btn">Record Baseline</button>
-      <button onclick="loadAnomalies()" style="font-size:11px;padding:4px 12px;background:#1e1b4b;color:#818cf8;border:1px solid #4338ca;border-radius:4px;cursor:pointer;" id="anomaly-btn">Check for Anomalies</button>
+      <button onclick="loadAnomalies()" style="font-size:11px;padding:4px 12px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:4px;cursor:pointer;" id="anomaly-btn">Check for Anomalies</button>
     </div>
   </div>
   <div class="panel-body">
@@ -625,7 +625,7 @@ function recordBaseline() {
     })
     .catch(err => {
       document.getElementById('anomaly-status').textContent = 'Error: ' + (err.message || 'unknown');
-      document.getElementById('anomaly-status').style.color = '#f87171';
+      document.getElementById('anomaly-status').style.color = '#d1d5db';
       if (btn) { btn.disabled = false; btn.textContent = 'Record Baseline'; }
     });
 }
@@ -657,7 +657,7 @@ function loadAnomalies() {
     })
     .catch(err => {
       statusEl.textContent = 'Error: ' + (err.message || 'unknown');
-      statusEl.style.color = '#f87171';
+      statusEl.style.color = '#d1d5db';
       if (btn) { btn.disabled = false; btn.textContent = 'Check for Anomalies'; }
     });
 }
@@ -666,10 +666,10 @@ function renderAnomalyCards(anomalies, baselineAt) {
   const root = document.getElementById('anomaly-cards');
   if (!root) return;
   if (!anomalies.length) {
-    root.innerHTML = '<div style="font-size:12px;color:#4ade80">No anomalies — current state matches baseline.</div>';
+    root.innerHTML = '<div style="font-size:12px;color:#9ca3af">No anomalies — current state matches baseline.</div>';
     return;
   }
-  const sevColors = {high:'#f87171', medium:'#fbbf24', low:'#4ade80', info:'#93c5fd'};
+  const sevColors = {high:'#d1d5db', medium:'#d1d5db', low:'#9ca3af', info:'#d1d5db'};
   const typeIcons = {
     vlan_change: '⚡', new_ports: '🔌', ports_disappeared: '⚠',
     multicast_spike: '📡', device_offline: '✕', device_disappeared: '✕', new_device: '✦'
@@ -681,13 +681,13 @@ function renderAnomalyCards(anomalies, baselineAt) {
       const icon = typeIcons[a.anomaly_type] || '●';
       const before = a.before ? JSON.stringify(a.before) : '—';
       const after = a.after ? JSON.stringify(a.after) : '—';
-      return '<div style="border:1px solid #374151;border-radius:7px;padding:9px;background:#0f172a;">'
+      return '<div style="border:1px solid #374151;border-radius:7px;padding:9px;background:#111111;">'
         + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">'
         + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;">' + icon + ' ' + escapeHtml(a.device_name) + ' <span style="font-size:11px;color:#6b7280;font-weight:400">(' + escapeHtml(a.ip) + ')</span></div>'
-        + '<span style="font-size:10px;color:' + col + ';background:#1f2937;padding:1px 6px;border-radius:3px;">' + escapeHtml(a.severity) + '</span>'
+        + '<span style="font-size:10px;color:' + col + ';background:#1a1a1a;padding:1px 6px;border-radius:3px;">' + escapeHtml(a.severity) + '</span>'
         + '</div>'
         + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(a.description) + '</div>'
-        + '<details style="font-size:11px;color:#6b7280;border:1px solid #1f2937;border-radius:4px;padding:3px 7px;">'
+        + '<details style="font-size:11px;color:#6b7280;border:1px solid #1a1a1a;border-radius:4px;padding:3px 7px;">'
         + '<summary style="cursor:pointer;color:#9ca3af;">Before / After</summary>'
         + '<div style="margin-top:4px;font-family:monospace;white-space:pre-wrap;word-break:break-all">'
         + 'Before: ' + escapeHtml(before) + '\nAfter:  ' + escapeHtml(after) + '</div>'

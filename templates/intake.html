@@ -4,7 +4,7 @@
 <div class="page-title">Device Intake</div>
 <div class="page-sub">Single intake workflow for manual entry, paste import, discovery/check staging, and commit into the active project inventory.</div>
 
-<div id="intake-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
+<div id="intake-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
 
 <div class="panel" id="manual-add-panel">
   <div class="panel-header">Manual Add Device</div>
@@ -159,18 +159,18 @@ function showIntakeStatus(message, tone){
   box.style.display = message ? 'block' : 'none';
   box.textContent = message || '';
   if(tone === 'error'){
-    box.style.background = '#3b0d0d';
-    box.style.color = '#fecaca';
+    box.style.background = '#1a1a1a';
+    box.style.color = '#e5e7eb';
     box.style.borderColor = '#7f1d1d';
     return;
   }
   if(tone === 'success'){
-    box.style.background = '#0f2f1f';
-    box.style.color = '#bbf7d0';
-    box.style.borderColor = '#166534';
+    box.style.background = '#1a1a1a';
+    box.style.color = '#d1d5db';
+    box.style.borderColor = '#2a2a2a';
     return;
   }
-  box.style.background = '#111827';
+  box.style.background = '#141414';
   box.style.color = '#d1d5db';
   box.style.borderColor = '#374151';
 }
@@ -662,8 +662,8 @@ function renderIntakeResults(){
 
   tbody.innerHTML = intakeRows.map((row, index) => {
     const statusTone = row.status === 'Committed'
-      ? 'color:#bbf7d0'
-      : (row.status === 'Conflict' ? 'color:#fecaca' : 'color:#d1d5db');
+      ? 'color:#d1d5db'
+      : (row.status === 'Conflict' ? 'color:#e5e7eb' : 'color:#d1d5db');
     const disabled = (row.committed || row.status === 'Conflict') ? 'disabled' : '';
     const checked = row.selected ? 'checked' : '';
     const statusText = row.status === 'Conflict' && row.conflict_reason

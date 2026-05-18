@@ -7,27 +7,27 @@
 <div class="cards">
   <div class="card">
     <div class="card-label">High Severity</div>
-    <div class="card-value" id="rec-high-count" style="color:#f87171">0</div>
+    <div class="card-value" id="rec-high-count" style="color:#d1d5db">0</div>
     <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
     <div class="card-label">Medium Severity</div>
-    <div class="card-value" id="rec-medium-count" style="color:#fbbf24">0</div>
+    <div class="card-value" id="rec-medium-count" style="color:#d1d5db">0</div>
     <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
     <div class="card-label">Low Severity</div>
-    <div class="card-value" id="rec-low-count" style="color:#4ade80">0</div>
+    <div class="card-value" id="rec-low-count" style="color:#9ca3af">0</div>
     <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
     <div class="card-label">Total Recommendations</div>
-    <div class="card-value" id="rec-total-count" style="color:#93c5fd">0</div>
+    <div class="card-value" id="rec-total-count" style="color:#d1d5db">0</div>
     <div class="card-sub">Live metric</div>
   </div>
   <div class="card">
     <div class="card-label">AI-Assisted</div>
-    <div class="card-value" id="ai-rec-count" style="color:#818cf8">—</div>
+    <div class="card-value" id="ai-rec-count" style="color:#9ca3af">—</div>
     <div class="card-sub">Evidence-backed suggestions</div>
   </div>
 </div>
@@ -44,7 +44,7 @@
 <div class="panel" style="margin-top:16px;">
   <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;">
     <span>AI-Assisted Recommendations <span style="font-size:11px;font-weight:400;color:#9ca3af">Evidence-backed, context-aware suggestions</span></span>
-    <button id="ai-rec-btn" onclick="loadAiRecommendations()" style="font-size:11px;padding:4px 12px;background:#1e1b4b;color:#818cf8;border:1px solid #4338ca;border-radius:4px;cursor:pointer;">Generate AI Recommendations</button>
+    <button id="ai-rec-btn" onclick="loadAiRecommendations()" style="font-size:11px;padding:4px 12px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:4px;cursor:pointer;">Generate AI Recommendations</button>
   </div>
   <div class="panel-body">
     <div id="ai-rec-status" style="font-size:12px;color:#9ca3af">Click Generate to run AI analysis on current project data.</div>
@@ -78,7 +78,7 @@ function setStatus(message, tone){
   const el = document.getElementById('rec-status');
   if(!el) return;
   el.textContent = message || '';
-  if(tone === 'error') el.style.color = '#f87171';
+  if(tone === 'error') el.style.color = '#d1d5db';
   else el.style.color = '#9ca3af';
 }
 
@@ -113,7 +113,7 @@ function renderEvidenceLinks(row){
   if(!sources.length) return '<span style="color:#9ca3af">No evidence source provided.</span>';
   return sources.map(source => {
     const href = linkForEvidenceSource(source);
-    return '<a href="' + escapeHtml(href) + '" style="color:#93c5fd;text-decoration:none;margin-right:8px">' + escapeHtml(source) + '</a>';
+    return '<a href="' + escapeHtml(href) + '" style="color:#d1d5db;text-decoration:none;margin-right:8px">' + escapeHtml(source) + '</a>';
   }).join('');
 }
 
@@ -127,8 +127,8 @@ function renderAffectedDevices(row){
 
 function buildRecommendationWhyHtml(card){
   return (
-    '<details style="margin-top:6px;border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
-    + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this recommendation?</summary>'
+    '<details style="margin-top:6px;border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
+    + '<summary style="cursor:pointer;color:#d1d5db;font-size:12px;">Why this recommendation?</summary>'
     + '<div style="margin-top:6px;">'
     + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Finding</div>'
     + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.finding || 'Limited evidence available.') + '</div>'
@@ -137,7 +137,7 @@ function buildRecommendationWhyHtml(card){
     + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Affected devices</div>'
     + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + renderAffectedDevices(card) + '</div>'
     + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Evidence source</div>'
-    + '<div style="font-size:12px;color:#93c5fd;">' + renderEvidenceLinks(card) + '</div>'
+    + '<div style="font-size:12px;color:#d1d5db;">' + renderEvidenceLinks(card) + '</div>'
     + '</div>'
     + '</details>'
   );
@@ -200,7 +200,7 @@ function renderRecommendations(){
       + '<div class="panel-body">'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;">'
       + cards.map(card => (
-        '<div style="border:1px solid #374151;border-radius:8px;padding:10px;background:#0f172a;">'
+        '<div style="border:1px solid #374151;border-radius:8px;padding:10px;background:#111111;">'
         + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px;">'
         + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title || '') + '</div>'
         + severityBadge(card.severity)
@@ -269,7 +269,7 @@ function setAiStatus(msg, tone) {
   const el = document.getElementById('ai-rec-status');
   if (!el) return;
   el.textContent = msg || '';
-  el.style.color = tone === 'error' ? '#f87171' : '#9ca3af';
+  el.style.color = tone === 'error' ? '#d1d5db' : '#9ca3af';
 }
 
 function renderAiRecommendations(recs) {
@@ -301,11 +301,11 @@ function renderAiRecommendations(recs) {
     const panel = document.createElement('div');
     panel.style.cssText = 'margin-top:12px;';
     panel.innerHTML =
-      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#818cf8;margin-bottom:6px;">'
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#9ca3af;margin-bottom:6px;">'
       + escapeHtml(label) + ' <span style="color:#6b7280;font-weight:400">(' + cards.length + ')</span></div>'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;">'
       + cards.map(card => {
-        const confColors = {high:'#f87171', medium:'#fbbf24', low:'#4ade80', info:'#93c5fd'};
+        const confColors = {high:'#d1d5db', medium:'#d1d5db', low:'#9ca3af', info:'#d1d5db'};
         const sevColor = confColors[card.severity] || '#9ca3af';
         const evidence = (card.evidence || []).map(e => '<li>' + escapeHtml(e) + '</li>').join('');
         const affected = (card.affected_devices || []).slice(0,6).map(n =>
@@ -314,17 +314,17 @@ function renderAiRecommendations(recs) {
         return '<div style="border:1px solid #312e81;border-radius:8px;padding:10px;background:#0f0f2a;">'
           + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
           + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title) + '</div>'
-          + '<span style="font-size:10px;color:' + sevColor + ';background:#1f2937;padding:1px 6px;border-radius:3px;white-space:nowrap;margin-left:6px;">' + escapeHtml(card.severity) + '</span>'
+          + '<span style="font-size:10px;color:' + sevColor + ';background:#1a1a1a;padding:1px 6px;border-radius:3px;white-space:nowrap;margin-left:6px;">' + escapeHtml(card.severity) + '</span>'
           + '</div>'
-          + '<div style="font-size:10px;color:#818cf8;text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px">Suggested Action</div>'
+          + '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px">Suggested Action</div>'
           + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.suggested_action) + '</div>'
-          + (card.finding ? '<details style="border:1px solid #1e1b4b;border-radius:5px;padding:4px 8px;background:#0a0a1e;margin-bottom:4px;">'
-            + '<summary style="cursor:pointer;color:#818cf8;font-size:11px;">Finding &amp; evidence</summary>'
+          + (card.finding ? '<details style="border:1px solid #1e1e1e;border-radius:5px;padding:4px 8px;background:#0a0a1e;margin-bottom:4px;">'
+            + '<summary style="cursor:pointer;color:#9ca3af;font-size:11px;">Finding &amp; evidence</summary>'
             + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;">' + escapeHtml(card.finding) + '</div>'
             + (evidence ? '<ul style="font-size:11px;color:#6b7280;margin:6px 0 0 14px;padding:0">' + evidence + '</ul>' : '')
             + (affected ? '<div style="margin-top:6px">' + affected + '</div>' : '')
             + '</details>' : '')
-          + '<div style="margin-top:4px;font-size:10px;color:#4338ca">▲ AI-Assisted</div>'
+          + '<div style="margin-top:4px;font-size:10px;color:#374151">▲ AI-Assisted</div>'
           + '</div>';
       }).join('')
       + '</div>';

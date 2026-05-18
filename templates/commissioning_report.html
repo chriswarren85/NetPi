@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>NetPi Report</title>
+  <title>NetPi Commissioning Report</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #141414; }
     .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
@@ -36,7 +36,6 @@
   </style>
 </head>
 <body>
-{% if report is defined and report %}
   {% set proj = report.summary or {} %}
   {% set sections = report.sections or {} %}
   {% set readiness = (proj.readiness or 'ready') %}
@@ -110,6 +109,22 @@
           <tr><th>Zones</th><td>{{ (fw.zones or [])|join(', ') if (fw.zones or []) else 'No generated zone relationships available.' }}</td></tr>
         </tbody>
       </table>
+      {% if fw.top_rule_pairs %}
+      <table style="margin-top:8px">
+        <thead><tr><th>Source Zone</th><th>Destination Zone</th><th>Protocol</th><th>Port</th><th>Level</th></tr></thead>
+        <tbody>
+          {% for row in fw.top_rule_pairs %}
+          <tr>
+            <td>{{ row.source_zone or '-' }}</td>
+            <td>{{ row.destination_zone or '-' }}</td>
+            <td>{{ row.protocol or '-' }}</td>
+            <td>{{ row.port if row.port is not none else '-' }}</td>
+            <td>{{ row.requirement_level or '-' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
     </div>
 
     <div class="section">
@@ -137,6 +152,7 @@
         </tbody>
       </table>
       {% if rec.top_high_priority %}
+      <div class="muted" style="margin-top:8px">Top high-priority recommendations:</div>
       <ul>
         {% for item in rec.top_high_priority %}
         <li>{{ item.id or '-' }} - {{ item.title or 'Untitled recommendation' }} ({{ item.category or 'unknown' }})</li>
@@ -151,7 +167,11 @@
       <h2>7. Outstanding Risks / Attention Items</h2>
       {% set risks = sections.outstanding_risks or [] %}
       {% if risks %}
-      <ul>{% for risk in risks %}<li>{{ risk }}</li>{% endfor %}</ul>
+      <ul>
+        {% for risk in risks %}
+        <li>{{ risk }}</li>
+        {% endfor %}
+      </ul>
       {% else %}
       <div class="muted">No outstanding risks captured from current data.</div>
       {% endif %}
@@ -161,33 +181,15 @@
       <h2>8. Suggested Next Actions</h2>
       {% set actions = sections.suggested_next_actions or [] %}
       {% if actions %}
-      <ul>{% for action in actions %}<li>{{ action }}</li>{% endfor %}</ul>
+      <ul>
+        {% for action in actions %}
+        <li>{{ action }}</li>
+        {% endfor %}
+      </ul>
       {% else %}
       <div class="muted">No suggested actions were generated from current evidence.</div>
       {% endif %}
     </div>
   </div>
-{% else %}
-  <div class="wrap">
-    <h1 class="title">Legacy Diagnostics Report</h1>
-    <div class="sub">Generated from historical diagnostics run data.</div>
-    <div class="actions">
-      <a class="btn" href="/tools/diagnostics">Back to Diagnostics</a>
-      <a class="btn" href="#" onclick="window.print(); return false;">Print / Save PDF</a>
-    </div>
-    <div class="section">
-      <h2>Summary</h2>
-      <table>
-        <tbody>
-          <tr><th>Overall</th><td>{{ (summary or {}).overall or '-' }}</td></tr>
-          <tr><th>Passed</th><td>{{ (summary or {}).passed or 0 }}</td></tr>
-          <tr><th>Warned</th><td>{{ (summary or {}).warned or 0 }}</td></tr>
-          <tr><th>Failed</th><td>{{ (summary or {}).failed or 0 }}</td></tr>
-          <tr><th>Run Time</th><td>{{ (data or {}).timestamp or '-' }}</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-{% endif %}
 </body>
 </html>

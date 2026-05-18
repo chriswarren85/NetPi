@@ -4,7 +4,7 @@
 <div class="page-title">Devices</div>
 <div class="page-sub">Define devices to check during diagnostics</div>
 <div id="success" class="success-msg">Device list saved.</div>
-<div id="device-action-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
+<div id="device-action-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
 <div class="panel">
   <div class="panel-header">Filter</div>
   <div class="panel-body">
@@ -48,7 +48,7 @@
     </div>
   </div>
   <div class="panel-body" style="padding:0">
-    <div style="padding:10px 12px;border-bottom:1px solid #374151;background:#0f172a">
+    <div style="padding:10px 12px;border-bottom:1px solid #374151;background:#111111">
       <div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Master Device Workflow</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="focusAddDevice()">Add</button>
@@ -81,7 +81,7 @@
           <td>{{ d.type }}</td>
           <td>{{ d.vlan or "" }}</td>
           <td>
-            <div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:#1f2937;color:#d1d5db">{{ d.freshness_label or "unknown" }}</div>
+            <div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:#1a1a1a;color:#d1d5db">{{ d.freshness_label or "unknown" }}</div>
             <div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280">Seen: {{ d.last_seen or "Never" }}</div>
             <div style="font-size:11px;line-height:1.4;color:#6b7280">Reachable: {{ d.last_reachable or "Never" }}</div>
             <div style="font-size:11px;line-height:1.4;color:#6b7280">First: {{ d.first_seen or "Unknown" }}</div>
@@ -378,20 +378,20 @@ function showDeviceActionStatus(message, tone){
   box.style.display = message ? 'block' : 'none';
 
   if(tone === 'error'){
-    box.style.background = '#3b0d0d';
-    box.style.color = '#fecaca';
+    box.style.background = '#1a1a1a';
+    box.style.color = '#e5e7eb';
     box.style.borderColor = '#7f1d1d';
     return;
   }
 
   if(tone === 'success'){
-    box.style.background = '#0f2f1f';
-    box.style.color = '#bbf7d0';
-    box.style.borderColor = '#166534';
+    box.style.background = '#1a1a1a';
+    box.style.color = '#d1d5db';
+    box.style.borderColor = '#2a2a2a';
     return;
   }
 
-  box.style.background = '#111827';
+  box.style.background = '#141414';
   box.style.color = '#d1d5db';
   box.style.borderColor = '#374151';
 }
@@ -549,7 +549,7 @@ function renderConnectivityResults(){
 
   if(errorText){
     summaryEl.innerHTML = "<b>⚠ Connectivity matrix error</b>";
-    noteEl.innerHTML = '<div style="padding:8px 10px;background:#3f1d1d;border:1px solid #7f1d1d;border-radius:6px;color:#fecaca;">'
+    noteEl.innerHTML = '<div style="padding:8px 10px;background:#3f1d1d;border:1px solid #7f1d1d;border-radius:6px;color:#e5e7eb;">'
       + escapeHtml(connectivityNote || errorText)
       + '</div>';
     resultsEl.innerHTML = '<div style="color:#9ca3af;">Connectivity matrix results are unavailable for this run.</div>';
@@ -565,7 +565,7 @@ function renderConnectivityResults(){
   summaryEl.innerHTML = "<b>Connectivity summary</b> <span style=\"color:#9ca3af\">(" + escapeHtml(summaryBits.join(" | ")) + ")</span>";
 
   if(connectivityNote){
-    noteEl.innerHTML = '<div style="padding:8px 10px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#d1d5db;">'
+    noteEl.innerHTML = '<div style="padding:8px 10px;background:#1a1a1a;border:1px solid #374151;border-radius:6px;color:#d1d5db;">'
       + escapeHtml(connectivityNote)
       + '</div>';
   } else {
@@ -746,7 +746,7 @@ function renderDetectedSystems(data){
             const toName = rel.to || "?";
             const relType = rel.type || "link";
             const inferred = rel.inferred ? ' <span style="color:#9ca3af;font-size:11px;">(inferred)</span>' : '';
-            return '<div style="margin-top:6px;padding:6px 8px;background:#111827;border:1px solid #374151;border-radius:6px;">'
+            return '<div style="margin-top:6px;padding:6px 8px;background:#141414;border:1px solid #374151;border-radius:6px;">'
               + '<span>' + escapeHtml(fromName) + ' → ' + escapeHtml(toName) + '</span>'
               + ' <span style="display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;background:#374151;color:#e5e7eb;font-size:11px;">' + escapeHtml(relType) + '</span>'
               + inferred
@@ -757,7 +757,7 @@ function renderDetectedSystems(data){
       relHtml = '<div style="margin-top:8px;font-size:12px;color:#9ca3af;">No relationships detected yet.</div>';
     }
 
-    return '<div style="margin-bottom:12px;padding:10px 12px;background:#1f2937;color:#e5e7eb;border:1px solid #374151;border-radius:8px;">'
+    return '<div style="margin-bottom:12px;padding:10px 12px;background:#1a1a1a;color:#e5e7eb;border:1px solid #374151;border-radius:8px;">'
       + '<div style="font-weight:600;">' + escapeHtml(id) + '</div>'
       + '<div style="margin-top:6px;color:#d1d5db;">' + escapeHtml(chain) + '</div>'
       + deviceHtml
@@ -1056,11 +1056,11 @@ function deriveConfidenceState(device, validation, freshnessLabel){
 
 function buildConfidenceBadgeHtml(state){
   const badgeStyles = {
-    confirmed: { label: 'Confirmed', bg: '#052e16', color: '#bbf7d0', border: '#166534' },
-    inferred: { label: 'Inferred', bg: '#172554', color: '#bfdbfe', border: '#1d4ed8' },
-    user_entered: { label: 'User-entered', bg: '#3b0764', color: '#e9d5ff', border: '#7e22ce' },
-    stale: { label: 'Stale', bg: '#1f2937', color: '#d1d5db', border: '#4b5563' },
-    unknown: { label: 'Unknown', bg: 'transparent', color: '#fca5a5', border: '#ef4444' }
+    confirmed: { label: 'Confirmed', bg: '#1a1a1a', color: '#d1d5db', border: '#2a2a2a' },
+    inferred: { label: 'Inferred', bg: '#172554', color: '#bfdbfe', border: '#374151' },
+    user_entered: { label: 'User-entered', bg: '#3b0764', color: '#e5e7eb', border: '#7e22ce' },
+    stale: { label: 'Stale', bg: '#1a1a1a', color: '#d1d5db', border: '#4b5563' },
+    unknown: { label: 'Unknown', bg: 'transparent', color: '#d1d5db', border: '#9ca3af' }
   };
   const style = badgeStyles[state] || badgeStyles.unknown;
   return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:' + style.bg + ';color:' + style.color + ';border:1px solid ' + style.border + '">' + style.label + '</span>';
@@ -1179,10 +1179,10 @@ function getFreshnessInfo(device){
   }
 
   const tones = {
-    fresh: { background: '#052e16', color: '#bbf7d0' },
-    aging: { background: '#3f2a06', color: '#fde68a' },
-    stale: { background: '#3b0d0d', color: '#fecaca' },
-    unknown: { background: '#1f2937', color: '#d1d5db' }
+    fresh: { background: '#1a1a1a', color: '#d1d5db' },
+    aging: { background: '#1e1e1e', color: '#e5e7eb' },
+    stale: { background: '#1a1a1a', color: '#e5e7eb' },
+    unknown: { background: '#1a1a1a', color: '#d1d5db' }
   };
 
   return {
@@ -1364,10 +1364,10 @@ function getValidationSummary(result){
 
 function buildValidationSummaryHtml(summary){
   const tones = {
-    pass: { background: '#052e16', color: '#bbf7d0' },
-    warn: { background: '#3f2a06', color: '#fde68a' },
-    fail: { background: '#3b0d0d', color: '#fecaca' },
-    unknown: { background: '#1f2937', color: '#d1d5db' }
+    pass: { background: '#1a1a1a', color: '#d1d5db' },
+    warn: { background: '#1e1e1e', color: '#e5e7eb' },
+    fail: { background: '#1a1a1a', color: '#e5e7eb' },
+    unknown: { background: '#1a1a1a', color: '#d1d5db' }
   };
 
   const tone = tones[summary.status] || tones.unknown;
@@ -1436,7 +1436,7 @@ function renderTable(){
 
   Object.keys(groups).sort().forEach(groupName => {
     const groupRow = document.createElement('tr');
-    groupRow.innerHTML = '<td colspan="9" style="background:#111827;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
+    groupRow.innerHTML = '<td colspan="9" style="background:#141414;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
     tbody.appendChild(groupRow);
 
     groups[groupName].forEach(d => {
@@ -1487,8 +1487,8 @@ function renderTable(){
           actionText += ': ' + actionState.detail;
         }
         const actionColor = actionState.status === 'error'
-          ? '#fecaca'
-          : (actionState.status === 'success' ? '#bbf7d0' : '#9ca3af');
+          ? '#e5e7eb'
+          : (actionState.status === 'success' ? '#d1d5db' : '#9ca3af');
         validationHtml += '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:' + actionColor + '">' + escapeHtml(actionText) + '</div>';
       }
 
@@ -1526,7 +1526,7 @@ function renderTable(){
       tr.innerHTML =
         '<td>' + nameCellHtml + '</td>' +
         '<td style="font-family:monospace;font-size:12px;color:#9ca3af">' + escapeHtml(d.ip) + '</td>' +
-        '<td style="font-family:monospace;font-size:12px;color:#d1d5db">' + (macText ? escapeHtml(macText) : '—') + (d.mac_conflict ? '<div style="margin-top:2px;font-size:10px;color:#fca5a5;font-family:inherit">Conflict</div>' : '') + '</td>' +
+        '<td style="font-family:monospace;font-size:12px;color:#d1d5db">' + (macText ? escapeHtml(macText) : '—') + (d.mac_conflict ? '<div style="margin-top:2px;font-size:10px;color:#d1d5db;font-family:inherit">Conflict</div>' : '') + '</td>' +
         '<td>' + typeCellHtml + '</td>' +
         '<td>' + escapeHtml(d.vlan || '') + '</td>' +
         '<td>' + freshnessHtml + '</td>' +
@@ -1559,16 +1559,16 @@ function renderTable(){
         const requirementsInfo = getDeviceRequirementsState(d, r);
         const requirementsMode = requirementsInfo.state || 'unknown';
         const requirementsBadgeHtml = requirementsMode === 'available'
-          ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#052e16;color:#bbf7d0;border:1px solid #166534">Available</span>'
+          ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1a1a1a;color:#d1d5db;border:1px solid #2a2a2a">Available</span>'
           : (requirementsMode === 'missing'
-            ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#3f2a06;color:#fde68a;border:1px solid #92400e">Missing</span>'
-            : '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1f2937;color:#d1d5db;border:1px solid #4b5563">Unknown</span>');
+            ? '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1e1e1e;color:#e5e7eb;border:1px solid #2e2e2e">Missing</span>'
+            : '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.02em;background:#1a1a1a;color:#d1d5db;border:1px solid #4b5563">Unknown</span>');
         const requirementsProfileType = String(requirementsInfo.effective_type || '').trim() || '-';
         const requirementsDerivedFrom = String(requirementsInfo.derived_from || '').trim() || '-';
         const missingMetadata = getMissingMetadataInfo(d);
         const metadataGapHtml = missingMetadata.count > 0
-          ? '<div style="margin-bottom:8px;padding:6px 8px;border-radius:6px;background:#3f2a06;color:#fde68a;font-size:11px;line-height:1.35;">⚠ ' + escapeHtml(String(missingMetadata.count)) + ' fields incomplete'
-            + '<div style="margin-top:2px;font-size:10px;color:#fcd34d;">Missing: ' + escapeHtml(missingMetadata.fields.join(', ')) + '</div>'
+          ? '<div style="margin-bottom:8px;padding:6px 8px;border-radius:6px;background:#1e1e1e;color:#e5e7eb;font-size:11px;line-height:1.35;">⚠ ' + escapeHtml(String(missingMetadata.count)) + ' fields incomplete'
+            + '<div style="margin-top:2px;font-size:10px;color:#d1d5db;">Missing: ' + escapeHtml(missingMetadata.fields.join(', ')) + '</div>'
             + '</div>'
           : '';
         const suggestedType = normalizeTypeValue(
@@ -1650,7 +1650,7 @@ function renderTable(){
 
         detailTr.innerHTML =
           '<td colspan="9" style="padding:0;border-top:none;">'
-          + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
+          + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#111111;color:#d1d5db;">'
           + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Device Intelligence</div>'
           + '<div style="margin-bottom:8px">' + buildConfidenceBadgeHtml(confidenceState) + '</div>'
           + '<div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Requirements</div>' + requirementsBadgeHtml + '</div>'
@@ -1665,8 +1665,8 @@ function renderTable(){
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">open ports</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">' + escapeHtml(openPorts) + '</div></div>'
           + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">MAC</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">MAC (' + escapeHtml(drawerMacSource) + '): ' + escapeHtml(drawerMacDisplay) + '</div></div>'
           + '<div style="grid-column:1 / -1">'
-          + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
-          + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this type?</summary>'
+          + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
+          + '<summary style="cursor:pointer;color:#d1d5db;font-size:12px;">Why this type?</summary>'
           + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4">' + escapeHtml(typeWhyText) + '</div>'
           + '<div style="margin-top:6px;font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">evidence summary</div>'
           + '<div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(evidenceSummary) + '</div>'
@@ -1694,14 +1694,14 @@ function renderTable(){
 function buildAiSuggestionPanelHtml(row) {
   const deviceId = encodeURIComponent(row.ip || row.name || '');
   if (!deviceId) return '';
-  return '<details style="border:1px solid #1e3a5f;border-radius:6px;padding:6px 8px;background:#0a1628;">'
-    + '<summary style="cursor:pointer;color:#60a5fa;font-size:12px;display:flex;align-items:center;gap:6px;">'
-    + '<span style="font-size:10px;background:#1e3a5f;color:#93c5fd;padding:1px 6px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
+  return '<details style="border:1px solid #1e1e1e;border-radius:6px;padding:6px 8px;background:#0a1628;">'
+    + '<summary style="cursor:pointer;color:#9ca3af;font-size:12px;display:flex;align-items:center;gap:6px;">'
+    + '<span style="font-size:10px;background:#1e1e1e;color:#d1d5db;padding:1px 6px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
     + 'AI Type Suggestion'
     + '</summary>'
     + '<div id="ai-result-' + escapeHtml(row.ip || row.name || '') + '" style="margin-top:8px;">'
     + '<button onclick="runAiClassify(' + JSON.stringify(row.ip || row.name || '') + ', event)" '
-    + 'style="font-size:11px;padding:3px 10px;background:#1e3a5f;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;">'
+    + 'style="font-size:11px;padding:3px 10px;background:#1e1e1e;color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;">'
     + 'Classify with AI</button>'
     + '<div style="font-size:11px;color:#6b7280;margin-top:4px">Analyses observed attributes to suggest a device type.</div>'
     + '</div>'
@@ -1719,11 +1719,11 @@ function runAiClassify(deviceId, event) {
     .then(r => r.json())
     .then(data => {
       if (!data.ok) {
-        resultEl.innerHTML = '<div style="font-size:11px;color:#f87171">Error: ' + escapeHtml(data.error || 'unknown') + '</div>';
+        resultEl.innerHTML = '<div style="font-size:11px;color:#d1d5db">Error: ' + escapeHtml(data.error || 'unknown') + '</div>';
         return;
       }
       const c = data.classification;
-      const confColors = {high:'#4ade80', medium:'#fbbf24', low:'#f97316', very_low:'#f87171'};
+      const confColors = {high:'#9ca3af', medium:'#d1d5db', low:'#9ca3af', very_low:'#d1d5db'};
       const confColor = confColors[c.confidence_label] || '#9ca3af';
       const pct = Math.round((c.confidence_score || 0) * 100);
       const type = c.predicted_type || 'Unknown';
@@ -1731,7 +1731,7 @@ function runAiClassify(deviceId, event) {
 
       let html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
         + '<span style="font-size:13px;color:#e5e7eb;font-weight:600">' + escapeHtml(type) + '</span>'
-        + '<span style="font-size:11px;color:' + confColor + ';background:#1f2937;padding:1px 6px;border-radius:3px;">'
+        + '<span style="font-size:11px;color:' + confColor + ';background:#1a1a1a;padding:1px 6px;border-radius:3px;">'
         + escapeHtml(c.confidence_label) + ' (' + pct + '%)</span>'
         + '</div>';
 
@@ -1743,16 +1743,16 @@ function runAiClassify(deviceId, event) {
       if (c.predicted_type) {
         html += '<div style="display:flex;gap:6px;margin-top:6px;">'
           + '<button onclick="confirmAiClassify(' + JSON.stringify(safeId) + ',' + JSON.stringify(c.predicted_type) + ',' + JSON.stringify(c.label || type) + ',this)" '
-          + 'style="font-size:11px;padding:3px 10px;background:#14532d;color:#4ade80;border:1px solid #16a34a;border-radius:4px;cursor:pointer;">Confirm</button>'
+          + 'style="font-size:11px;padding:3px 10px;background:#1e2e1e;color:#9ca3af;border:1px solid #16a34a;border-radius:4px;cursor:pointer;">Confirm</button>'
           + '<button onclick="rejectAiClassify(' + JSON.stringify(safeId) + ',' + JSON.stringify(c.predicted_type) + ',this)" '
-          + 'style="font-size:11px;padding:3px 10px;background:#450a0a;color:#f87171;border:1px solid #b91c1c;border-radius:4px;cursor:pointer;">Reject</button>'
+          + 'style="font-size:11px;padding:3px 10px;background:#1e1e1e;color:#d1d5db;border:1px solid #374151;border-radius:4px;cursor:pointer;">Reject</button>'
           + '</div>';
       }
 
       resultEl.innerHTML = html;
     })
     .catch(err => {
-      resultEl.innerHTML = '<div style="font-size:11px;color:#f87171">Request failed</div>';
+      resultEl.innerHTML = '<div style="font-size:11px;color:#d1d5db">Request failed</div>';
     });
 }
 
@@ -1766,7 +1766,7 @@ function confirmAiClassify(deviceId, confirmedType, label, btn) {
   }).then(r => r.json()).then(data => {
     const parent = btn.closest('div[style*="display:flex"]');
     if (data.ok) {
-      if (parent) parent.innerHTML = '<div style="font-size:11px;color:#4ade80">' + escapeHtml(data.message || 'Fingerprint saved') + '</div>';
+      if (parent) parent.innerHTML = '<div style="font-size:11px;color:#9ca3af">' + escapeHtml(data.message || 'Fingerprint saved') + '</div>';
     } else {
       btn.disabled = false;
       btn.textContent = 'Confirm';

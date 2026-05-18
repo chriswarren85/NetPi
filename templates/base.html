@@ -6,66 +6,73 @@
 <title>NetPi {% block title %}{% endblock %}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;display:flex}
-.sidebar{width:220px;background:#1a1d27;border-right:1px solid #2d3148;padding:1rem 0;flex-shrink:0;min-height:100vh}
-.sidebar-logo{padding:0.75rem 1rem 1.25rem;font-size:15px;font-weight:600;color:#fff;border-bottom:1px solid #2d3148;margin-bottom:0.5rem}
-.sidebar-logo span{color:#60a5fa}
-.project-label{padding:0.25rem 1rem 0.75rem;font-size:11px;color:#6b7280;border-bottom:1px solid #2d3148;margin-bottom:0.5rem}
-.project-switch-wrap{padding:0 1rem 0.75rem;border-bottom:1px solid #2d3148;margin-bottom:0.5rem}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111111;color:#e2e8f0;min-height:100vh;display:flex}
+.sidebar{width:220px;background:#1a1a1a;border-right:1px solid #2e2e2e;padding:1rem 0;flex-shrink:0;min-height:100vh}
+.sidebar-logo{padding:0.75rem 1rem 1.25rem;font-size:15px;font-weight:600;color:#fff;border-bottom:1px solid #2e2e2e;margin-bottom:0.5rem}
+.sidebar-logo span{color:#d1d5db}
+.project-label{padding:0.25rem 1rem 0.75rem;font-size:11px;color:#6b7280;border-bottom:1px solid #2e2e2e;margin-bottom:0.5rem}
+.project-switch-wrap{padding:0 1rem 0.75rem;border-bottom:1px solid #2e2e2e;margin-bottom:0.5rem}
 .project-switch-wrap select{font-size:12px;padding:6px 8px}
-.nav-section{padding:0.5rem 1rem 0.25rem;font-size:10px;color:#4b5563;letter-spacing:0.08em;text-transform:uppercase;font-weight:600}
+.nav-section{padding:0.5rem 1rem 0.25rem;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;color:#6b7280}
+.nav-section.s-overview{color:#7a9cb8}
+.nav-section.s-intake{color:#b89050}
+.nav-section.s-planning{color:#7a9cb8}
+.nav-section.s-validation{color:#6b9e7a}
+.nav-section.s-network{color:#7aadad}
+.nav-section.s-config{color:#9ca3af}
+.nav-section.s-external{color:#6b7280}
 .nav-item{display:flex;align-items:center;gap:10px;padding:7px 1rem;font-size:13px;color:#9ca3af;text-decoration:none;border-left:2px solid transparent;transition:all 0.1s}
-.nav-item:hover{color:#e2e8f0;background:#22263a}
-.nav-item.active{color:#fff;border-left:2px solid #60a5fa;background:#22263a}
+.nav-item:hover{color:#e2e8f0;background:#222222}
+.nav-item.active{color:#fff;border-left:2px solid #7a9cb8;background:#222222}
 .nav-dot{width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0}
-.nav-dot.green{background:#22c55e}
-.nav-dot.blue{background:#60a5fa}
-.nav-dot.amber{background:#f59e0b}
-.nav-dot.red{background:#f87171}
+.nav-dot.green{background:#6b9e7a}
+.nav-dot.blue{background:#7a9cb8}
+.nav-dot.amber{background:#b89050}
+.nav-dot.red{background:#b87a7a}
 .main{flex:1;padding:1.5rem;overflow-y:auto}
 .page-title{font-size:18px;font-weight:600;color:#fff;margin-bottom:0.25rem}
 .page-sub{font-size:13px;color:#6b7280;margin-bottom:1.5rem}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:1.5rem}
-.card{background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:0.875rem}
+.card{background:#1a1a1a;border:1px solid #2e2e2e;border-radius:8px;padding:0.875rem}
 .card-label{font-size:11px;color:#6b7280;margin-bottom:4px}
 .card-value{font-size:22px;font-weight:600;color:#fff}
 .card-sub{font-size:11px;color:#4b5563;margin-top:2px}
-.panel{background:#1a1d27;border:1px solid #2d3148;border-radius:8px;margin-bottom:1rem;overflow:hidden}
-.panel-header{padding:10px 14px;background:#22263a;border-bottom:1px solid #2d3148;font-size:13px;font-weight:500;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center}
+.panel{background:#1a1a1a;border:1px solid #2e2e2e;border-radius:8px;margin-bottom:1rem;overflow:hidden}
+.panel-header{padding:10px 14px;background:#222222;border-bottom:1px solid #2e2e2e;font-size:13px;font-weight:500;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center}
 .panel-body{padding:14px}
 table{width:100%;border-collapse:collapse;font-size:12px}
-th{text-align:left;padding:6px 10px;color:#6b7280;font-weight:500;border-bottom:1px solid #2d3148;font-size:11px;text-transform:uppercase;letter-spacing:0.05em}
-td{padding:7px 10px;border-bottom:1px solid #1e2235;color:#e2e8f0}
+th{text-align:left;padding:6px 10px;color:#6b7280;font-weight:500;border-bottom:1px solid #2e2e2e;font-size:11px;text-transform:uppercase;letter-spacing:0.05em}
+td{padding:7px 10px;border-bottom:1px solid #1e1e1e;color:#e2e8f0}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:#22263a}
+tr:hover td{background:#222222}
 .badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500}
-.badge-green{background:#14532d;color:#4ade80}
-.badge-red{background:#450a0a;color:#f87171}
-.badge-amber{background:#451a03;color:#fbbf24}
-.badge-blue{background:#172554;color:#60a5fa}
-.btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #374151;background:#22263a;color:#e2e8f0;transition:all 0.1s}
-.btn:hover{background:#2d3148;border-color:#4b5563}
-.btn-primary{background:#2563eb;border-color:#2563eb;color:#fff}
-.btn-primary:hover{background:#1d4ed8}
+.badge-green{background:#1a2e1a;color:#9ca3af}
+.badge-red{background:#2e1a1a;color:#d1d5db}
+.badge-amber{background:#2e2414;color:#d1d5db}
+.badge-blue{background:#1e1e1e;color:#d1d5db}
+.btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #374151;background:#222222;color:#e2e8f0;transition:all 0.1s}
+.btn:hover{background:#2e2e2e;border-color:#4b5563}
+.btn-primary{background:#374151;border-color:#4b5563;color:#fff}
+.btn-primary:hover{background:#4b5563}
 .btn-danger{background:#991b1b;border-color:#991b1b;color:#fff}
 .btn-danger:hover{background:#7f1d1d}
-input,select,textarea{background:#22263a;border:1px solid #374151;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;width:100%;outline:none}
-input:focus,select:focus,textarea:focus{border-color:#2563eb}
+input,select,textarea{background:#222222;border:1px solid #374151;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:#6b7280}
 label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 .form-group{margin-bottom:1rem}
 .form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1rem}
-.output-box{background:#0f1117;border:1px solid #2d3148;border-radius:6px;padding:10px;font-family:monospace;font-size:11px;color:#86efac;white-space:pre-wrap;min-height:80px;max-height:300px;overflow-y:auto}
-.vlan-card{background:#22263a;border:1px solid #2d3148;border-radius:8px;padding:1rem;margin-bottom:1rem}
+.output-box{background:#111111;border:1px solid #2e2e2e;border-radius:6px;padding:10px;font-family:monospace;font-size:11px;color:#9ca3af;white-space:pre-wrap;min-height:80px;max-height:300px;overflow-y:auto}
+.vlan-card{background:#222222;border:1px solid #2e2e2e;border-radius:8px;padding:1rem;margin-bottom:1rem}
 .vlan-title{font-size:13px;font-weight:600;color:#fff;margin-bottom:0.75rem;display:flex;align-items:center;gap:8px}
-.success-msg{background:#14532d;border:1px solid #166534;color:#4ade80;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:1rem;display:none}
-.error-msg{background:#450a0a;border:1px solid #7f1d1d;color:#f87171;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:1rem;display:none}
+.success-msg{background:#1a2e1a;border:1px solid #2d4a2d;color:#9ca3af;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:1rem;display:none}
+.error-msg{background:#2e1a1a;border:1px solid #4a2d2d;color:#d1d5db;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:1rem;display:none}
 #toast-container{position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;max-width:340px;opacity:0;transform:translateY(8px);transition:opacity 0.2s,transform 0.2s;pointer-events:auto;box-shadow:0 4px 12px rgba(0,0,0,.4)}
 .toast.show{opacity:1;transform:translateY(0)}
-.toast-success{background:#14532d;border:1px solid #166534;color:#4ade80}
-.toast-error{background:#450a0a;border:1px solid #7f1d1d;color:#f87171}
-.toast-warn{background:#451a03;border:1px solid #78350f;color:#fbbf24}
-.toast-info{background:#172554;border:1px solid #1e3a8a;color:#60a5fa}
+.toast-success{background:#1a2e1a;border:1px solid #2d4a2d;color:#d1d5db}
+.toast-error{background:#2e1a1a;border:1px solid #4a2d2d;color:#e2e8f0}
+.toast-warn{background:#2e2414;border:1px solid #4a3a1e;color:#e2e8f0}
+.toast-info{background:#1e1e1e;border:1px solid #374151;color:#d1d5db}
 </style>
 </head>
 <body>
@@ -75,28 +82,28 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   <div class="project-switch-wrap">
     <select id="sidebar-project-switcher"></select>
   </div>
-  <div class="nav-section">Overview</div>
+  <div class="nav-section s-overview">Overview</div>
   <a href="/tools/dashboard" class="nav-item {% if request.path == '/tools/dashboard' %}active{% endif %}"><span class="nav-dot blue"></span>Dashboard</a>
-  <div class="nav-section">Intake</div>
+  <div class="nav-section s-intake">Intake</div>
   <a href="/tools/intake" class="nav-item {% if request.path == '/tools/intake' %}active{% endif %}"><span class="nav-dot amber"></span>Device intake</a>
   <a href="/tools/devices" class="nav-item {% if request.path == '/tools/devices' %}active{% endif %}"><span class="nav-dot blue"></span>Devices</a>
-  <div class="nav-section">Planning</div>
+  <div class="nav-section s-planning">Planning</div>
   <a href="/tools/requirements" class="nav-item {% if request.path == '/tools/requirements' %}active{% endif %}"><span class="nav-dot blue"></span>Requirements</a>
   <a href="/tools/ipschedule" class="nav-item {% if request.path == '/tools/ipschedule' %}active{% endif %}"><span class="nav-dot blue"></span>IP schedule</a>
   <a href="/tools/firewall" class="nav-item {% if request.path == '/tools/firewall' %}active{% endif %}"><span class="nav-dot amber"></span>Firewall plan</a>
-  <div class="nav-section">Validation</div>
+  <div class="nav-section s-validation">Validation</div>
   <a href="/tools/diagnostics" class="nav-item {% if request.path == '/tools/diagnostics' %}active{% endif %}"><span class="nav-dot green"></span>Run checks</a>
   <a href="/tools/validation" class="nav-item {% if request.path == '/tools/validation' %}active{% endif %}"><span class="nav-dot red"></span>Validation</a>
   <a href="/tools/recommendations" class="nav-item {% if request.path == '/tools/recommendations' %}active{% endif %}"><span class="nav-dot blue"></span>Recommendations</a>
-  <div class="nav-section">Network</div>
+  <div class="nav-section s-network">Network</div>
   <a href="/tools/scanner" class="nav-item {% if request.path == '/tools/scanner' %}active{% endif %}"><span class="nav-dot green"></span>Device scanner</a>
   <a href="/tools/dns" class="nav-item {% if request.path == '/tools/dns' %}active{% endif %}"><span class="nav-dot green"></span>DNS records</a>
   <a href="/tools/network" class="nav-item {% if request.path == '/tools/network' %}active{% endif %}"><span class="nav-dot green"></span>Network tools</a>
   <a href="/tools/dhcp" class="nav-item {% if request.path == '/tools/dhcp' %}active{% endif %}"><span class="nav-dot amber"></span>DHCP leases</a>
   <a href="/tools/ntp" class="nav-item {% if request.path == '/tools/ntp' %}active{% endif %}"><span class="nav-dot green"></span>NTP status</a>
-  <div class="nav-section">Config</div>
+  <div class="nav-section s-config">Config</div>
   <a href="/tools/settings" class="nav-item {% if request.path == '/tools/settings' %}active{% endif %}"><span class="nav-dot blue"></span>Settings</a>
-  <div class="nav-section" style="margin-top:0.5rem">External</div>
+  <div class="nav-section s-external" style="margin-top:0.5rem">External</div>
   <a href="http://192.168.1.50:8080" class="nav-item" target="_blank"><span class="nav-dot blue"></span>Pi-hole ↗</a>
 </div>
 <div class="main">

@@ -13,17 +13,17 @@
   <div class="card">
     <div class="card-label">Validation</div>
     <div class="card-value" id="dash-validation-summary" style="font-size:14px;color:#6b7280">—</div>
-    <div class="card-sub"><a href="/tools/validation" style="color:#60a5fa">Run validation</a></div>
+    <div class="card-sub"><a href="/tools/validation" style="color:#9ca3af">Run validation</a></div>
   </div>
   <div class="card">
     <div class="card-label">Requirements</div>
     <div class="card-value" id="dash-requirements-count" style="font-size:14px;color:#6b7280">—</div>
-    <div class="card-sub"><a href="/tools/requirements" style="color:#60a5fa">View requirements</a></div>
+    <div class="card-sub"><a href="/tools/requirements" style="color:#9ca3af">View requirements</a></div>
   </div>
   <div class="card">
     <div class="card-label">Firewall Rules</div>
     <div class="card-value" id="dash-firewall-count" style="font-size:14px;color:#6b7280">—</div>
-    <div class="card-sub"><a href="/tools/firewall" style="color:#60a5fa">View firewall plan</a></div>
+    <div class="card-sub"><a href="/tools/firewall" style="color:#9ca3af">View firewall plan</a></div>
   </div>
   <div class="card">
     <div class="card-label">Outstanding Attention</div>
@@ -39,7 +39,7 @@
   </div>
   <div class="panel-body">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">
-      <div style="background:#22263a;border:1px solid #2d3148;border-radius:8px;padding:10px">
+      <div style="background:#222222;border:1px solid #2e2e2e;border-radius:8px;padding:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <strong style="font-size:13px">Missing Metadata</strong>
           <span class="badge badge-red" id="dash-missing-count">0</span>
@@ -48,7 +48,7 @@
         <div style="margin-top:8px"><a class="btn" href="/tools/ipschedule">Open IP Schedule</a></div>
       </div>
 
-      <div style="background:#22263a;border:1px solid #2d3148;border-radius:8px;padding:10px">
+      <div style="background:#222222;border:1px solid #2e2e2e;border-radius:8px;padding:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <strong style="font-size:13px">Low-Confidence Types</strong>
           <span class="badge badge-amber" id="dash-confidence-count">0</span>
@@ -57,7 +57,7 @@
         <div style="margin-top:8px"><a class="btn" href="/tools/devices">Review Inventory</a></div>
       </div>
 
-      <div style="background:#22263a;border:1px solid #2d3148;border-radius:8px;padding:10px">
+      <div style="background:#222222;border:1px solid #2e2e2e;border-radius:8px;padding:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <strong style="font-size:13px">Validation Concerns</strong>
           <span class="badge badge-amber" id="dash-concern-count">—</span>
@@ -85,25 +85,25 @@
 <div class="panel" id="ai-query-panel">
   <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleQueryPanel()">
     <span>
-      <span style="font-size:10px;background:#1e3a8a;color:#93c5fd;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;margin-right:6px;">AI</span>
+      <span style="font-size:10px;background:#1e1e1e;color:#d1d5db;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;margin-right:6px;">AI</span>
       Network Query
       <span style="font-size:11px;font-weight:400;color:#9ca3af;margin-left:6px">Ask questions about this project in plain English</span>
     </span>
     <span id="query-panel-toggle" style="font-size:12px;color:#6b7280;">▶ expand</span>
   </div>
   <div id="query-panel-body" style="display:none;" class="panel-body">
-    <div id="query-backend-warning" style="display:none;font-size:12px;color:#fbbf24;background:#1c1700;border:1px solid #92400e;border-radius:5px;padding:8px 12px;margin-bottom:10px;">
+    <div id="query-backend-warning" style="display:none;font-size:12px;color:#d1d5db;background:#1c1700;border:1px solid #2e2e2e;border-radius:5px;padding:8px 12px;margin-bottom:10px;">
       AI query backend not configured. To enable, add <code>"ai_query": {"backend": "ollama"}</code> or <code>{"backend": "anthropic", "anthropic_api_key": "..."}</code> to project Settings.
     </div>
     <div style="display:flex;gap:8px;margin-bottom:10px;">
-      <input id="ai-query-input" type="text" placeholder="e.g. Which switches are missing QoS for Dante? / Why is audio failing in Room 3?" style="flex:1;background:#1f2937;border:1px solid #374151;color:#e5e7eb;border-radius:5px;padding:6px 10px;font-size:13px;" onkeydown="if(event.key==='Enter')submitAiQuery()"/>
-      <button onclick="submitAiQuery()" id="ai-query-btn" style="padding:6px 14px;background:#1e3a8a;color:#93c5fd;border:1px solid #2563eb;border-radius:5px;font-size:12px;cursor:pointer;">Ask</button>
+      <input id="ai-query-input" type="text" placeholder="e.g. Which switches are missing QoS for Dante? / Why is audio failing in Room 3?" style="flex:1;background:#1a1a1a;border:1px solid #374151;color:#e5e7eb;border-radius:5px;padding:6px 10px;font-size:13px;" onkeydown="if(event.key==='Enter')submitAiQuery()"/>
+      <button onclick="submitAiQuery()" id="ai-query-btn" style="padding:6px 14px;background:#1e1e1e;color:#d1d5db;border:1px solid #4b5563;border-radius:5px;font-size:12px;cursor:pointer;">Ask</button>
     </div>
     <div style="font-size:11px;color:#4b5563;margin-bottom:8px">
       Example: "Show all devices on VLAN 40 that failed validation" · "Which devices have no QoS config?" · "Generate Aruba ACL hints for this deployment"
     </div>
     <div id="ai-query-status" style="font-size:12px;color:#9ca3af;display:none;"></div>
-    <div id="ai-query-answer" style="display:none;background:#0b1120;border:1px solid #1e3a5f;border-radius:6px;padding:10px 14px;font-size:13px;color:#e5e7eb;line-height:1.55;white-space:pre-wrap;word-break:break-word;"></div>
+    <div id="ai-query-answer" style="display:none;background:#0b1120;border:1px solid #1e1e1e;border-radius:6px;padding:10px 14px;font-size:13px;color:#e5e7eb;line-height:1.55;white-space:pre-wrap;word-break:break-word;"></div>
     <div id="ai-query-sources" style="font-size:11px;color:#4b5563;margin-top:6px;display:none;"></div>
   </div>
 </div>
@@ -188,7 +188,7 @@ function loadDashboard(){
       renderAttentionList('dash-confidence-list', lowConfidenceItems, 'No low-confidence type concerns.');
 
       const concernEl = document.getElementById('dash-concern-list');
-      if(concernEl) concernEl.innerHTML = '<span style="color:#6b7280;font-size:11px">Run <a href="/tools/validation" style="color:#60a5fa">Validation</a> to see system concerns.</span>';
+      if(concernEl) concernEl.innerHTML = '<span style="color:#6b7280;font-size:11px">Run <a href="/tools/validation" style="color:#9ca3af">Validation</a> to see system concerns.</span>';
 
       setDashText('dash-validation-summary', '—');
       setDashText('dash-requirements-count', '—');
@@ -212,18 +212,18 @@ loadDashboard();
       const conf = Math.round((data.confidence_score || 0) * 100);
       const banner = document.createElement('div');
       banner.id = 'topology-match-banner';
-      banner.style.cssText = 'margin-bottom:14px;padding:12px 16px;border:1px solid #1e40af;border-radius:8px;background:#0f172a;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;';
+      banner.style.cssText = 'margin-bottom:14px;padding:12px 16px;border:1px solid #1e40af;border-radius:8px;background:#111111;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;';
       banner.innerHTML =
         '<div>'
         + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-        + '<span style="font-size:10px;background:#1e3a8a;color:#93c5fd;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
+        + '<span style="font-size:10px;background:#1e1e1e;color:#d1d5db;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
         + '<span style="font-size:14px;font-weight:600;color:#e5e7eb">Topology Match: ' + escapeHtml(data.pattern_name) + '</span>'
-        + '<span style="font-size:11px;color:#818cf8;background:#1e1b4b;padding:1px 7px;border-radius:3px;">' + data.confidence_label + ' (' + conf + '%)</span>'
+        + '<span style="font-size:11px;color:#9ca3af;background:#1e1e1e;padding:1px 7px;border-radius:3px;">' + data.confidence_label + ' (' + conf + '%)</span>'
         + '</div>'
         + '<div style="font-size:12px;color:#9ca3af;">' + escapeHtml(data.pattern_description || '') + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:8px;flex-shrink:0;">'
-        + '<button onclick="applyTopologyBaseline()" style="font-size:11px;padding:4px 12px;background:#1e3a8a;color:#93c5fd;border:1px solid #2563eb;border-radius:4px;cursor:pointer;" id="apply-topology-btn">Apply Baseline Config</button>'
+        + '<button onclick="applyTopologyBaseline()" style="font-size:11px;padding:4px 12px;background:#1e1e1e;color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;" id="apply-topology-btn">Apply Baseline Config</button>'
         + '<button onclick="dismissTopologyBanner()" style="font-size:11px;padding:4px 8px;background:transparent;color:#6b7280;border:1px solid #374151;border-radius:4px;cursor:pointer;">Dismiss</button>'
         + '</div>';
       window._topologySuggestions = data.suggestions;
@@ -278,7 +278,7 @@ function submitAiQuery() {
           warn.style.display = 'block';
         }
         statusEl.textContent = 'Error: ' + (data.error || 'unknown');
-        statusEl.style.color = '#f87171';
+        statusEl.style.color = '#d1d5db';
         return;
       }
       statusEl.style.display = 'none';
@@ -292,7 +292,7 @@ function submitAiQuery() {
     .catch(err => {
       if (btn) btn.disabled = false;
       statusEl.textContent = 'Request failed: ' + (err.message || 'unknown');
-      statusEl.style.color = '#f87171';
+      statusEl.style.color = '#d1d5db';
     });
 }
 

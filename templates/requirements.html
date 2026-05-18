@@ -12,7 +12,7 @@
   </div>
   <div class="card">
     <div class="card-label">Unmapped Devices</div>
-    <div class="card-value" id="req-unresolved" style="color:#fbbf24">0</div>
+    <div class="card-value" id="req-unresolved" style="color:#d1d5db">0</div>
     <div class="card-sub">No template configured yet</div>
   </div>
   <div class="card">
@@ -190,22 +190,22 @@ function renderUnmappedDevices(){
     return;
   }
   if(requirementsLoadState === 'error'){
-    el.innerHTML = '<div style="padding:8px 10px;border-radius:8px;background:#3b0d0d;border:1px solid #7f1d1d;color:#fecaca;">Failed to load requirement generation results: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</div>';
+    el.innerHTML = '<div style="padding:8px 10px;border-radius:8px;background:#1a1a1a;border:1px solid #7f1d1d;color:#e5e7eb;">Failed to load requirement generation results: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</div>';
     return;
   }
   if(!unmappedDevices.length){
-    el.innerHTML = '<div style="padding:8px 10px;border-radius:8px;background:#052e16;border:1px solid #166534;color:#bbf7d0;">All visible devices currently map to a requirement template.</div>';
+    el.innerHTML = '<div style="padding:8px 10px;border-radius:8px;background:#1a1a1a;border:1px solid #2a2a2a;color:#d1d5db;">All visible devices currently map to a requirement template.</div>';
     return;
   }
 
-  let html = '<div style="margin-bottom:8px;color:#fcd34d">Some devices do not yet have a mapped requirement template.</div>';
+  let html = '<div style="margin-bottom:8px;color:#d1d5db">Some devices do not yet have a mapped requirement template.</div>';
   html += '<table><thead><tr><th>Device</th><th>IP</th><th>Type</th><th>Status</th></tr></thead><tbody>';
   unmappedDevices.forEach(item => {
     html += '<tr>'
       + '<td>' + escapeHtml(item.name || '(unnamed)') + '</td>'
       + '<td style="font-family:monospace">' + escapeHtml(item.ip || '-') + '</td>'
       + '<td>' + escapeHtml(item.effective_type || item.type || 'unknown') + '</td>'
-      + '<td style="color:#fbbf24">No mapped requirement template yet</td>'
+      + '<td style="color:#d1d5db">No mapped requirement template yet</td>'
       + '</tr>';
   });
   html += '</tbody></table>';
@@ -373,7 +373,7 @@ function renderRequirementRows(){
   }
 
   if(requirementsLoadState === 'error'){
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#fecaca;text-align:center;padding:1rem">Requirements endpoint failed: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#e5e7eb;text-align:center;padding:1rem">Requirements endpoint failed: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</td></tr>';
     return;
   }
 
@@ -411,7 +411,7 @@ function renderRequirementRows(){
       const detailTr = document.createElement('tr');
       detailTr.innerHTML =
         '<td colspan="7" style="padding:0;border-top:none;">'
-        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#0f172a;color:#d1d5db;">'
+        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#111111;color:#d1d5db;">'
         + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Requirement Explanation</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.effective_type || 'unknown') + '</div></div>'
@@ -421,8 +421,8 @@ function renderRequirementRows(){
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">required services</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.required_services) && row.required_services.length ? row.required_services.join(', ') : '-') + '</div></div>'
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.notes) && row.notes.length ? row.notes.join(' | ') : '-') + '</div></div>'
         + '<div style="grid-column:1 / -1;margin-top:2px;">'
-        + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#0b1220;">'
-        + '<summary style="cursor:pointer;color:#93c5fd;font-size:12px;">Why this requirement?</summary>'
+        + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
+        + '<summary style="cursor:pointer;color:#d1d5db;font-size:12px;">Why this requirement?</summary>'
         + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4">' + escapeHtml(buildRequirementWhyText(row)) + '</div>'
         + '</details>'
         + '</div>'
