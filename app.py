@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, send_file
-import json, os, subprocess, csv
+import json, os, subprocess, csv, sys
 from datetime import datetime
 import copy
 import socket
@@ -174,6 +174,56 @@ XLSX_FILL_CRITICAL = "F4CCCC"
 XLSX_FILL_HIGH = "FFE699"
 XLSX_FILL_UNKNOWN = "D9D9D9"
 XLSX_EXPORT_ROUTE_NOTES = "Install openpyxl to use Excel export routes."
+
+# ── W15.2  Atomic write helper ────────────────────────────────────────────────
+_WRITE_LOCK = threading.Lock()
+
+def safe_write_json(path, data, *, indent=2, sort_keys=False):
+    """Write JSON atomically: tmp → fsync → rename.  Thread-safe via _WRITE_LOCK."""
+    tmp = path + ".tmp"
+    with _WRITE_LOCK:
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=indent, sort_keys=sort_keys)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except PermissionError:
+            # Windows: target locked — fall back to direct overwrite
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=indent, sort_keys=sort_keys)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+# ── W15.1  Subprocess helper ──────────────────────────────────────────────────
+_WIN_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+
+def _subprocess_run_safe(cmd, timeout=10, **kwargs):
+    """subprocess.check_output with CREATE_NO_WINDOW on Windows, timeout, and
+    structured error handling.  Returns (stdout_text, error_str)."""
+    if os.name == "nt":
+        kwargs.setdefault("creationflags", _WIN_NO_WINDOW)
+    kwargs.setdefault("stderr", subprocess.DEVNULL)
+    try:
+        out = subprocess.check_output(cmd, timeout=timeout, **kwargs)
+        return out.decode(errors="replace"), None
+    except FileNotFoundError:
+        return "", f"Tool not found: {cmd[0]!r} — install it or check PATH"
+    except subprocess.TimeoutExpired:
+        return "", f"Command timed out after {timeout}s"
+    except subprocess.CalledProcessError as exc:
+        return (exc.output or b"").decode(errors="replace"), f"Exit code {exc.returncode}"
+    except Exception as exc:
+        return "", str(exc)
 
 
 def _sanitize_project_id(value):
@@ -684,7 +734,9 @@ def _start_background_job(target, *args):
 def _build_discovery_popen_kwargs():
     kwargs = {}
     if os.name == "nt":
-        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        # CREATE_NEW_PROCESS_GROUP enables cancel-via-CTRL_BREAK_EVENT;
+        # CREATE_NO_WINDOW suppresses the CMD flash when run as an EXE.
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
     else:
         kwargs["start_new_session"] = True
     return kwargs
@@ -3387,10 +3439,7 @@ def _apply_observed_mac(device, observed_mac, observed_source):
 
 def save_devices_file(devices):
     devices = normalize_devices_for_save(devices, settings=load_settings())
-    devices_file = _devices_file()
-    os.makedirs(os.path.dirname(devices_file) or ".", exist_ok=True)
-    with open(devices_file, 'w') as f:
-        json.dump({'devices': devices}, f, indent=2)
+    safe_write_json(_devices_file(), {"devices": devices})
 
 
 def _devices_with_freshness_view(devices):
@@ -3417,10 +3466,7 @@ def load_fingerprints():
 
 
 def save_fingerprints(data):
-    fingerprints_file = _fingerprints_file()
-    os.makedirs(os.path.dirname(fingerprints_file) or ".", exist_ok=True)
-    with open(fingerprints_file, 'w') as f:
-        json.dump(data or {}, f, indent=2, sort_keys=True)
+    safe_write_json(_fingerprints_file(), data or {}, sort_keys=True)
 
 
 def load_device_evidence():
@@ -3437,10 +3483,7 @@ def load_device_evidence():
 
 
 def save_device_evidence(data):
-    evidence_file = _device_evidence_file()
-    os.makedirs(os.path.dirname(evidence_file) or ".", exist_ok=True)
-    with open(evidence_file, 'w') as f:
-        json.dump(data or {}, f, indent=2, sort_keys=True)
+    safe_write_json(_device_evidence_file(), data or {}, sort_keys=True)
 
 
 def _fingerprint_confidence_rank(value):
@@ -7794,8 +7837,7 @@ def api_fingerprint_confirm():
         patterns_data["confirmed"] = confirmed_list
         patterns_data["_meta"] = meta
 
-        with open(ai_patterns_file, "w", encoding="utf-8") as f:
-            json.dump(patterns_data, f, indent=2)
+        safe_write_json(ai_patterns_file, patterns_data)
 
         return jsonify({
             "ok": True,
@@ -7833,8 +7875,7 @@ def api_fingerprint_reject():
         })
         patterns_data["rejected"] = rejected_list
 
-        with open(ai_patterns_file, "w", encoding="utf-8") as f:
-            json.dump(patterns_data, f, indent=2)
+        safe_write_json(ai_patterns_file, patterns_data)
 
         return jsonify({"ok": True, "message": "Rejection logged"})
     except Exception as e:
@@ -8151,31 +8192,30 @@ def api_scan():
     if not subnet:
         return jsonify({'error': 'No subnet'}), 400
 
-    try:
-        result = subprocess.check_output(
-            build_nmap_host_discovery_command(subnet, output_flag='--oG'),
-            timeout=90
-        ).decode()
+    result, err = _subprocess_run_safe(
+        build_nmap_host_discovery_command(subnet, output_flag='--oG'),
+        timeout=90,
+    )
+    if err and not result:
+        return jsonify({'error': err}), 500
 
-        devices = []
-        for line in result.splitlines():
-            if 'Host:' in line:
-                p = line.split()
-                ip = p[1]
-                hostname = p[2].strip('()') if len(p) > 2 else ''
-                mac = ""
-                if "MAC Address:" in line:
-                    try:
-                        mac_part = line.split("MAC Address:", 1)[1].strip()
-                        mac = _normalize_mac_value(mac_part.split(" (", 1)[0].strip())
-                    except Exception:
-                        mac = ""
-                devices.append({'ip': ip, 'hostname': hostname, 'mac': mac, 'status': 'online'})
+    devices = []
+    for line in result.splitlines():
+        if 'Host:' in line:
+            p = line.split()
+            ip = p[1]
+            hostname = p[2].strip('()') if len(p) > 2 else ''
+            mac = ""
+            if "MAC Address:" in line:
+                try:
+                    mac_part = line.split("MAC Address:", 1)[1].strip()
+                    mac = _normalize_mac_value(mac_part.split(" (", 1)[0].strip())
+                except Exception:
+                    mac = ""
+            devices.append({'ip': ip, 'hostname': hostname, 'mac': mac, 'status': 'online'})
 
-        _persist_discovery_macs(devices)
-        return jsonify({'devices': devices, 'count': len(devices)})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    _persist_discovery_macs(devices)
+    return jsonify({'devices': devices, 'count': len(devices)})
 
 
 @app.route('/tools/api/ping', methods=['POST'])
@@ -8184,17 +8224,14 @@ def api_ping():
     if not host:
         return jsonify({'error': 'No host'}), 400
 
-    try:
-        out = subprocess.check_output(
-            build_ping_command(host),
-            timeout=15,
-            stderr=subprocess.STDOUT
-        ).decode(errors='replace')
-        return jsonify({'output': out})
-    except subprocess.CalledProcessError as e:
-        return jsonify({'output': e.output.decode(errors='replace'), 'error': 'Host unreachable'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    result, err = _subprocess_run_safe(
+        build_ping_command(host),
+        timeout=15,
+        stderr=subprocess.STDOUT,
+    )
+    if err and not result:
+        return jsonify({'error': err}), 500
+    return jsonify({'output': result, **({"error": err} if err else {})})
 
 
 @app.route('/tools/api/portscan', methods=['POST'])
@@ -8203,19 +8240,14 @@ def api_portscan():
     if not host:
         return jsonify({'error': 'No host'}), 400
 
-    try:
-        out = subprocess.check_output(
-            build_nmap_command(host),
-            timeout=60,
-            stderr=subprocess.STDOUT
-        ).decode(errors='replace')
-        return jsonify({'output': out})
-    except FileNotFoundError:
-        return jsonify({'error': 'nmap not installed or not available in PATH on this platform'}), 500
-    except subprocess.CalledProcessError as e:
-        return jsonify({'output': e.output.decode(errors='replace'), 'error': 'Port scan failed'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    result, err = _subprocess_run_safe(
+        build_nmap_command(host),
+        timeout=60,
+        stderr=subprocess.STDOUT,
+    )
+    if err and not result:
+        return jsonify({'error': err}), 500
+    return jsonify({'output': result, **({"error": err} if err else {})})
 
 
 @app.route('/tools/api/traceroute', methods=['POST'])
@@ -8224,19 +8256,15 @@ def api_traceroute():
     if not host:
         return jsonify({'error': 'No host'}), 400
 
-    try:
-        trace_spec = build_traceroute_command(host)
-
-        out = subprocess.check_output(
-            trace_spec['command'],
-            timeout=trace_spec['timeout'],
-            stderr=subprocess.STDOUT
-        ).decode(errors='replace')
-        return jsonify({'output': out})
-    except subprocess.CalledProcessError as e:
-        return jsonify({'output': e.output.decode(errors='replace'), 'error': 'Traceroute failed'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    trace_spec = build_traceroute_command(host)
+    result, err = _subprocess_run_safe(
+        trace_spec['command'],
+        timeout=trace_spec['timeout'],
+        stderr=subprocess.STDOUT,
+    )
+    if err and not result:
+        return jsonify({'error': err}), 500
+    return jsonify({'output': result, **({"error": err} if err else {})})
 
 
 @app.route('/tools/api/dns/add', methods=['POST'])
@@ -8249,7 +8277,9 @@ def api_dns_add():
     try:
         with open('/etc/pihole/custom.list', 'a') as f:
             f.write(f'{ip} {domain}\n')
-        subprocess.check_output(['pihole', 'restartdns'], timeout=10)
+        _, err = _subprocess_run_safe(['pihole', 'restartdns'], timeout=10)
+        if err:
+            return jsonify({'success': True, 'warning': err})
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -8266,7 +8296,9 @@ def api_dns_delete():
             lines = f.readlines()
         with open('/etc/pihole/custom.list', 'w') as f:
             f.writelines(l for l in lines if domain not in l)
-        subprocess.check_output(['pihole', 'restartdns'], timeout=10)
+        _, err = _subprocess_run_safe(['pihole', 'restartdns'], timeout=10)
+        if err:
+            return jsonify({'success': True, 'warning': err})
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -10604,7 +10636,131 @@ def api_generate_firewall_plan():
             "error": str(e),
         }), 500
 
+# ── W15.0  Startup checks + clean shutdown ────────────────────────────────────
+
+def _port_is_free(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind(("0.0.0.0", port))
+            return True
+        except OSError:
+            return False
+
+
+def startup_checks(port=5000):
+    """Validate the environment before binding Flask.  Exits on fatal errors."""
+    import logging
+    log = logging.getLogger("netpi.startup")
+
+    # Port availability
+    if not _port_is_free(port):
+        print(
+            f"\nERROR: Port {port} is already in use.\n"
+            "Another NetPi instance may be running — close it first, or\n"
+            "kill the process holding the port and try again.\n"
+        )
+        sys.exit(1)
+
+    # Required directories
+    for d in [DATA_DIR, os.path.join(DATA_DIR, DEFAULT_PROJECT_ID)]:
+        os.makedirs(d, exist_ok=True)
+
+    # Safe defaults for required data files in the default project
+    default_proj_dir = os.path.join(DATA_DIR, DEFAULT_PROJECT_ID)
+    defaults = {
+        os.path.join(default_proj_dir, "devices.json"): {"devices": []},
+        os.path.join(default_proj_dir, "settings.json"): {},
+        os.path.join(DATA_DIR, "fingerprints.json"): {},
+        os.path.join(DATA_DIR, "device_evidence.json"): {},
+    }
+    for path, default_data in defaults.items():
+        if not os.path.exists(path):
+            try:
+                safe_write_json(path, default_data)
+                log.info("Created missing data file: %s", path)
+            except Exception as exc:
+                log.warning("Could not create %s: %s", path, exc)
+
+    log.info("Startup checks passed — starting NetPi on port %d.", port)
+
+
+def tool_check():
+    """Log a warning (never raises) for each missing external tool."""
+    import logging
+    log = logging.getLogger("netpi.startup")
+    tools = ["nmap", "ping"]
+    if platform.system() != "Windows":
+        tools += ["avahi-resolve-address", "ip"]
+    for tool in tools:
+        if not shutil.which(tool):
+            log.warning("Optional tool not found: %r — some features may be limited.", tool)
+
+
+def _shutdown_handler(signum, frame):
+    print(f"\nNetPi received signal {signum}. Shutting down…")
+    sys.exit(0)
+
+
+# =========================
+# Global error handlers
+# =========================
+
+def _api_error(message, status, suggestion=None):
+    from datetime import datetime, timezone
+    payload = {"ok": False, "error": message, "timestamp": datetime.now(timezone.utc).isoformat()}
+    if suggestion:
+        payload["suggestion"] = suggestion
+    return jsonify(payload), status
+
+
+@app.errorhandler(400)
+def err_bad_request(exc):
+    if request.path.startswith('/tools/api/'):
+        return _api_error(str(exc) or "Bad request", 400, "Check the request body and try again.")
+    return exc
+
+
+@app.errorhandler(404)
+def err_not_found(exc):
+    if request.path.startswith('/tools/api/'):
+        return _api_error(f"Endpoint not found: {request.path}", 404, "Check the API path.")
+    return exc
+
+
+@app.errorhandler(405)
+def err_method_not_allowed(exc):
+    if request.path.startswith('/tools/api/'):
+        return _api_error(f"Method {request.method} not allowed here.", 405)
+    return exc
+
+
+@app.errorhandler(500)
+def err_server_error(exc):
+    if request.path.startswith('/tools/api/'):
+        return _api_error("Internal server error", 500, "Check server logs for details.")
+    return exc
+
+
+@app.errorhandler(Exception)
+def err_unhandled(exc):
+    if request.path.startswith('/tools/api/'):
+        app.logger.exception("Unhandled exception in %s", request.path)
+        return _api_error(str(exc) or "Unexpected error", 500, "Check server logs.")
+    raise exc
+
+
 if __name__ == '__main__':
+    import atexit, logging
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    signal.signal(signal.SIGTERM, _shutdown_handler)
+    try:
+        signal.signal(signal.SIGINT, _shutdown_handler)
+    except OSError:
+        pass  # SIGINT not available on all platforms
+    atexit.register(lambda: print("NetPi process exited."))
+    startup_checks()
+    tool_check()
     app.run(host='0.0.0.0', port=5000, debug=False)
 
 

@@ -59,6 +59,13 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 .vlan-title{font-size:13px;font-weight:600;color:#fff;margin-bottom:0.75rem;display:flex;align-items:center;gap:8px}
 .success-msg{background:#14532d;border:1px solid #166534;color:#4ade80;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:1rem;display:none}
 .error-msg{background:#450a0a;border:1px solid #7f1d1d;color:#f87171;padding:8px 12px;border-radius:6px;font-size:12px;margin-bottom:1rem;display:none}
+#toast-container{position:fixed;bottom:1.25rem;right:1.25rem;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;max-width:340px;opacity:0;transform:translateY(8px);transition:opacity 0.2s,transform 0.2s;pointer-events:auto;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast-success{background:#14532d;border:1px solid #166534;color:#4ade80}
+.toast-error{background:#450a0a;border:1px solid #7f1d1d;color:#f87171}
+.toast-warn{background:#451a03;border:1px solid #78350f;color:#fbbf24}
+.toast-info{background:#172554;border:1px solid #1e3a8a;color:#60a5fa}
 </style>
 </head>
 <body>
@@ -95,6 +102,23 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 <div class="main">
   {% block content %}{% endblock %}
 </div>
+<div id="toast-container"></div>
+<script>
+window.showToast = function(message, type, duration) {
+  type = type || 'info';
+  duration = duration === undefined ? 4000 : duration;
+  var container = document.getElementById('toast-container');
+  var t = document.createElement('div');
+  t.className = 'toast toast-' + type;
+  t.textContent = message;
+  container.appendChild(t);
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){ t.classList.add('show'); }); });
+  setTimeout(function(){
+    t.classList.remove('show');
+    setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 250);
+  }, duration);
+};
+</script>
 <script>
 fetch('/tools/api/project-name').then(r=>r.json()).then(d=>{
   if(d.name) document.getElementById('sidebar-project').textContent=d.name;
