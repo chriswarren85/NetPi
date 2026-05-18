@@ -45,21 +45,12 @@
         <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
       {% endfor %}
     </select>
-
     <button class="btn btn-primary" id="run-btn" onclick="runChecks()">Run all checks</button>
-    <button class="btn" id="validate-all-btn" onclick="validateAll()">Validate All</button>
-    <button class="btn" id="system-validate-btn" onclick="runSystemValidation()">Run System Validation</button>
-    <button class="btn" id="discover-btn" onclick="discoverHosts()">Discover Hosts</button>
-    <button class="btn btn-primary" id="add-all-discovered-btn" onclick="addAllDiscovered()" disabled>Add All Discovered</button>
-    <button class="btn" id="fingerprint-added-btn" onclick="fingerprintAddedDevices()" style="display:none">Fingerprint Added Devices</button>
-    <button class="btn" id="cancel-discover-btn" onclick="cancelDiscovery()" style="display:none">Cancel Discovery</button>
   </div>
-
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="addSelected()">Add Selected</button>
     <button class="btn" onclick="downloadCSV()">Export CSV</button>
     <button class="btn" onclick="openReport()">Open Report</button>
-    <button class="btn" onclick="window.location.href='/tools/devices'">Manage devices</button>
+    <a class="btn" href="/tools/devices">Manage devices</a>
   </div>
 </div>
 
@@ -68,14 +59,6 @@
 </div>
 
 <div id="validation-status-msg" style="display:none;font-size:13px;margin-bottom:1rem;padding:10px 12px;border-radius:8px;background:#111827;color:#d1d5db;border:1px solid #374151"></div>
-
-<div id="discovering-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem">
-  Discovering live hosts on selected subnet...
-</div>
-
-<div id="discover-summary" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem"></div>
-
-<div id="fingerprint-added-msg" style="display:none;color:#6b7280;font-size:13px;margin-bottom:1rem"></div>
 
 <div class="panel" id="base-panel" style="display:none">
   <div class="panel-header">Network checks</div>
@@ -97,22 +80,6 @@
   </div>
 </div>
 
-<div class="panel" id="discover-panel" style="display:none">
-  <div class="panel-header">Discovered hosts</div>
-  <div class="panel-body" style="padding:0">
-    <table>
-      <thead><tr><th><input type="checkbox" onclick="toggleAll(this)"></th><th>Hostname</th><th>IP</th><th>MAC / Vendor</th><th>Status</th><th>Likely type</th><th>Actions</th></tr></thead>
-      <tbody id="discover-results"></tbody>
-    </table>
-  </div>
-</div>
-
-<div class="panel" id="portscan-panel" style="display:none">
-  <div class="panel-header">Quick port scan output</div>
-  <div class="panel-body">
-    <pre id="portscan-output" style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:0"></pre>
-  </div>
-</div>
 
 <script>
 let lastAddedIps = [];

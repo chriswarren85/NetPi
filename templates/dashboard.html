@@ -11,19 +11,19 @@
     <div class="card-sub">Inventory rows</div>
   </div>
   <div class="card">
-    <div class="card-label">Validation Summary</div>
-    <div class="card-value" id="dash-validation-summary">0/0/0</div>
-    <div class="card-sub">pass / warn / fail</div>
+    <div class="card-label">Validation</div>
+    <div class="card-value" id="dash-validation-summary" style="font-size:14px;color:#6b7280">—</div>
+    <div class="card-sub"><a href="/tools/validation" style="color:#60a5fa">Run validation</a></div>
   </div>
   <div class="card">
-    <div class="card-label">Requirements Count</div>
-    <div class="card-value" id="dash-requirements-count">0</div>
-    <div class="card-sub">System requirement groups</div>
+    <div class="card-label">Requirements</div>
+    <div class="card-value" id="dash-requirements-count" style="font-size:14px;color:#6b7280">—</div>
+    <div class="card-sub"><a href="/tools/requirements" style="color:#60a5fa">View requirements</a></div>
   </div>
   <div class="card">
-    <div class="card-label">Firewall Rules Count</div>
-    <div class="card-value" id="dash-firewall-count">0</div>
-    <div class="card-sub">Generated rules</div>
+    <div class="card-label">Firewall Rules</div>
+    <div class="card-value" id="dash-firewall-count" style="font-size:14px;color:#6b7280">—</div>
+    <div class="card-sub"><a href="/tools/firewall" style="color:#60a5fa">View firewall plan</a></div>
   </div>
   <div class="card">
     <div class="card-label">Outstanding Attention</div>
@@ -59,10 +59,10 @@
 
       <div style="background:#22263a;border:1px solid #2d3148;border-radius:8px;padding:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <strong style="font-size:13px">Validation / Flow Concerns</strong>
-          <span class="badge badge-amber" id="dash-concern-count">0</span>
+          <strong style="font-size:13px">Validation Concerns</strong>
+          <span class="badge badge-amber" id="dash-concern-count">—</span>
         </div>
-        <div id="dash-concern-list" style="font-size:12px;color:#d1d5db;line-height:1.4">No issues.</div>
+        <div id="dash-concern-list" style="font-size:12px;color:#6b7280;line-height:1.4">Run Validation to see system concerns.</div>
         <div style="margin-top:8px"><a class="btn" href="/tools/validation">Open Validation</a></div>
       </div>
     </div>
@@ -139,25 +139,6 @@ function renderAttentionList(id, items, emptyText){
   )).join('') + '</ul>';
 }
 
-function normalizeStatus(value){
-  const s = String(value || '').trim().toLowerCase();
-  if(s === 'pass' || s === 'ok') return 'pass';
-  if(s === 'warn' || s === 'warning' || s === 'info') return 'warn';
-  if(s === 'fail' || s === 'error') return 'fail';
-  return 'unknown';
-}
-
-function summarizeValidation(results){
-  const summary = { pass: 0, warn: 0, fail: 0 };
-  (results || []).forEach(row => {
-    const s = normalizeStatus(row && row.overall);
-    if(s === 'pass') summary.pass += 1;
-    else if(s === 'warn') summary.warn += 1;
-    else if(s === 'fail') summary.fail += 1;
-  });
-  return summary;
-}
-
 function buildMissingMetadataItems(devices){
   const items = [];
   (devices || []).forEach(device => {
@@ -174,100 +155,49 @@ function buildMissingMetadataItems(devices){
   return items;
 }
 
-function buildLowConfidenceItems(validateAllRows){
+function buildLowConfidenceItems(devices){
   const items = [];
-  (validateAllRows || []).forEach(row => {
-    const name = String(row.name || row.ip || 'Unknown device').trim();
-    const type = String(row.type || '').trim().toLowerCase();
-    const effectiveType = String(row.effective_type || '').trim().toLowerCase();
-    const confidenceScore = Number(row.confidence_score || 0);
-    const confidenceLabel = String(row.confidence_label || '').trim().toLowerCase();
-
-    const weakByScore = Number.isFinite(confidenceScore) && confidenceScore > 0 && confidenceScore < 60;
-    const weakByLabel = ['low', 'none', 'unknown'].includes(confidenceLabel);
-    const weakByType = weakTypes.has(type) || weakTypes.has(effectiveType);
-    if(weakByScore || weakByLabel || weakByType){
-      items.push(name + ': type=' + (type || 'unknown') + ', confidence=' + (confidenceScore || confidenceLabel || 'unknown'));
-    }
-  });
-  return items;
-}
-
-function buildValidationConcernItems(systemData){
-  const items = [];
-  const relationRows = (systemData && systemData.results) || [];
-  relationRows.forEach(row => {
-    const s = normalizeStatus(row.status);
-    if(s === 'warn' || s === 'fail' || s === 'unknown'){
-      const source = String(row.from_device || '?').trim();
-      const target = String(row.to_device || '?').trim();
-      const rel = String(row.relationship_type || row.system_check || 'relationship').trim();
-      items.push(source + ' -> ' + target + ': ' + s.toUpperCase() + ' (' + rel + ')');
-    }
-  });
-  const connectivityRows = (systemData && systemData.connectivity) || [];
-  connectivityRows.forEach(row => {
-    const s = normalizeStatus(row.status);
-    if(s === 'warn' || s === 'fail' || s === 'unknown'){
-      const source = String(row.source_device || row.source_ip || '?').trim();
-      const target = String(row.dest_device || row.dest_ip || '?').trim();
-      const message = String(row.message || row.rule_id || 'connectivity concern').trim();
-      items.push(source + ' -> ' + target + ': ' + s.toUpperCase() + ' (' + message + ')');
+  (devices || []).forEach(device => {
+    const name = String((device && (device.name || device.ip)) || 'Unknown device').trim();
+    const type = String((device && device.type) || '').trim().toLowerCase();
+    if(weakTypes.has(type)){
+      items.push(name + ': type=' + (type || 'unknown'));
     }
   });
   return items;
 }
 
 function loadDashboard(){
-  setDashText('dash-status', 'Loading dashboard data...');
-  Promise.allSettled([
-    fetch('/tools/api/ipschedule').then(r => r.json()),
-    fetch('/tools/api/validate_all', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})}).then(r => r.json()),
-    fetch('/tools/api/validate_systems', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})}).then(r => r.json()),
-    fetch('/tools/api/system_requirements', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})}).then(r => r.json()),
-    fetch('/tools/api/generate_firewall_plan', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})}).then(r => r.json())
-  ]).then(results => {
-    const ips = results[0].status === 'fulfilled' ? results[0].value : {};
-    const all = results[1].status === 'fulfilled' ? results[1].value : {};
-    const systems = results[2].status === 'fulfilled' ? results[2].value : {};
-    const reqs = results[3].status === 'fulfilled' ? results[3].value : {};
-    const fw = results[4].status === 'fulfilled' ? results[4].value : {};
+  setDashText('dash-status', 'Loading...');
+  fetch('/tools/api/ipschedule')
+    .then(r => r.json())
+    .then(ips => {
+      const devices = Array.isArray(ips.devices) ? ips.devices : [];
+      setDashText('dash-device-count', devices.length);
 
-    const devices = Array.isArray(ips.devices) ? ips.devices : [];
-    const validateAllRows = Array.isArray(all.results) ? all.results : [];
-    const validationSummary = summarizeValidation(validateAllRows);
-    const requirementCount = Number(reqs.count || 0);
-    const firewallRules = Number((((fw.firewall_plan || {}).summary || {}).total_rules) || (((fw.firewall_plan || {}).rules || []).length) || 0);
+      const missingItems = buildMissingMetadataItems(devices);
+      const lowConfidenceItems = buildLowConfidenceItems(devices);
+      const attentionCount = missingItems.length + lowConfidenceItems.length;
 
-    setDashText('dash-device-count', devices.length);
-    setDashText('dash-validation-summary', validationSummary.pass + '/' + validationSummary.warn + '/' + validationSummary.fail);
-    setDashText('dash-requirements-count', requirementCount);
-    setDashText('dash-firewall-count', firewallRules);
+      setDashText('dash-missing-count', missingItems.length);
+      setDashText('dash-confidence-count', lowConfidenceItems.length);
+      setDashText('dash-concern-count', '—');
+      setDashText('dash-attention-count', attentionCount);
 
-    const missingItems = buildMissingMetadataItems(devices);
-    const lowConfidenceItems = buildLowConfidenceItems(validateAllRows);
-    const concernItems = buildValidationConcernItems(systems || {});
+      renderAttentionList('dash-missing-list', missingItems, 'No devices missing MAC/serial/VLAN.');
+      renderAttentionList('dash-confidence-list', lowConfidenceItems, 'No low-confidence type concerns.');
 
-    setDashText('dash-missing-count', missingItems.length);
-    setDashText('dash-confidence-count', lowConfidenceItems.length);
-    setDashText('dash-concern-count', concernItems.length);
+      const concernEl = document.getElementById('dash-concern-list');
+      if(concernEl) concernEl.innerHTML = '<span style="color:#6b7280;font-size:11px">Run <a href="/tools/validation" style="color:#60a5fa">Validation</a> to see system concerns.</span>';
 
-    renderAttentionList('dash-missing-list', missingItems, 'No devices missing MAC/serial/VLAN.');
-    renderAttentionList('dash-confidence-list', lowConfidenceItems, 'No low-confidence type concerns.');
-    renderAttentionList('dash-concern-list', concernItems, 'No active validation/flow concerns.');
-
-    const attentionCount = missingItems.length + lowConfidenceItems.length + concernItems.length;
-    setDashText('dash-attention-count', attentionCount);
-
-    const failedCalls = results.filter(r => r.status !== 'fulfilled').length;
-    if(failedCalls){
-      setDashText('dash-status', 'Loaded with partial data (' + failedCalls + ' source(s) unavailable).');
-    } else {
-      setDashText('dash-status', 'Live dashboard data loaded.');
-    }
-  }).catch(() => {
-    setDashText('dash-status', 'Unable to load dashboard data.');
-  });
+      setDashText('dash-validation-summary', '—');
+      setDashText('dash-requirements-count', '—');
+      setDashText('dash-firewall-count', '—');
+      setDashText('dash-status', devices.length + ' device' + (devices.length === 1 ? '' : 's') + ' in inventory.');
+    })
+    .catch(() => {
+      setDashText('dash-status', 'Unable to load device data.');
+    });
 }
 
 loadDashboard();
