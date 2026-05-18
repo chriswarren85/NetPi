@@ -1,0 +1,216 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Seeded AV device fingerprint patterns for the AI classifier. Each entry maps a predicted_type to match rules applied against observed device attributes.",
+    "confirmed_count": 0,
+    "last_improved": null
+  },
+  "patterns": [
+    {
+      "id": "dante-endpoint",
+      "predicted_type": "dante-endpoint",
+      "label": "Dante Audio Endpoint",
+      "rules": [
+        {"field": "mdns_services", "contains": "_dante._udp", "weight": 5},
+        {"field": "mdns_services", "contains": "_netaudio._udp", "weight": 4},
+        {"field": "open_ports", "contains": 14336, "weight": 3},
+        {"field": "open_ports", "contains": 14337, "weight": 3},
+        {"field": "snmp_sysdescr", "icontains": "dante", "weight": 4},
+        {"field": "hostname", "icontains": "dante", "weight": 2},
+        {"field": "http_title", "icontains": "dante", "weight": 3},
+        {"field": "http_server", "icontains": "dante", "weight": 3},
+        {"field": "mac_oui", "in": ["00:1A:E3", "00:50:C2", "70:B3:D5"], "weight": 2}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "qsys-core",
+      "predicted_type": "qsys",
+      "label": "Q-SYS Core / Peripheral",
+      "rules": [
+        {"field": "http_title", "icontains": "q-sys", "weight": 5},
+        {"field": "http_title", "icontains": "qsys", "weight": 5},
+        {"field": "http_server", "icontains": "qsc", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "q-sys", "weight": 5},
+        {"field": "snmp_sysdescr", "icontains": "qsc", "weight": 4},
+        {"field": "hostname", "iregex": "q-sys|qsys|qcore|qsc", "weight": 3},
+        {"field": "open_ports", "contains": 1710, "weight": 3},
+        {"field": "mdns_services", "contains": "_qsys._tcp", "weight": 5},
+        {"field": "http_title", "icontains": "qsc", "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "biamp-tesira",
+      "predicted_type": "biamp-tesira",
+      "label": "Biamp Tesira DSP",
+      "rules": [
+        {"field": "http_server", "icontains": "lighttpd", "weight": 2},
+        {"field": "http_title", "icontains": "tesira", "weight": 5},
+        {"field": "http_title", "icontains": "biamp", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "tesira", "weight": 5},
+        {"field": "snmp_sysdescr", "icontains": "biamp", "weight": 4},
+        {"field": "hostname", "iregex": "biamp|tesira|tfs|tfx|forte", "weight": 3},
+        {"field": "mdns_services", "contains": "_biamp._tcp", "weight": 5},
+        {"field": "open_ports", "contains": 23, "weight": 2},
+        {"field": "mac_oui", "in": ["00:90:5E", "00:1A:2F"], "weight": 2}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "shure-mxa",
+      "predicted_type": "shure-mxa",
+      "label": "Shure MXA Microphone / MXN",
+      "rules": [
+        {"field": "http_title", "icontains": "shure", "weight": 4},
+        {"field": "http_title", "icontains": "mxa", "weight": 5},
+        {"field": "http_title", "icontains": "microflex", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "shure", "weight": 4},
+        {"field": "hostname", "iregex": "shure|mxa|mxn|mx[0-9]", "weight": 3},
+        {"field": "mdns_services", "contains": "_shure._tcp", "weight": 5},
+        {"field": "open_ports", "contains": 2202, "weight": 3},
+        {"field": "mac_oui", "in": ["00:0E:DD"], "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "crestron-processor",
+      "predicted_type": "crestron-processor",
+      "label": "Crestron Control Processor",
+      "rules": [
+        {"field": "http_server", "icontains": "crestron", "weight": 5},
+        {"field": "http_title", "icontains": "crestron", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "crestron", "weight": 5},
+        {"field": "hostname", "iregex": "cp[0-9]|cp4|mc[0-9]|rmc|pro[0-9]|crestron|ctrl", "weight": 3},
+        {"field": "open_ports", "contains": 41794, "weight": 4},
+        {"field": "open_ports", "contains": 41795, "weight": 3},
+        {"field": "mac_oui", "in": ["00:10:7F", "00:90:C8"], "weight": 2}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "crestron-touchpanel",
+      "predicted_type": "crestron-touchpanel",
+      "label": "Crestron Touch Panel",
+      "rules": [
+        {"field": "http_server", "icontains": "openresty", "weight": 3},
+        {"field": "http_title", "icontains": "crestron", "weight": 4},
+        {"field": "hostname", "iregex": "tsw|tss|ts[0-9]|touchpanel|touch-panel", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "tsw", "weight": 4},
+        {"field": "open_ports", "contains": 443, "weight": 1},
+        {"field": "open_ports", "contains": 80, "weight": 1},
+        {"field": "http_headers_location", "icontains": "/system/", "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "crestron-uc",
+      "predicted_type": "crestron-uc",
+      "label": "Crestron UC Engine",
+      "rules": [
+        {"field": "http_title", "icontains": "uc-engine", "weight": 5},
+        {"field": "http_title", "icontains": "crestron uc", "weight": 5},
+        {"field": "http_server", "icontains": "iis", "weight": 2},
+        {"field": "hostname", "iregex": "uc[0-9]?-|uc-engine|flex", "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "amx-nxp",
+      "predicted_type": "amx",
+      "label": "AMX NetLinx / Controller",
+      "rules": [
+        {"field": "http_title", "icontains": "amx", "weight": 4},
+        {"field": "http_title", "icontains": "netlinx", "weight": 5},
+        {"field": "snmp_sysdescr", "icontains": "amx", "weight": 5},
+        {"field": "hostname", "iregex": "nxp|nxi|nxa|amx|netlinx", "weight": 3},
+        {"field": "open_ports", "contains": 1319, "weight": 4},
+        {"field": "mac_oui", "in": ["00:60:9F"], "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "extron-device",
+      "predicted_type": "extron",
+      "label": "Extron AV Device",
+      "rules": [
+        {"field": "http_title", "icontains": "extron", "weight": 5},
+        {"field": "http_server", "icontains": "extron", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "extron", "weight": 5},
+        {"field": "hostname", "iregex": "extron|xtp|dmp|smp|xpa|xpv", "weight": 3},
+        {"field": "open_ports", "contains": 2001, "weight": 3},
+        {"field": "mac_oui", "in": ["00:05:A6"], "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "ndi-encoder",
+      "predicted_type": "ndi-encoder",
+      "label": "NDI Video Encoder / Node",
+      "rules": [
+        {"field": "mdns_services", "contains": "_ndi._tcp", "weight": 5},
+        {"field": "http_title", "icontains": "ndi", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "ndi", "weight": 4},
+        {"field": "open_ports", "contains": 5960, "weight": 4},
+        {"field": "open_ports", "contains": 5961, "weight": 3},
+        {"field": "hostname", "iregex": "ndi|newtek|tricaster|vizrt|kiloview", "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "barco-clickshare",
+      "predicted_type": "barco-device",
+      "label": "Barco ClickShare / Device",
+      "rules": [
+        {"field": "http_title", "icontains": "clickshare", "weight": 5},
+        {"field": "http_title", "icontains": "barco", "weight": 4},
+        {"field": "snmp_sysdescr", "icontains": "barco", "weight": 5},
+        {"field": "hostname", "iregex": "clickshare|barco|cse|csx|csm|csc|ctrl", "weight": 3},
+        {"field": "mac_oui", "in": ["00:00:E8", "18:C0:4D"], "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "cisco-switch",
+      "predicted_type": "cisco-switch",
+      "label": "Cisco Network Switch",
+      "rules": [
+        {"field": "snmp_sysdescr", "icontains": "cisco", "weight": 5},
+        {"field": "http_title", "icontains": "cisco", "weight": 4},
+        {"field": "hostname", "iregex": "sw[0-9]|switch|cisco|cat[0-9]|nexus|sg[0-9]", "weight": 2},
+        {"field": "open_ports", "contains": 22, "weight": 1},
+        {"field": "open_ports", "contains": 23, "weight": 1},
+        {"field": "mac_oui", "in": ["00:0F:90", "00:0F:23", "00:19:E7", "CC:D8:C1", "D0:57:7B"], "weight": 3}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "video-wall-processor",
+      "predicted_type": "video-wall-processor",
+      "label": "Video Wall / Splicer Processor",
+      "rules": [
+        {"field": "http_title", "icontains": "video wall", "weight": 5},
+        {"field": "http_title", "icontains": "splicer", "weight": 4},
+        {"field": "http_title", "icontains": "videwall", "weight": 4},
+        {"field": "open_ports", "contains": 8080, "weight": 2},
+        {"field": "open_ports", "contains": 22, "weight": 1},
+        {"field": "http_server", "icontains": "nginx", "weight": 1}
+      ],
+      "min_score": 4
+    },
+    {
+      "id": "pi-hole",
+      "predicted_type": "pi-hole",
+      "label": "Pi-hole DNS Filter",
+      "rules": [
+        {"field": "http_title", "icontains": "pi-hole", "weight": 5},
+        {"field": "open_ports", "contains": 8080, "weight": 2},
+        {"field": "open_ports", "contains": 80, "weight": 1},
+        {"field": "hostname", "icontains": "pi.hole", "weight": 4},
+        {"field": "http_headers_xframe", "icontains": "deny", "weight": 1}
+      ],
+      "min_score": 4
+    }
+  ],
+  "confirmed": []
+}
