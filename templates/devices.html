@@ -28,6 +28,7 @@
       </div>
     </div>
   </div>
+</div>
 
 <div class="panel">
   <div class="panel-header">
@@ -1674,8 +1675,8 @@ function renderTable(){
           + '</details>'
           + '</div>'
           + '</div>'
-          + '<div id="ai-suggest-' + escapeHtml(String(row.ip || row.name || '')) + '" style="margin-top:8px;">'
-          + buildAiSuggestionPanelHtml(row)
+          + '<div id="ai-suggest-' + escapeHtml(String(d.ip || d.name || '')) + '" style="margin-top:8px;">'
+          + buildAiSuggestionPanelHtml(d)
           + '</div>'
           + '</div>'
           + '</td>';
