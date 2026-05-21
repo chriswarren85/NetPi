@@ -5371,7 +5371,8 @@ def devices():
 
 @app.route('/tools/intake')
 def intake():
-    return render_template('intake.html', s=load_settings())
+    from flask import redirect
+    return redirect('/tools/devices#intake', code=302)
 
 @app.route('/tools/requirements')
 def requirements():
@@ -8034,6 +8035,25 @@ def api_classify_device(device_id):
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/devices/<device_id>/type", methods=["PATCH", "POST"])
+def api_device_set_type(device_id):
+    payload = request.get_json(force=True, silent=True) or {}
+    new_type = str((payload.get("type") or "")).strip().lower().replace(" ", "-")
+    if not new_type:
+        return jsonify({"ok": False, "error": "type required"}), 400
+    devices = load_devices()
+    target = next(
+        (d for d in devices if str(d.get("id") or d.get("name") or d.get("ip") or "") == device_id),
+        None
+    )
+    if target is None:
+        return jsonify({"ok": False, "error": "Device not found"}), 404
+    target["type"] = new_type
+    save_devices_file(devices)
+    append_audit_entry("device_type_set", f"type={new_type}", device_id=device_id)
+    return jsonify({"ok": True, "type": new_type, "device_id": device_id})
 
 
 @app.route("/tools/api/fingerprints/confirm", methods=["POST"])

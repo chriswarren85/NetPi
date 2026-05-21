@@ -32,9 +32,10 @@
 
 <div class="panel">
   <div class="panel-header">
-    <span>Inventory Views</span>
+    <span>Views</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" id="inventory-view-devices-tab" onclick="showInventoryView('devices')">Device List</button>
+      <button class="btn" id="inventory-view-intake-tab" onclick="showInventoryView('intake')">Intake</button>
       <button class="btn" id="inventory-view-lan-tab" onclick="showInventoryView('lan')">Project LAN Sheet</button>
       <button class="btn" id="inventory-view-topology-tab" onclick="showInventoryView('topology')">Network Topology</button>
     </div>
@@ -52,9 +53,8 @@
     <div style="padding:10px 12px;border-bottom:1px solid #374151;background:#111111">
       <div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Master Device Workflow</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="focusAddDevice()">Add</button>
-        <button class="btn" onclick="focusImportDevices()">Import</button>
-        <a class="btn" href="/tools/intake">Device Intake</a>
+        <button class="btn btn-primary" onclick="focusAddDevice()">Add Device</button>
+        <button class="btn" onclick="focusImportDevices()">Paste Import</button>
         <a class="btn" href="/tools/requirements">Requirements</a>
         <a class="btn" href="/tools/validation">Validation</a>
       </div>
@@ -152,12 +152,154 @@
   </div>
 </div>
 
+<div id="inventory-view-intake-panel" style="display:none">
+<div id="intake-status" style="display:none;font-size:13px;margin:0 0 14px 0;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
+
+<div class="panel" id="manual-add-panel">
+  <div class="panel-header">Manual Add Device</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group"><label>Name</label><input id="manual-name" placeholder="e.g. DSP-01"></div>
+      <div class="form-group"><label>Hostname</label><input id="manual-hostname" placeholder="e.g. dsp01"></div>
+      <div class="form-group"><label>IP</label><input id="manual-ip" placeholder="e.g. 192.168.1.20"></div>
+      <div class="form-group"><label>MAC</label><input id="manual-mac" placeholder="e.g. AA:BB:CC:DD:EE:FF"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Type</label><input id="manual-type" placeholder="e.g. qsys"></div>
+      <div class="form-group"><label>VLAN</label><input id="manual-vlan" placeholder="e.g. AV_Control"></div>
+      <div class="form-group"><label>Room</label><input id="manual-room" placeholder="e.g. Room A"></div>
+      <div class="form-group"><label>Zone</label><input id="manual-zone" placeholder="e.g. Stage Left"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Vendor</label><input id="manual-vendor" placeholder="e.g. QSC"></div>
+      <div class="form-group"><label>Model</label><input id="manual-model" placeholder="e.g. Core"></div>
+      <div class="form-group"><label>Serial</label><input id="manual-serial" placeholder="e.g. SN12345"></div>
+      <div class="form-group"><label>Notes</label><input id="manual-notes" placeholder="Optional notes"></div>
+    </div>
+    <button class="btn btn-primary" onclick="addManualDevice()">Add Manual Device</button>
+  </div>
+</div>
+
+<div class="panel" id="paste-list-panel">
+  <div class="panel-header">Paste Device List</div>
+  <div class="panel-body">
+    <textarea id="pasted-device-text" style="width:100%;min-height:170px;font-family:monospace;" placeholder="Name,IP,Type,VLAN&#10;DSP-01,192.168.1.20,qsys,AV_Control&#10;192.168.1.30"></textarea>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="previewPasteDevices()">Preview Parse</button>
+      <button class="btn" onclick="clearPaste()">Clear</button>
+    </div>
+    <div id="paste-summary" style="margin-top:10px;"></div>
+    <div id="paste-invalid" style="margin-top:10px;"></div>
+    <div id="paste-save-section" style="display:none;margin-top:14px;padding:12px;background:#111;border:1px solid #374151;border-radius:8px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;margin-bottom:10px">Save parsed rows</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="commitAll()">Commit All to Device List</button>
+        <button class="btn btn-primary" onclick="savePasteToLanSheet()">Save All to LAN Sheet</button>
+        <button class="btn" onclick="commitSelected()">Commit Selected</button>
+      </div>
+      <div id="paste-save-status" style="margin-top:8px;font-size:12px;color:#9ca3af;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" id="run-checks-panel">
+  <div class="panel-header">Run Checks / Discovery</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Discovery VLAN</label>
+        <select id="checks-vlan">
+          <option value="">Auto (default)</option>
+          {% for v in s.vlans %}
+          <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Host / IP</label>
+        <input id="checks-host" placeholder="e.g. 192.168.1.20 or hostname">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-primary" onclick="discoverHostsForIntake()">Discover Hosts</button>
+      <button class="btn" onclick="runPingCheck()">Ping</button>
+      <button class="btn" onclick="runPortScanCheck()">Port Scan</button>
+      <button class="btn" onclick="runTracerouteCheck()">Traceroute</button>
+      <button class="btn" onclick="fingerprintHostForIntake()">Fingerprint Host</button>
+    </div>
+    <div id="checks-summary" style="margin-bottom:10px;color:#9ca3af"></div>
+    <div id="discover-wrap" style="display:none;overflow-x:auto;margin-bottom:10px">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="discover-select-all" onchange="toggleAllDiscovered(this.checked)"></th>
+            <th>Hostname</th>
+            <th>IP</th>
+            <th>MAC / Vendor</th>
+            <th>Status</th>
+            <th>Likely Type</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="discover-results"></tbody>
+      </table>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" onclick="stageSelectedDiscovered()">Stage Selected</button>
+        <button class="btn" onclick="stageAllDiscovered()">Stage All</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:0">
+      <div class="panel-header">Check Output</div>
+      <div class="panel-body">
+        <pre id="checks-output" style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:0;min-height:110px"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Intake Results</div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px"></th>
+          <th>Name</th>
+          <th>IP</th>
+          <th>Type</th>
+          <th>VLAN</th>
+          <th>Vendor / Model</th>
+          <th>Room</th>
+          <th>MAC</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="intake-results">
+        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Commit Intake Results</div>
+  <div class="panel-body" style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" onclick="selectAllRows(true)">Select All</button>
+    <button class="btn" onclick="selectAllRows(false)">Select None</button>
+    <button class="btn btn-primary" onclick="commitSelected()">Commit Selected</button>
+    <button class="btn" onclick="commitAll()">Commit All</button>
+  </div>
+</div>
+</div>
+
 
 
 <script>
 let deviceList = {{ devices | tojson | safe }};
 let topologyState = { topology: [], count: 0, generated_at: '', switches_considered: 0, switches_queried: 0, note: '' };
 let activeInventoryView = 'devices';
+let intakeRows = [];
+let discoveredRows = [];
 
 const FILTER_STATE_KEY = 'netpi.devices.filterState.v1';
 const VALIDATION_STATE_KEY = 'netpi.devices.validationState.v1';
@@ -807,16 +949,20 @@ function renderDetectedSystems(data){
   el.innerHTML = html;
 }
 
-function showInventoryView(view){
-  activeInventoryView = (view === 'topology' || view === 'lan') ? view : 'devices';
-  const views = ['devices', 'lan', 'topology'];
-  views.forEach(v => {
+function showInventoryView(view, scrollTo){
+  const valid = ['devices', 'intake', 'lan', 'topology'];
+  activeInventoryView = valid.includes(view) ? view : 'devices';
+  valid.forEach(v => {
     const panel = document.getElementById('inventory-view-' + v + '-panel');
     const tab = document.getElementById('inventory-view-' + v + '-tab');
     if(panel) panel.style.display = (activeInventoryView === v) ? 'block' : 'none';
     if(tab) tab.className = (activeInventoryView === v) ? 'btn btn-primary' : 'btn';
   });
   if(activeInventoryView === 'lan') loadLanSheet();
+  if(scrollTo){
+    const el = document.getElementById(scrollTo);
+    if(el) setTimeout(() => el.scrollIntoView({behavior:'smooth', block:'start'}), 80);
+  }
 }
 
 function renderTopology(){
@@ -1728,18 +1874,33 @@ function renderTable(){
 // ── W13.1 AI Suggestion Panel ─────────────────────────────────────────────
 
 function buildAiSuggestionPanelHtml(row) {
-  const deviceId = encodeURIComponent(row.ip || row.name || '');
+  const rawId = row.ip || row.name || '';
+  const deviceId = encodeURIComponent(rawId);
   if (!deviceId) return '';
+  const safeId = escapeHtml(rawId);
   return '<details style="border:1px solid #1e1e1e;border-radius:6px;padding:6px 8px;background:#0a1628;">'
     + '<summary style="cursor:pointer;color:#9ca3af;font-size:12px;display:flex;align-items:center;gap:6px;">'
     + '<span style="font-size:10px;background:#1e1e1e;color:#d1d5db;padding:1px 6px;border-radius:3px;font-weight:700;letter-spacing:.04em">AI</span>'
-    + 'AI Type Suggestion'
+    + 'Identify Device'
     + '</summary>'
-    + '<div id="ai-result-' + escapeHtml(row.ip || row.name || '') + '" style="margin-top:8px;">'
-    + '<button onclick="runAiClassify(' + JSON.stringify(row.ip || row.name || '') + ', event)" '
+    + '<div style="margin-top:8px;">'
+    + '<div id="ai-result-' + safeId + '">'
+    + '<button onclick="runAiClassify(' + JSON.stringify(rawId) + ', event)" '
     + 'style="font-size:11px;padding:3px 10px;background:#1e1e1e;color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;">'
     + 'Classify with AI</button>'
     + '<div style="font-size:11px;color:#6b7280;margin-top:4px">Analyses observed attributes to suggest a device type.</div>'
+    + '</div>'
+    + '<div style="margin-top:10px;border-top:1px solid #1e1e1e;padding-top:8px;">'
+    + '<div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Or identify manually</div>'
+    + '<div style="display:flex;gap:6px;align-items:center;">'
+    + '<input id="ai-manual-input-' + safeId + '" placeholder="e.g. qsys, barco-encoder, crestron" '
+    + 'style="flex:1;font-size:12px;padding:4px 8px;background:#111;border:1px solid #374151;border-radius:4px;color:#e2e8f0;" '
+    + 'onkeydown="if(event.key===\'Enter\'){saveManualDeviceType(' + JSON.stringify(rawId) + ',event)}">'
+    + '<button onclick="saveManualDeviceType(' + JSON.stringify(rawId) + ',event)" '
+    + 'style="font-size:11px;padding:4px 10px;background:#1e2e1e;color:#9ca3af;border:1px solid #16a34a;border-radius:4px;cursor:pointer;white-space:nowrap;">Save Type</button>'
+    + '</div>'
+    + '<div id="ai-manual-status-' + safeId + '" style="font-size:11px;color:#6b7280;margin-top:4px"></div>'
+    + '</div>'
     + '</div>'
     + '</details>';
 }
@@ -1795,22 +1956,73 @@ function runAiClassify(deviceId, event) {
 function confirmAiClassify(deviceId, confirmedType, label, btn) {
   btn.disabled = true;
   btn.textContent = 'Saving...';
-  fetch('/tools/api/fingerprints/confirm', {
+  const fpReq = fetch('/tools/api/fingerprints/confirm', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({device_id: deviceId, confirmed_type: confirmedType, label: label})
-  }).then(r => r.json()).then(data => {
+  }).then(r => r.json());
+  const typeReq = fetch('/tools/api/devices/' + encodeURIComponent(deviceId) + '/type', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({type: confirmedType})
+  }).then(r => r.json());
+  Promise.all([fpReq, typeReq]).then(([fpData, typeData]) => {
     const parent = btn.closest('div[style*="display:flex"]');
-    if (data.ok) {
-      if (parent) parent.innerHTML = '<div style="font-size:11px;color:#9ca3af">' + escapeHtml(data.message || 'Fingerprint saved') + '</div>';
+    if (fpData.ok) {
+      if(typeData.ok){
+        const d = deviceList.find(x => x.ip === deviceId || x.name === deviceId);
+        if(d) d.type = confirmedType;
+        renderTable();
+      }
+      if (parent) parent.innerHTML = '<div style="font-size:11px;color:#9ca3af">' + escapeHtml(fpData.message || 'Saved') + '</div>';
     } else {
       btn.disabled = false;
       btn.textContent = 'Confirm';
-      alert('Error: ' + (data.error || 'unknown'));
+      alert('Error: ' + (fpData.error || 'unknown'));
     }
   }).catch(() => {
     btn.disabled = false;
     btn.textContent = 'Confirm';
+  });
+}
+
+function saveManualDeviceType(deviceId, event) {
+  event && event.stopPropagation();
+  const safeId = escapeHtml(deviceId);
+  const input = document.getElementById('ai-manual-input-' + safeId);
+  const statusEl = document.getElementById('ai-manual-status-' + safeId);
+  if(!input) return;
+  const raw = input.value.trim();
+  if(!raw){ if(statusEl) statusEl.textContent = 'Enter a device type first.'; return; }
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, '-');
+  const role = ROLE_MAP[normalized] || null;
+  if(statusEl) statusEl.textContent = 'Saving…';
+
+  const typeReq = fetch('/tools/api/devices/' + encodeURIComponent(deviceId) + '/type', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({type: normalized})
+  }).then(r => r.json());
+  const fpReq = fetch('/tools/api/fingerprints/confirm', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({device_id: deviceId, confirmed_type: normalized, label: raw})
+  }).then(r => r.json());
+
+  Promise.all([typeReq, fpReq]).then(([typeData, fpData]) => {
+    if(typeData.ok){
+      const d = deviceList.find(x => x.ip === deviceId || x.name === deviceId);
+      if(d) d.type = normalized;
+      renderTable();
+      const roleText = role ? (' — ' + role + ' category') : ' (new type added)';
+      if(statusEl) statusEl.textContent = 'Saved as "' + normalized + '"' + roleText;
+      input.value = '';
+    } else {
+      if(statusEl) statusEl.textContent = 'Error: ' + (typeData.error || 'failed');
+    }
+  }).catch(() => {
+    if(statusEl) statusEl.textContent = 'Request failed';
   });
 }
 
@@ -1854,11 +2066,11 @@ function saveDeviceNotes(ip) {
 // ── End W13.1 ─────────────────────────────────────────────────────────────
 
 function focusAddDevice(){
-  window.location.href = '/tools/intake#manual-add-panel';
+  showInventoryView('intake', 'manual-add-panel');
 }
 
 function focusImportDevices(){
-  window.location.href = '/tools/intake#paste-list-panel';
+  showInventoryView('intake', 'paste-list-panel');
 }
 
 function showWorkflowStub(action){
@@ -1987,6 +2199,278 @@ window.loadTopologyData = loadTopologyData;
 window.showInventoryView = showInventoryView;
 
 restoreFilterState();
+// ── Intake Tab Functions ──────────────────────────────────────────────────
+
+function statusBadge(s){
+  const map = {
+    ok: '<span class="badge badge-green">OK</span>',
+    warn: '<span class="badge badge-amber">WARN</span>',
+    fail: '<span class="badge badge-red">FAIL</span>',
+    error: '<span class="badge badge-red">ERROR</span>',
+    online: '<span class="badge badge-green">ONLINE</span>'
+  };
+  return map[s] || escapeHtml(s || 'unknown');
+}
+
+function showIntakeStatus(message, tone){
+  const box = document.getElementById('intake-status');
+  if(!box) return;
+  box.style.display = message ? 'block' : 'none';
+  box.textContent = message || '';
+  if(tone === 'error'){ box.style.background='#1a1a1a'; box.style.color='#e5e7eb'; box.style.borderColor='#7f1d1d'; return; }
+  if(tone === 'success'){ box.style.background='#1a1a1a'; box.style.color='#d1d5db'; box.style.borderColor='#2a2a2a'; return; }
+  box.style.background='#141414'; box.style.color='#d1d5db'; box.style.borderColor='#374151';
+}
+
+function appendCheckOutput(text){
+  const output = document.getElementById('checks-output');
+  if(!output) return;
+  const previous = output.textContent || '';
+  output.textContent = previous ? (previous + '\n\n' + text) : text;
+}
+
+function dedupeAndUpsertIntakeRow(nextRow){
+  const ip = String((nextRow && nextRow.ip) || '').trim();
+  if(!ip) return;
+  const idx = intakeRows.findIndex(row => String((row && row.ip) || '').trim() === ip);
+  if(idx >= 0){
+    intakeRows[idx] = { ...intakeRows[idx], ...nextRow, selected: intakeRows[idx].committed ? false : (nextRow.selected !== undefined ? !!nextRow.selected : intakeRows[idx].selected), committed: !!intakeRows[idx].committed };
+  } else {
+    intakeRows.push({ selected: true, committed: false, status: 'Ready', source: 'checks', conflict_reason: '', ...nextRow });
+  }
+}
+
+function collectManualPayload(){
+  return {
+    name: document.getElementById('manual-name').value.trim(),
+    hostname: document.getElementById('manual-hostname').value.trim(),
+    ip: document.getElementById('manual-ip').value.trim(),
+    mac: document.getElementById('manual-mac').value.trim(),
+    type: document.getElementById('manual-type').value.trim(),
+    vlan: document.getElementById('manual-vlan').value.trim(),
+    room: document.getElementById('manual-room').value.trim(),
+    zone: document.getElementById('manual-zone').value.trim(),
+    vendor: document.getElementById('manual-vendor').value.trim(),
+    model: document.getElementById('manual-model').value.trim(),
+    serial: document.getElementById('manual-serial').value.trim(),
+    notes: document.getElementById('manual-notes').value.trim()
+  };
+}
+
+function clearManualForm(){
+  ['manual-name','manual-hostname','manual-ip','manual-mac','manual-type','manual-vlan','manual-room','manual-zone','manual-vendor','manual-model','manual-serial','manual-notes']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+}
+
+async function addManualDevice(){
+  const payload = collectManualPayload();
+  if(!payload.ip){ showIntakeStatus('Manual add requires an IP address.', 'error'); return; }
+  try {
+    const res = await fetch('/tools/api/devices/add_manual', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if(!res.ok || !data.success){ showIntakeStatus(data.error || 'Manual add failed.', 'error'); return; }
+    const added = data.device || payload;
+    dedupeAndUpsertIntakeRow({ ...added, selected: false, committed: true, source: 'manual', status: 'Committed', conflict_reason: '' });
+    renderIntakeResults();
+    clearManualForm();
+    showIntakeStatus('Manual device added to active project inventory.', 'success');
+  } catch(e){ showIntakeStatus('Manual add failed: ' + e, 'error'); }
+}
+
+async function previewPasteDevices(){
+  const pasted = document.getElementById('pasted-device-text').value.trim();
+  if(!pasted){ showIntakeStatus('Paste device rows first.', 'error'); return; }
+  try {
+    const res = await fetch('/tools/api/devices/preview_pasted', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: pasted }) });
+    const data = await res.json();
+    if(!res.ok || !data.ok){ showIntakeStatus(data.error || 'Preview failed.', 'error'); return; }
+    intakeRows = (Array.isArray(data.devices) ? data.devices : []).map((row, idx) => {
+      const duplicate = !!row.duplicate;
+      const duplicateIp = !!row.duplicate_ip;
+      const duplicateMac = !!row.duplicate_mac;
+      let reason = duplicateIp && duplicateMac ? 'duplicate_ip+duplicate_mac' : (duplicateIp ? 'duplicate_ip' : (duplicateMac ? 'duplicate_mac' : ''));
+      return { id: idx+1, selected: !duplicate, source: 'paste', committed: false, status: duplicate ? 'Conflict' : 'Ready', conflict_reason: reason, ...row };
+    });
+    document.getElementById('paste-summary').innerHTML = '<div style="color:#9ca3af"><strong>Preview:</strong> valid ' + (data.rows_valid||0) + ' | invalid ' + (data.rows_invalid||0) + ' | duplicate IP ' + (data.rows_duplicate_ip||0) + ' | headers detected: ' + (data.headers_detected?'yes':'no') + '</div>';
+    const invalidRows = Array.isArray(data.invalid_rows) ? data.invalid_rows : [];
+    document.getElementById('paste-invalid').innerHTML = invalidRows.length ? ('<details><summary><strong>Invalid rows (' + invalidRows.length + ')</strong></summary><pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">' + escapeHtml(JSON.stringify(invalidRows,null,2)) + '</pre></details>') : '';
+    renderIntakeResults();
+    showIntakeStatus('Paste preview generated. Review rows, then commit or save to LAN Sheet.', 'success');
+    const saveSection = document.getElementById('paste-save-section');
+    if(saveSection) saveSection.style.display = (data.rows_valid > 0) ? '' : 'none';
+  } catch(e){ showIntakeStatus('Preview failed: ' + e, 'error'); }
+}
+
+function clearPaste(){
+  const text = document.getElementById('pasted-device-text');
+  if(text) text.value = '';
+  document.getElementById('paste-summary').innerHTML = '';
+  document.getElementById('paste-invalid').innerHTML = '';
+  const saveSection = document.getElementById('paste-save-section');
+  if(saveSection) saveSection.style.display = 'none';
+  const saveStatus = document.getElementById('paste-save-status');
+  if(saveStatus){ saveStatus.style.display='none'; saveStatus.textContent=''; }
+  intakeRows = [];
+  renderIntakeResults();
+  showIntakeStatus('', 'neutral');
+}
+
+async function savePasteToLanSheet(){
+  const entries = intakeRows.filter(r => r.ip).map(r => ({ name:r.name||'', ip:r.ip||'', mac:r.mac||r.mac_address||'', type:r.type||'', vlan:r.vlan||'', vendor:r.vendor||'', model:r.model||'', room:r.room||'', notes:r.notes||'' }));
+  if(!entries.length){ showIntakeStatus('No valid rows to save — preview first.', 'error'); return; }
+  const lanStatus = document.getElementById('paste-save-status');
+  if(lanStatus){ lanStatus.style.display='block'; lanStatus.textContent='Saving to LAN Sheet…'; }
+  try {
+    const res = await fetch('/tools/api/lan-sheet/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({entries}) });
+    const data = await res.json();
+    if(!res.ok || !data.ok){ if(lanStatus) lanStatus.textContent='Failed: '+(data.error||'unknown error'); return; }
+    if(lanStatus) lanStatus.textContent='Saved to LAN Sheet: '+data.total+' entries ('+data.added+' new, '+data.updated+' updated).';
+  } catch(e){ if(lanStatus) lanStatus.textContent='Request failed: '+e; }
+}
+
+function getChecksHost(){ return String((document.getElementById('checks-host')||{}).value||'').trim(); }
+function getChecksVlan(){ return String((document.getElementById('checks-vlan')||{}).value||'').trim(); }
+
+async function runPingCheck(){
+  const host = getChecksHost();
+  if(!host){ showIntakeStatus('Enter Host/IP for Ping.', 'error'); return; }
+  try { appendCheckOutput('Ping: '+host+' ...'); const res = await fetch('/tools/api/ping',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host})}); const data=await res.json(); appendCheckOutput(data.output||data.error||'No ping output.'); showIntakeStatus('Ping completed.','success'); } catch(e){ showIntakeStatus('Ping failed: '+e,'error'); }
+}
+
+async function runPortScanCheck(){
+  const host = getChecksHost();
+  if(!host){ showIntakeStatus('Enter Host/IP for Port Scan.', 'error'); return; }
+  try { appendCheckOutput('Port Scan: '+host+' ...'); const res = await fetch('/tools/api/portscan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host})}); const data=await res.json(); appendCheckOutput(data.output||data.error||'No output.'); showIntakeStatus('Port scan completed.','success'); } catch(e){ showIntakeStatus('Port scan failed: '+e,'error'); }
+}
+
+async function runTracerouteCheck(){
+  const host = getChecksHost();
+  if(!host){ showIntakeStatus('Enter Host/IP for Traceroute.', 'error'); return; }
+  try { appendCheckOutput('Traceroute: '+host+' ...'); const res = await fetch('/tools/api/traceroute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host})}); const data=await res.json(); appendCheckOutput(data.output||data.error||'No output.'); showIntakeStatus('Traceroute completed.','success'); } catch(e){ showIntakeStatus('Traceroute failed: '+e,'error'); }
+}
+
+async function fingerprintHostForIntake(){
+  const host = getChecksHost();
+  if(!host){ showIntakeStatus('Enter Host/IP for Fingerprint.', 'error'); return; }
+  try {
+    const res = await fetch('/tools/api/fingerprint_host',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip:host,vendor:''})});
+    const data = await res.json();
+    if(data.error){ showIntakeStatus(data.error,'error'); appendCheckOutput('Fingerprint failed for '+host+': '+data.error); return; }
+    dedupeAndUpsertIntakeRow({ name:host, hostname:'', ip:host, mac:'', type:data.guessed_type||data.suggested_type||'generic', vlan:'', vendor:'', notes:'Fingerprint: '+(data.suggested_type||data.guessed_type||'generic')+(data.confidence_label?' ('+data.confidence_label+')':'') });
+    renderIntakeResults();
+    const ports = Array.isArray(data.open_ports) ? data.open_ports.join(', ') : '';
+    appendCheckOutput('Fingerprint '+host+': guessed='+(data.guessed_type||'generic')+', suggested='+(data.suggested_type||'-')+', confidence='+(data.confidence_label||'-')+(ports?', open_ports='+ports:''));
+    showIntakeStatus('Fingerprint completed and staged.','success');
+  } catch(e){ showIntakeStatus('Fingerprint failed: '+e,'error'); }
+}
+
+function renderDiscoveredTable(){
+  const wrap = document.getElementById('discover-wrap');
+  const tbody = document.getElementById('discover-results');
+  if(!wrap||!tbody) return;
+  wrap.style.display='block';
+  if(!discoveredRows.length){ tbody.innerHTML='<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">No discovered hosts.</td></tr>'; return; }
+  tbody.innerHTML = discoveredRows.map((row,index) => '<tr>'
+    + '<td><input type="checkbox" class="discover-check" data-idx="'+index+'" '+(row.selected?'checked':'')+' onchange="toggleDiscovered('+index+')"></td>'
+    + '<td>'+(row.hostname?escapeHtml(row.hostname):'<span style="color:#6b7280">-</span>')+'</td>'
+    + '<td style="font-family:monospace"><a href="http://'+escapeHtml(row.ip||'')+'" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">'+escapeHtml(row.ip||'')+'</a></td>'
+    + '<td style="font-size:11px;color:#9ca3af">'+(row.mac?'<div style="font-family:monospace">'+escapeHtml(row.mac)+'</div>':'<div>-</div>')+(row.vendor?'<div>'+escapeHtml(row.vendor)+'</div>':'')+'</td>'
+    + '<td>'+statusBadge(row.status||'online')+'</td>'
+    + '<td>'+escapeHtml(row.guessed_type||'generic')+'</td>'
+    + '<td><button class="btn" onclick="stageDiscoveredByIndex('+index+')">Stage</button></td>'
+    + '</tr>').join('');
+}
+
+function toggleDiscovered(index){ if(discoveredRows[index]) discoveredRows[index].selected=!discoveredRows[index].selected; }
+function toggleAllDiscovered(nextValue){ discoveredRows=discoveredRows.map(row=>({...row,selected:!!nextValue})); renderDiscoveredTable(); }
+
+function stageDiscoveredByIndex(index){
+  const row = discoveredRows[index];
+  if(!row) return;
+  dedupeAndUpsertIntakeRow({ name:row.hostname||row.ip, hostname:row.hostname||'', ip:row.ip||'', mac:row.mac||row.mac_address||'', type:row.guessed_type||'generic', vlan:getChecksVlan(), vendor:row.vendor||'', notes:'Discovered host' });
+  renderIntakeResults();
+  showIntakeStatus('Discovered host staged.','success');
+}
+
+function stageSelectedDiscovered(){
+  let staged=0;
+  discoveredRows.forEach((row,idx)=>{ if(row.selected){ stageDiscoveredByIndex(idx); staged++; } });
+  if(!staged) showIntakeStatus('No discovered rows selected.','error');
+}
+
+function stageAllDiscovered(){
+  if(!discoveredRows.length){ showIntakeStatus('No discovered rows available.','error'); return; }
+  discoveredRows.forEach((_,idx)=>stageDiscoveredByIndex(idx));
+}
+
+async function discoverHostsForIntake(){
+  const vlan=getChecksVlan();
+  try {
+    document.getElementById('checks-summary').textContent='Discovering hosts...';
+    const res=await fetch('/tools/api/discover_hosts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vlan})});
+    const data=await res.json();
+    if(!res.ok||data.error){ showIntakeStatus(data.error||'Discover hosts failed.','error'); document.getElementById('checks-summary').textContent=data.error||'Discovery failed.'; return; }
+    discoveredRows=(Array.isArray(data.devices)?data.devices:[]).map(item=>({...item,selected:true}));
+    renderDiscoveredTable();
+    document.getElementById('checks-summary').textContent='Discovery found '+(data.count||0)+' host(s) on '+(data.subnet||'selected subnet')+'.';
+    showIntakeStatus('Discovery completed. Stage rows into Intake Results as needed.','success');
+    appendCheckOutput('Discovery complete: '+(data.count||0)+' hosts.');
+  } catch(e){ showIntakeStatus('Discover hosts failed: '+e,'error'); document.getElementById('checks-summary').textContent='Discovery failed.'; }
+}
+
+function selectAllRows(nextValue){ intakeRows=intakeRows.map(row=>({...row,selected:!!nextValue&&!row.committed&&row.status!=='Conflict'})); renderIntakeResults(); }
+function toggleRow(index){ const row=intakeRows[index]; if(!row||row.committed||row.status==='Conflict') return; row.selected=!row.selected; }
+
+function buildCommitPayload(rows){ return rows.map(row=>({ name:row.name||'', hostname:row.hostname||'', ip:row.ip||'', mac:row.mac||row.mac_address||'', type:row.type||'', vlan:row.vlan||'', room:row.room||'', zone:row.zone||'', vendor:row.vendor||'', model:row.model||'', serial:row.serial||'', notes:row.notes||'' })); }
+
+async function commitRows(rows){
+  if(!rows.length){ showIntakeStatus('No intake rows selected for commit.','error'); return; }
+  try {
+    const res=await fetch('/tools/api/devices/import_pasted',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({devices:buildCommitPayload(rows)})});
+    const data=await res.json();
+    if(!res.ok||!data.ok){ showIntakeStatus(data.error||'Commit failed.','error'); return; }
+    const skipped=Array.isArray(data.skipped)?data.skipped:[];
+    const skippedByIp=new Map(skipped.map(item=>[String(item.ip||''),String(item.reason||'skipped')]));
+    intakeRows=intakeRows.map(row=>{
+      if(!rows.includes(row)) return row;
+      const reason=skippedByIp.get(String(row.ip||''));
+      if(reason) return{...row,selected:false,committed:false,status:'Conflict',conflict_reason:reason};
+      return{...row,selected:false,committed:true,status:'Committed',conflict_reason:''};
+    });
+    renderIntakeResults();
+    showIntakeStatus('Commit complete. Added: '+(data.added||0)+' | Skipped: '+(data.skipped_count||0),'success');
+  } catch(e){ showIntakeStatus('Commit failed: '+e,'error'); }
+}
+
+function commitSelected(){ commitRows(intakeRows.filter(row=>row.selected&&!row.committed&&row.status!=='Conflict')); }
+function commitAll(){ commitRows(intakeRows.filter(row=>!row.committed&&row.status!=='Conflict')); }
+
+function renderIntakeResults(){
+  const tbody=document.getElementById('intake-results');
+  if(!tbody) return;
+  if(!intakeRows.length){ tbody.innerHTML='<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet.</td></tr>'; return; }
+  tbody.innerHTML=intakeRows.map((row,index)=>{
+    const statusTone=row.status==='Committed'?'color:#d1d5db':(row.status==='Conflict'?'color:#e5e7eb':'color:#d1d5db');
+    const disabled=(row.committed||row.status==='Conflict')?'disabled':'';
+    const checked=row.selected?'checked':'';
+    const statusText=row.status==='Conflict'&&row.conflict_reason?'Conflict ('+row.conflict_reason+')':row.status;
+    const vm=[row.vendor,row.model].filter(Boolean).join(' / ');
+    return '<tr>'
+      +'<td><input type="checkbox" '+checked+' '+disabled+' onchange="toggleRow('+index+')"></td>'
+      +'<td style="font-size:12px">'+escapeHtml(row.name||'')+'</td>'
+      +'<td style="font-family:monospace;font-size:12px"><a href="http://'+escapeHtml(row.ip||'')+'" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">'+escapeHtml(row.ip||'')+'</a></td>'
+      +'<td style="font-size:12px">'+escapeHtml(row.type||'')+'</td>'
+      +'<td style="font-size:12px">'+escapeHtml(row.vlan||'')+'</td>'
+      +'<td style="font-size:11px;color:#9ca3af">'+escapeHtml(vm)+'</td>'
+      +'<td style="font-size:11px;color:#9ca3af">'+escapeHtml(row.room||'')+'</td>'
+      +'<td style="font-family:monospace;font-size:11px;color:#6b7280">'+escapeHtml(row.mac||row.mac_address||'')+'</td>'
+      +'<td style="'+statusTone+'">'+escapeHtml(statusText||'')+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+// ── End Intake Tab Functions ───────────────────────────────────────────────
+
 document.getElementById('filter-vlan').addEventListener('change', () => {
   saveFilterState();
   renderTable();
@@ -1999,6 +2483,7 @@ renderTable();
 refreshRequirementsStateFromEndpoint();
 showInventoryView('devices');
 loadTopologyData();
+if(window.location.hash === '#intake') showInventoryView('intake');
 </script>
 {% endblock %}
 
