@@ -9013,9 +9013,9 @@ HEADER_ALIASES = {
 }
 
 DEFAULT_COLUMN_ORDER = [
-    "area", "room", "name", "location", "vendor", "model", "vlan",
+    "room", "name", "location", "vendor", "model", "vlan",
     "ip", "subnet", "gateway", "multicast", "hostname", "mac",
-    "serial", "switch_port", "poe_type", "rack_location", "type", "notes"
+    "serial", "switch_port", "poe_type", "type", "notes"
 ]
 
 # Short device-ID pattern: letters followed by dash/underscore and digits (e.g. dsp-01, amp-02, tp-01a)

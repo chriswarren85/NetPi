@@ -41,12 +41,6 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Area</label>
-        <select id="f-area" onchange="applyFilters()">
-          <option value="">All Areas</option>
-        </select>
-      </div>
-      <div class="form-group">
         <label>Room / Zone</label>
         <select id="f-room" onchange="applyFilters()">
           <option value="">All Rooms</option>
@@ -77,7 +71,6 @@
     <table id="lan-table" style="min-width:1600px;font-size:11px">
       <thead>
         <tr>
-          <th class="sortable" onclick="setSort('area')" style="cursor:pointer;white-space:nowrap">Area / Comm Rack <span id="si-area" style="color:#6b7280"></span></th>
           <th class="sortable" onclick="setSort('room')" style="cursor:pointer;white-space:nowrap">Room / Zone <span id="si-room" style="color:#6b7280"></span></th>
           <th class="sortable" onclick="setSort('name')" style="cursor:pointer;white-space:nowrap">Device <span id="si-name" style="color:#6b7280"></span></th>
           <th class="sortable" onclick="setSort('location')" style="cursor:pointer;white-space:nowrap">Location <span id="si-location" style="color:#6b7280"></span></th>
@@ -90,13 +83,12 @@
           <th>Serial No.</th>
           <th class="sortable" onclick="setSort('switch_port')" style="cursor:pointer;white-space:nowrap">Switch / Port <span id="si-switch_port" style="color:#6b7280"></span></th>
           <th>PoE Type</th>
-          <th>Rack / Location Detail</th>
           <th class="sortable" onclick="setSort('status')" style="cursor:pointer;white-space:nowrap">Status <span id="si-status" style="color:#6b7280"></span></th>
           <th></th>
         </tr>
       </thead>
       <tbody id="lan-tbody">
-        <tr><td colspan="16" style="color:#6b7280;text-align:center;padding:1.5rem">Loading…</td></tr>
+        <tr><td colspan="14" style="color:#6b7280;text-align:center;padding:1.5rem">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -168,7 +160,7 @@ function sortEntries(entries){
 }
 
 function updateSortIndicators(){
-  ['area','room','name','location','vendor','vlan','ip','hostname','switch_port','status'].forEach(col => {
+  ['room','name','location','vendor','vlan','ip','hostname','switch_port','status'].forEach(col => {
     const el = document.getElementById('si-' + col);
     if(!el) return;
     el.textContent = sortState.col === col ? (sortState.dir === 'asc' ? '▲' : '▼') : '';
@@ -178,13 +170,11 @@ function updateSortIndicators(){
 function applyFilters(){
   const search = String(document.getElementById('f-search').value || '').toLowerCase().trim();
   const vlan = document.getElementById('f-vlan').value || '';
-  const area = (document.getElementById('f-area') || {}).value || '';
   const room = document.getElementById('f-room').value || '';
   const status = document.getElementById('f-status').value || '';
 
   filtered = lanEntries.filter(e => {
     if(vlan && e.vlan !== vlan) return false;
-    if(area && e.area !== area) return false;
     if(room && e.room !== room) return false;
     if(status === 'present' && !e.present) return false;
     if(status === 'missing' && e.present) return false;
@@ -206,14 +196,6 @@ function populateRoomFilter(){
   sel.innerHTML = '<option value="">All Rooms</option>' + rooms.map(r =>
     `<option value="${escHtml(r)}"${r === cur ? ' selected' : ''}>${escHtml(r)}</option>`
   ).join('');
-  const areas = [...new Set(lanEntries.map(e => e.area).filter(Boolean))].sort();
-  const asel = document.getElementById('f-area');
-  if(asel){
-    const acur = asel.value;
-    asel.innerHTML = '<option value="">All Areas</option>' + areas.map(a =>
-      `<option value="${escHtml(a)}"${a === acur ? ' selected' : ''}>${escHtml(a)}</option>`
-    ).join('');
-  }
 }
 
 function populateVlanFilter(){
@@ -287,7 +269,6 @@ function buildEntryRow(e){
   };
 
   return '<tr>'
-    + cell(e.area, 'area', 'white-space:nowrap')
     + cell(e.room, 'room', 'white-space:nowrap')
     + `<td style="white-space:nowrap;color:#e5e7eb;font-weight:500">${escHtml(e.name || '') || '<span style="color:#374151">—</span>'}</td>`
     + cell(e.location, 'location')
@@ -300,7 +281,6 @@ function buildEntryRow(e){
     + cell(e.serial, 'serial', 'font-family:monospace;font-size:11px;color:#6b7280')
     + cell(e.switch_port, 'switch_port', 'font-family:monospace;font-size:11px;color:#6b7280')
     + cell(e.poe_type, 'poe_type', 'font-size:11px;color:#6b7280')
-    + cell(e.rack_location, 'rack_location', 'font-size:11px;color:#6b7280')
     + `<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present ? 'Present' : 'Missing'}</span></td>`
     + `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${rawIp.replace(/'/g,"\\'")}')">Remove</button></td>`
     + '</tr>';
@@ -316,7 +296,7 @@ function renderSheet(){
     (filtered.length < lanEntries.length ? ' (filtered from ' + lanEntries.length + ')' : '');
 
   if(!filtered.length){
-    tbody.innerHTML = '<tr><td colspan="16" style="color:#4b5563;text-align:center;padding:1.5rem">' +
+    tbody.innerHTML = '<tr><td colspan="14" style="color:#4b5563;text-align:center;padding:1.5rem">' +
       (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet. Paste from Device Intake or sync from Device List.') +
       '</td></tr>';
     return;
@@ -325,37 +305,22 @@ function renderSheet(){
   const sorted = sortEntries(filtered);
 
   if(groupByRoom){
-    // Two-level grouping: Area → Room
-    const areaOrder = [], areaGroups = {};
+    const groups = {}, ORDER = [];
     sorted.forEach(e => {
-      const a = e.area || '(No area)';
       const r = e.room || '(No room)';
-      const key = a + '\x00' + r;
-      if(!areaGroups[a]){ areaGroups[a] = {}; areaOrder.push(a); }
-      if(!areaGroups[a][r]) areaGroups[a][r] = [];
-      areaGroups[a][r].push(e);
+      if(!groups[r]){ groups[r] = []; ORDER.push(r); }
+      groups[r].push(e);
     });
-
     let html = '';
-    areaOrder.forEach(area => {
-      const rooms = areaGroups[area];
-      const areaDevs = Object.values(rooms).flat();
-      const areaMissing = areaDevs.filter(d => !d.present).length;
-      const aMissing = areaMissing > 0 ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${areaMissing} missing)</span>` : '';
-      html += `<tr style="background:#0d0d0d;border-top:3px solid #4b5563">
-        <td colspan="16" style="padding:6px 12px;font-weight:700;color:#e5e7eb;font-size:12px;letter-spacing:.07em;text-transform:uppercase">
-          ${escHtml(area)} <span style="color:#6b7280;font-weight:400;font-size:11px">&nbsp;—&nbsp;${areaDevs.length} device${areaDevs.length!==1?'s':''}</span>${aMissing}
+    ORDER.forEach(room => {
+      const devs = groups[room];
+      const missing = devs.filter(d => !d.present).length;
+      const mSpan = missing > 0 ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${missing} missing)</span>` : '';
+      html += `<tr style="background:#111;border-top:2px solid #374151">
+        <td colspan="14" style="padding:8px 12px;font-weight:700;color:#e5e7eb;font-size:11px;letter-spacing:.06em;text-transform:uppercase">
+          ${escHtml(room)}<span style="color:#6b7280;font-weight:400">&nbsp;—&nbsp;${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
         </td></tr>`;
-      Object.keys(rooms).forEach(room => {
-        const devs = rooms[room];
-        const missing = devs.filter(d => !d.present).length;
-        const mSpan = missing > 0 ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${missing} missing)</span>` : '';
-        html += `<tr style="background:#111;border-top:1px solid #2e2e2e">
-          <td colspan="16" style="padding:5px 20px;font-weight:600;color:#9ca3af;font-size:11px;letter-spacing:.04em">
-            ${escHtml(room)} <span style="color:#4b5563;font-weight:400">&nbsp;·&nbsp;${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
-          </td></tr>`;
-        devs.forEach(e => { html += buildEntryRow(e); });
-      });
+      devs.forEach(e => { html += buildEntryRow(e); });
     });
     tbody.innerHTML = html;
   } else {
