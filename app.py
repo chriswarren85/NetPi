@@ -8638,6 +8638,9 @@ def api_lan_sheet_add():
             by_ip[ip] = row
             added += 1
     merged = list(by_ip.values())
+    # Auto-infer VLANs for entries that still have none
+    settings = load_settings()
+    merged = [assign_inferred_vlan(e, settings=settings) for e in merged]
     _save_lan_sheet(merged)
     return jsonify({"ok": True, "added": added, "updated": updated, "total": len(merged)})
 
@@ -8671,6 +8674,74 @@ def api_lan_sheet_infer_vlans():
     live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
     enriched = [dict(e, present=(str(e.get("ip") or "").strip() in live_ips)) for e in new_entries]
     return jsonify({"ok": True, "updated": updated, "total": len(new_entries), "entries": enriched})
+
+
+@app.route("/tools/api/lan-sheet/create-vlan-groups", methods=["POST"])
+def api_lan_sheet_create_vlan_groups():
+    import collections as _col
+    settings = load_settings()
+    entries = _load_lan_sheet()
+    if not entries:
+        return jsonify({"ok": False, "error": "LAN sheet is empty"}), 400
+
+    entries = [assign_inferred_vlan(e, settings=settings) for e in entries]
+
+    prefix_vlans = _col.defaultdict(list)
+    prefix_count = _col.defaultdict(int)
+    for e in entries:
+        ip = str(e.get("ip") or "").strip()
+        vlan = str(e.get("vlan") or "").strip()
+        if not ip:
+            continue
+        parts = ip.split(".")
+        if len(parts) != 4:
+            continue
+        prefix = ".".join(parts[:3])
+        prefix_count[prefix] += 1
+        if vlan:
+            prefix_vlans[prefix].append(vlan)
+
+    if not prefix_count:
+        return jsonify({"ok": False, "error": "No valid IPs in LAN sheet"}), 400
+
+    derived = {}
+    for prefix in prefix_count:
+        if prefix_vlans[prefix]:
+            vlan_name = _col.Counter(prefix_vlans[prefix]).most_common(1)[0][0]
+        else:
+            vlan_name = "VLAN-" + prefix.split(".")[-1]
+        derived[vlan_name] = {"name": vlan_name, "subnet": prefix + ".0/24", "gateway": prefix + ".1"}
+
+    existing_vlans = settings.get("vlans") if isinstance(settings.get("vlans"), list) else []
+    by_name = {str(v.get("name") or "").strip(): i for i, v in enumerate(existing_vlans) if isinstance(v, dict)}
+    added = 0
+    updated_count = 0
+    for vlan_name, cfg in derived.items():
+        if vlan_name in by_name:
+            idx = by_name[vlan_name]
+            existing_vlans[idx]["subnet"] = cfg["subnet"]
+            existing_vlans[idx]["gateway"] = cfg["gateway"]
+            updated_count += 1
+        else:
+            existing_vlans.append(cfg)
+            added += 1
+
+    settings["vlans"] = existing_vlans
+    save_settings(settings)
+
+    new_settings = load_settings()
+    entries = [assign_inferred_vlan(e, settings=new_settings, force=False) for e in entries]
+    _save_lan_sheet(entries)
+
+    live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
+    enriched = [dict(e, present=(str(e.get("ip") or "").strip() in live_ips)) for e in entries]
+    return jsonify({
+        "ok": True,
+        "vlans_added": added,
+        "vlans_updated": updated_count,
+        "total_vlans": len(existing_vlans),
+        "entries": enriched
+    })
 
 
 @app.route("/tools/api/lan-sheet/entry", methods=["PATCH"])

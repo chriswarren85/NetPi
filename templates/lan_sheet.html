@@ -8,7 +8,7 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">
     <button class="btn btn-primary" onclick="syncFromDeviceList()">Sync from Device List</button>
-    <button class="btn" onclick="inferVlans()">Infer VLANs from IP</button>
+    <button class="btn" onclick="createVlanGroups()">Create VLAN Groups for Project</button>
     <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
     <a class="btn" href="/tools/devices">Device List</a>
   </div>
@@ -312,6 +312,10 @@ async function loadSheet(){
     const data = await res.json();
     if(!data.ok){ showStatus('Failed to load LAN sheet.', 'error'); return; }
     lanEntries = Array.isArray(data.entries) ? data.entries : [];
+    if(lanEntries.length > 0 && lanEntries.some(e => !e.vlan)){
+      await _autoInferVlans();
+      return;
+    }
     populateRoomFilter();
     populateVlanFilter();
     updateStats();
@@ -319,6 +323,18 @@ async function loadSheet(){
   } catch(e) {
     showStatus('Request failed: ' + e, 'error');
   }
+}
+
+async function _autoInferVlans(){
+  try {
+    const res = await fetch('/tools/api/lan-sheet/infer-vlans', {method:'POST'});
+    const data = await res.json();
+    if(data.ok) lanEntries = Array.isArray(data.entries) ? data.entries : [];
+  } catch(e) {}
+  populateRoomFilter();
+  populateVlanFilter();
+  updateStats();
+  applyFilters();
 }
 
 function removeEntry(ip){
@@ -368,10 +384,10 @@ async function syncFromDeviceList(){
   }
 }
 
-async function inferVlans(){
-  showStatus('Inferring VLANs from IP addresses…', 'neutral');
+async function createVlanGroups(){
+  showStatus('Deriving VLAN groups from IP addressing…', 'neutral');
   try {
-    const res = await fetch('/tools/api/lan-sheet/infer-vlans', {method:'POST'});
+    const res = await fetch('/tools/api/lan-sheet/create-vlan-groups', {method:'POST'});
     const data = await res.json();
     if(data.ok){
       lanEntries = Array.isArray(data.entries) ? data.entries : [];
@@ -379,9 +395,9 @@ async function inferVlans(){
       populateVlanFilter();
       updateStats();
       applyFilters();
-      showStatus('VLAN inference complete — ' + data.updated + ' of ' + data.total + ' entries updated.', 'neutral');
+      showStatus('VLAN groups saved — ' + data.vlans_added + ' added, ' + data.vlans_updated + ' updated (' + data.total_vlans + ' total in project settings).', 'neutral');
     } else {
-      showStatus('Infer failed: ' + (data.error || '?'), 'error');
+      showStatus('Failed: ' + (data.error || '?'), 'error');
     }
   } catch(e) {
     showStatus('Request failed: ' + e, 'error');
