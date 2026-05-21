@@ -40,10 +40,12 @@
     <textarea id="pasted-device-text" style="width:100%;min-height:170px;font-family:monospace;" placeholder="Name,IP,Type,VLAN\nDSP-01,192.168.1.20,qsys,AV_Control\n192.168.1.30"></textarea>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="previewPasteDevices()">Preview Parse</button>
+      <button class="btn btn-primary" id="save-to-lan-btn" onclick="savePasteToLanSheet()" style="display:none">Save to LAN Sheet</button>
       <button class="btn" onclick="clearPaste()">Clear</button>
     </div>
     <div id="paste-summary" style="margin-top:10px;"></div>
     <div id="paste-invalid" style="margin-top:10px;"></div>
+    <div id="paste-lan-status" style="margin-top:10px;font-size:13px;color:#9ca3af;display:none"></div>
   </div>
 </div>
 
@@ -339,7 +341,9 @@ async function previewPasteDevices(){
     }
 
     renderIntakeResults();
-    showIntakeStatus('Paste preview generated. Review rows and commit selected.', 'success');
+    showIntakeStatus('Paste preview generated. Review rows, then commit or save to LAN Sheet.', 'success');
+    const lanBtn = document.getElementById('save-to-lan-btn');
+    if(lanBtn) lanBtn.style.display = (data.rows_valid > 0) ? '' : 'none';
   } catch (e) {
     showIntakeStatus('Preview failed: ' + e, 'error');
   }
@@ -350,9 +354,48 @@ function clearPaste(){
   if(text) text.value = '';
   document.getElementById('paste-summary').innerHTML = '';
   document.getElementById('paste-invalid').innerHTML = '';
+  const lanBtn = document.getElementById('save-to-lan-btn');
+  if(lanBtn) lanBtn.style.display = 'none';
+  const lanStatus = document.getElementById('paste-lan-status');
+  if(lanStatus){ lanStatus.style.display = 'none'; lanStatus.textContent = ''; }
   intakeRows = [];
   renderIntakeResults();
   showIntakeStatus('', 'neutral');
+}
+
+async function savePasteToLanSheet(){
+  const entries = intakeRows.filter(r => r.ip).map(r => ({
+    name: r.name || '',
+    ip: r.ip || '',
+    mac: r.mac || r.mac_address || '',
+    type: r.type || '',
+    vlan: r.vlan || '',
+    vendor: r.vendor || '',
+    model: r.model || '',
+    room: r.room || '',
+    notes: r.notes || '',
+  }));
+  if(!entries.length){
+    showIntakeStatus('No valid rows to save — preview first.', 'error');
+    return;
+  }
+  const lanStatus = document.getElementById('paste-lan-status');
+  if(lanStatus){ lanStatus.style.display = 'block'; lanStatus.textContent = 'Saving to LAN Sheet…'; }
+  try {
+    const res = await fetch('/tools/api/lan-sheet/add', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({entries})
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      if(lanStatus){ lanStatus.textContent = 'Failed: ' + (data.error || 'unknown error'); }
+      return;
+    }
+    if(lanStatus){ lanStatus.textContent = 'Saved to LAN Sheet: ' + data.total + ' entries (' + data.added + ' new, ' + data.updated + ' updated).'; }
+  } catch(e) {
+    if(lanStatus){ lanStatus.textContent = 'Request failed: ' + e; }
+  }
 }
 
 function getChecksHost(){
@@ -484,7 +527,7 @@ function renderDiscoveredTable(){
     return '<tr>'
       + '<td><input type="checkbox" class="discover-check" data-idx="' + index + '" ' + (row.selected ? 'checked' : '') + ' onchange="toggleDiscovered(' + index + ')"></td>'
       + '<td>' + (row.hostname ? escapeHtml(row.hostname) : '<span style="color:#6b7280">-</span>') + '</td>'
-      + '<td style="font-family:monospace">' + escapeHtml(row.ip || '') + '</td>'
+      + '<td style="font-family:monospace"><a href="http://' + escapeHtml(row.ip || '') + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">' + escapeHtml(row.ip || '') + '</a></td>'
       + '<td style="font-size:11px;color:#9ca3af">'
       + (row.mac ? '<div style="font-family:monospace">' + escapeHtml(row.mac) + '</div>' : '<div>-</div>')
       + (row.vendor ? '<div>' + escapeHtml(row.vendor) + '</div>' : '')
@@ -674,7 +717,7 @@ function renderIntakeResults(){
       + '<td><input type="checkbox" ' + checked + ' ' + disabled + ' onchange="toggleRow(' + index + ')"></td>'
       + '<td>' + escapeHtml(row.name || '') + '</td>'
       + '<td>' + escapeHtml(row.hostname || '') + '</td>'
-      + '<td style="font-family:monospace">' + escapeHtml(row.ip || '') + '</td>'
+      + '<td style="font-family:monospace"><a href="http://' + escapeHtml(row.ip || '') + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">' + escapeHtml(row.ip || '') + '</a></td>'
       + '<td style="font-family:monospace">' + escapeHtml(row.mac || row.mac_address || '') + '</td>'
       + '<td>' + escapeHtml(row.type || '') + '</td>'
       + '<td>' + escapeHtml(row.vlan || '') + '</td>'

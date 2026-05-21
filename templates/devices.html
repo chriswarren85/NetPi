@@ -35,6 +35,7 @@
     <span>Inventory Views</span>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" id="inventory-view-devices-tab" onclick="showInventoryView('devices')">Device List</button>
+      <button class="btn" id="inventory-view-lan-tab" onclick="showInventoryView('lan')">Project LAN Sheet</button>
       <button class="btn" id="inventory-view-topology-tab" onclick="showInventoryView('topology')">Network Topology</button>
     </div>
   </div>
@@ -76,7 +77,7 @@
         {% for d in devices %}
         <tr>
           <td>{{ d.name }}</td>
-          <td style="font-family:monospace">{{ d.ip }}</td>
+          <td style="font-family:monospace"><a href="http://{{ d.ip }}" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">{{ d.ip }}</a></td>
           <td style="font-family:monospace">{{ d.mac or d.mac_address or "—" }}</td>
           <td>{{ d.type }}</td>
           <td>{{ d.vlan or "" }}</td>
@@ -95,6 +96,44 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="panel" id="inventory-view-lan-panel" style="display:none">
+  <div class="panel-header">
+    <span>Project LAN Sheet</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="pushDeviceListToLanSheet()">Sync from Device List</button>
+      <button class="btn" onclick="loadLanSheet()">Refresh</button>
+      <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
+    </div>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <div style="padding:10px 12px;border-bottom:1px solid #374151;background:#111111;font-size:12px;color:#6b7280">
+      The LAN Sheet is the committed project IP register. Devices missing from the live list are flagged.
+      Populate it by pasting from a spreadsheet (Device Intake) or syncing the current device list.
+    </div>
+    <div id="lan-sheet-status" style="display:none;padding:10px 12px;font-size:13px;color:#d1d5db;border-bottom:1px solid #374151"></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>IP</th>
+            <th>Type</th>
+            <th>VLAN</th>
+            <th>Vendor / Model</th>
+            <th>Room</th>
+            <th>Notes</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="lan-sheet-table">
+          <tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">Loading LAN sheet…</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -769,24 +808,15 @@ function renderDetectedSystems(data){
 }
 
 function showInventoryView(view){
-  activeInventoryView = view === 'topology' ? 'topology' : 'devices';
-  const devicesPanel = document.getElementById('inventory-view-devices-panel');
-  const topologyPanel = document.getElementById('inventory-view-topology-panel');
-  const devicesTab = document.getElementById('inventory-view-devices-tab');
-  const topologyTab = document.getElementById('inventory-view-topology-tab');
-
-  if(devicesPanel){
-    devicesPanel.style.display = activeInventoryView === 'devices' ? 'block' : 'none';
-  }
-  if(topologyPanel){
-    topologyPanel.style.display = activeInventoryView === 'topology' ? 'block' : 'none';
-  }
-  if(devicesTab){
-    devicesTab.className = activeInventoryView === 'devices' ? 'btn btn-primary' : 'btn';
-  }
-  if(topologyTab){
-    topologyTab.className = activeInventoryView === 'topology' ? 'btn btn-primary' : 'btn';
-  }
+  activeInventoryView = (view === 'topology' || view === 'lan') ? view : 'devices';
+  const views = ['devices', 'lan', 'topology'];
+  views.forEach(v => {
+    const panel = document.getElementById('inventory-view-' + v + '-panel');
+    const tab = document.getElementById('inventory-view-' + v + '-tab');
+    if(panel) panel.style.display = (activeInventoryView === v) ? 'block' : 'none';
+    if(tab) tab.className = (activeInventoryView === v) ? 'btn btn-primary' : 'btn';
+  });
+  if(activeInventoryView === 'lan') loadLanSheet();
 }
 
 function renderTopology(){
@@ -1525,7 +1555,7 @@ function renderTable(){
 
       tr.innerHTML =
         '<td>' + nameCellHtml + '</td>' +
-        '<td style="font-family:monospace;font-size:12px;color:#9ca3af">' + escapeHtml(d.ip) + '</td>' +
+        '<td style="font-family:monospace;font-size:12px;color:#9ca3af"><a href="http://' + escapeHtml(d.ip) + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">' + escapeHtml(d.ip) + '</a></td>' +
         '<td style="font-family:monospace;font-size:12px;color:#d1d5db">' + (macText ? escapeHtml(macText) : '—') + (d.mac_conflict ? '<div style="margin-top:2px;font-size:10px;color:#d1d5db;font-family:inherit">Conflict</div>' : '') + '</td>' +
         '<td>' + typeCellHtml + '</td>' +
         '<td>' + escapeHtml(d.vlan || '') + '</td>' +
@@ -1841,6 +1871,96 @@ function showWorkflowStub(action){
     return;
   }
   alert('This workflow step is planned for a later stage.');
+}
+
+// ── LAN Sheet ─────────────────────────────────────────────────────────────────
+
+function showLanSheetStatus(msg, tone){
+  const el = document.getElementById('lan-sheet-status');
+  if(!el) return;
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg || '';
+  el.style.color = tone === 'error' ? '#e5e7eb' : '#d1d5db';
+  el.style.borderColor = tone === 'error' ? '#7f1d1d' : '#374151';
+}
+
+function loadLanSheet(){
+  const tbody = document.getElementById('lan-sheet-table');
+  if(!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">Loading…</td></tr>';
+  fetch('/tools/api/lan-sheet')
+    .then(r => r.json())
+    .then(data => {
+      if(!data.ok){ tbody.innerHTML = '<tr><td colspan="9" style="color:#e5e7eb;text-align:center;padding:1rem">Failed to load LAN sheet.</td></tr>'; return; }
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      if(!entries.length){
+        tbody.innerHTML = '<tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">No entries yet. Paste from Device Intake or sync from the Device List.</td></tr>';
+        return;
+      }
+      const missing = entries.filter(e => !e.present).length;
+      showLanSheetStatus(entries.length + ' entries · ' + (entries.length - missing) + ' present · ' + missing + ' missing', 'neutral');
+      tbody.innerHTML = entries.map(e => {
+        const ip = escapeHtml(e.ip || '');
+        const statusBg = e.present ? '#0d2015' : '#1a0d0d';
+        const statusColor = e.present ? '#86efac' : '#fca5a5';
+        const statusText = e.present ? 'Present' : 'Missing';
+        return '<tr style="opacity:' + (e.present ? '1' : '0.8') + '">'
+          + '<td style="color:#e5e7eb">' + escapeHtml(e.name || '') + '</td>'
+          + '<td style="font-family:monospace;font-size:12px"><a href="http://' + ip + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">' + ip + '</a></td>'
+          + '<td style="color:#9ca3af">' + escapeHtml(e.type || '') + '</td>'
+          + '<td style="color:#9ca3af">' + escapeHtml(e.vlan || '') + '</td>'
+          + '<td style="color:#6b7280;font-size:12px">' + escapeHtml([e.vendor, e.model].filter(Boolean).join(' / ') || '') + '</td>'
+          + '<td style="color:#6b7280">' + escapeHtml(e.room || '') + '</td>'
+          + '<td style="color:#6b7280;font-size:12px">' + escapeHtml(e.notes || '') + '</td>'
+          + '<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:' + statusBg + ';color:' + statusColor + '">' + statusText + '</span></td>'
+          + '<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px" onclick="removeLanEntry(\'' + ip.replace(/'/g, "\\'") + '\')">Remove</button></td>'
+          + '</tr>';
+      }).join('');
+    })
+    .catch(() => {
+      if(tbody) tbody.innerHTML = '<tr><td colspan="9" style="color:#e5e7eb;text-align:center;padding:1rem">Request failed.</td></tr>';
+    });
+}
+
+function removeLanEntry(ip){
+  fetch('/tools/api/lan-sheet/remove', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ip})
+  }).then(r => r.json()).then(d => {
+    if(d.ok) loadLanSheet();
+    else showLanSheetStatus('Remove failed: ' + (d.error || '?'), 'error');
+  }).catch(() => showLanSheetStatus('Request failed', 'error'));
+}
+
+function pushDeviceListToLanSheet(){
+  if(!deviceList.length){
+    showLanSheetStatus('Device list is empty — nothing to sync.', 'error');
+    return;
+  }
+  const entries = deviceList.map(d => ({
+    name: d.name || '',
+    ip: d.ip || '',
+    mac: d.mac || d.mac_address || '',
+    type: d.type || '',
+    vlan: d.vlan || '',
+    vendor: d.vendor || '',
+    model: d.model || '',
+    room: d.room || '',
+    notes: d.notes || '',
+  })).filter(e => e.ip);
+  fetch('/tools/api/lan-sheet/add', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({entries})
+  }).then(r => r.json()).then(d => {
+    if(d.ok){
+      showLanSheetStatus('Synced ' + d.total + ' devices to LAN Sheet (' + d.added + ' new, ' + d.updated + ' updated).', 'success');
+      loadLanSheet();
+    } else {
+      showLanSheetStatus('Sync failed: ' + (d.error || '?'), 'error');
+    }
+  }).catch(() => showLanSheetStatus('Request failed', 'error'));
 }
 
 function saveDevices(){

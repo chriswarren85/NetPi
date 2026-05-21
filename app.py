@@ -8508,6 +8508,123 @@ def api_devices_save():
     return jsonify({'success': True, 'devices': normalized_devices})
 
 
+# ── LAN Sheet ─────────────────────────────────────────────────────────────────
+
+def _lan_sheet_file():
+    return get_project_path("lan_sheet.json", ensure_parent=True)
+
+
+def _load_lan_sheet():
+    try:
+        data = json.loads(open(_lan_sheet_file(), encoding="utf-8").read())
+        entries = data.get("entries") if isinstance(data, dict) else data
+        return [e for e in (entries or []) if isinstance(e, dict)]
+    except Exception:
+        return []
+
+
+def _save_lan_sheet(entries):
+    safe_write_json(_lan_sheet_file(), {
+        "entries": entries,
+        "updated_at": utc_now_iso(),
+    })
+
+
+@app.route("/tools/api/lan-sheet", methods=["GET"])
+def api_lan_sheet_get():
+    entries = _load_lan_sheet()
+    live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
+    enriched = []
+    for e in entries:
+        row = dict(e)
+        ip = str(row.get("ip") or "").strip()
+        row["present"] = ip in live_ips if ip else False
+        enriched.append(row)
+    return jsonify({"ok": True, "entries": enriched, "live_count": len(live_ips)})
+
+
+@app.route("/tools/api/lan-sheet/save", methods=["POST"])
+def api_lan_sheet_save():
+    payload = request.get_json(force=True, silent=True) or {}
+    entries = payload.get("entries") if isinstance(payload, dict) else []
+    if not isinstance(entries, list):
+        return jsonify({"ok": False, "error": "entries must be a list"}), 400
+    cleaned = []
+    seen_ips = set()
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        ip = str(e.get("ip") or "").strip()
+        if not ip or ip in seen_ips:
+            continue
+        seen_ips.add(ip)
+        row = {
+            "name": str(e.get("name") or ""),
+            "ip": ip,
+            "mac": str(e.get("mac") or e.get("mac_address") or ""),
+            "type": str(e.get("type") or ""),
+            "vlan": str(e.get("vlan") or ""),
+            "vendor": str(e.get("vendor") or ""),
+            "model": str(e.get("model") or ""),
+            "room": str(e.get("room") or ""),
+            "notes": str(e.get("notes") or ""),
+            "added_at": str(e.get("added_at") or utc_now_iso()),
+        }
+        cleaned.append(row)
+    _save_lan_sheet(cleaned)
+    return jsonify({"ok": True, "count": len(cleaned)})
+
+
+@app.route("/tools/api/lan-sheet/add", methods=["POST"])
+def api_lan_sheet_add():
+    payload = request.get_json(force=True, silent=True) or {}
+    incoming = payload.get("entries") if isinstance(payload, dict) else []
+    if not isinstance(incoming, list):
+        return jsonify({"ok": False, "error": "entries must be a list"}), 400
+    existing = _load_lan_sheet()
+    by_ip = {str(e.get("ip") or "").strip(): e for e in existing}
+    added = 0
+    updated = 0
+    for e in incoming:
+        if not isinstance(e, dict):
+            continue
+        ip = str(e.get("ip") or "").strip()
+        if not ip:
+            continue
+        row = {
+            "name": str(e.get("name") or ""),
+            "ip": ip,
+            "mac": str(e.get("mac") or e.get("mac_address") or ""),
+            "type": str(e.get("type") or ""),
+            "vlan": str(e.get("vlan") or ""),
+            "vendor": str(e.get("vendor") or ""),
+            "model": str(e.get("model") or ""),
+            "room": str(e.get("room") or ""),
+            "notes": str(e.get("notes") or ""),
+            "added_at": str(e.get("added_at") or by_ip.get(ip, {}).get("added_at") or utc_now_iso()),
+        }
+        if ip in by_ip:
+            by_ip[ip] = row
+            updated += 1
+        else:
+            by_ip[ip] = row
+            added += 1
+    merged = list(by_ip.values())
+    _save_lan_sheet(merged)
+    return jsonify({"ok": True, "added": added, "updated": updated, "total": len(merged)})
+
+
+@app.route("/tools/api/lan-sheet/remove", methods=["POST"])
+def api_lan_sheet_remove():
+    payload = request.get_json(force=True, silent=True) or {}
+    ip = str((payload.get("ip") or "") if isinstance(payload, dict) else "").strip()
+    if not ip:
+        return jsonify({"ok": False, "error": "ip required"}), 400
+    entries = [e for e in _load_lan_sheet() if str(e.get("ip") or "").strip() != ip]
+    _save_lan_sheet(entries)
+    return jsonify({"ok": True, "total": len(entries)})
+
+
 @app.route('/tools/api/scan', methods=['POST'])
 def api_scan():
     subnet = request.json.get('subnet')
