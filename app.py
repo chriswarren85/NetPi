@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify, redirect, send_file
 import json, os, subprocess, csv, sys
-from datetime import datetime
+from datetime import datetime, timezone
 import copy
 import socket
 import platform
@@ -260,7 +260,7 @@ def _save_current_project_state(project_id):
     os.makedirs(DATA_DIR, exist_ok=True)
     payload = {
         "active_project_id": project_id,
-        "updated_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "updated_at": datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0).isoformat() + "Z",
     }
     temp_path = CURRENT_PROJECT_STATE_FILE + ".tmp"
     with open(temp_path, "w", encoding="utf-8") as handle:
@@ -526,7 +526,7 @@ def resolve_subnet(settings):
 
 
 def utc_now_iso():
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    return datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0).isoformat() + "Z"
 
 
 def resolve_selected_subnet(settings, selected_vlan=""):
@@ -3307,7 +3307,7 @@ def _derive_device_freshness(device):
     age_days = None
 
     if evidence_dt:
-        age_seconds = max(0, (datetime.utcnow() - evidence_dt.replace(tzinfo=None)).total_seconds())
+        age_seconds = max(0, (datetime.now(timezone.utc).replace(tzinfo=None) - evidence_dt.replace(tzinfo=None)).total_seconds())
         age_days = int(age_seconds // 86400)
         if evidence_source == "first_seen":
             if age_seconds <= 30 * 86400:
@@ -3574,7 +3574,7 @@ def _stale_sweep():
         devices = load_devices()
         stale_list = []
         aging_count = 0
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         for device in devices:
             freshness = _derive_device_freshness(device)
             label = freshness.get("freshness_label", "unknown")
@@ -4460,7 +4460,7 @@ def _build_fingerprint_entry(device, result, av_role=None):
         "services": copy.deepcopy(evidence.get("services") or []),
         "fingerprint": copy.deepcopy(result.get("fingerprint") or evidence.get("fingerprint") or {}),
         "evidence": evidence,
-        "last_seen": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "last_seen": datetime.now(timezone.utc).replace(tzinfo=None).replace(microsecond=0).isoformat() + "Z",
     }
 
 
@@ -4592,7 +4592,7 @@ def _create_pre_restore_backup():
     backup_root = get_project_path(PROJECT_BACKUPS_DIRNAME, ensure_parent=True)
     os.makedirs(backup_root, exist_ok=True)
 
-    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%dT%H%M%SZ")
     backup_name = f"netpi_pre_restore_{timestamp}.avp"
     backup_path = os.path.join(backup_root, backup_name)
 
@@ -6562,7 +6562,7 @@ def api_project_name():
 
 
 def _export_filename(stem):
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%dT%H%M%SZ")
     project_id = safe_sheet_name(get_active_project_id()).replace(" ", "_")
     version = get_project_version()
     return f"netpi_{stem}_{project_id}_v{version}_{ts}.xlsx"
@@ -7326,7 +7326,7 @@ def api_project_snapshot():
         archive.writestr("manifest.json", json.dumps(manifest, indent=2))
 
     archive_io.seek(0)
-    filename = f"netpi_project_snapshot_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.avp"
+    filename = f"netpi_project_snapshot_{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%dT%H%M%SZ')}.avp"
     try:
         return send_file(
             archive_io,
@@ -8124,14 +8124,14 @@ def api_fingerprint_confirm():
                     "label": label,
                     "source": "operator-confirmed",
                     "device_id": device_id,
-                    "confirmed_at": datetime.utcnow().isoformat() + "Z",
+                    "confirmed_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
                     "rules": rules,
                     "min_score": 2,
                 })
 
         meta = patterns_data.get("_meta") or {}
         meta["confirmed_count"] = len(confirmed_list)
-        meta["last_improved"] = datetime.utcnow().isoformat() + "Z"
+        meta["last_improved"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         patterns_data["confirmed"] = confirmed_list
         patterns_data["_meta"] = meta
 
@@ -8170,7 +8170,7 @@ def api_fingerprint_reject():
         rejected_list.append({
             "device_id": device_id,
             "rejected_type": rejected_type,
-            "rejected_at": datetime.utcnow().isoformat() + "Z",
+            "rejected_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z",
         })
         patterns_data["rejected"] = rejected_list
 
