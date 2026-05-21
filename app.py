@@ -8965,9 +8965,6 @@ def api_dns_delete():
 # =========================
 
 HEADER_ALIASES = {
-    "area": {"area", "area/comm rack", "area / comm rack", "comm rack", "comm. rack",
-             "communications rack", "comms rack", "building area", "av zone", "area name",
-             "system area", "zone area"},
     "name": {"name", "device", "equipment", "device name", "device description",
              "short name", "tag", "asset tag", "label", "device tag", "device id"},
     "hostname": {"hostname", "host name", "dns name", "fqdn", "computer name",
@@ -8997,7 +8994,10 @@ HEADER_ALIASES = {
     "location": {"location", "install location", "device location",
                  "mounting location", "position", "install site"},
     "room": {"room", "room/zone", "room / zone", "zone", "space",
-             "room name", "room location", "room number", "room/location"},
+             "room name", "room location", "room number", "room/location",
+             "area", "area/comm rack", "area / comm rack", "comm rack", "comm. rack",
+             "communications rack", "comms rack", "building area", "av zone", "area name",
+             "system area", "zone area", "area/room", "area / room"},
     "switch_port": {"switch/port", "switch / port", "switch port", "port",
                     "connected port", "network port", "uplink port",
                     "connected switch", "switch connection", "wall plate",
@@ -9207,9 +9207,9 @@ def _row_to_device_by_position(row):
             if v and not re.search(r'\bvlan\b', v, re.I) and not _valid_ip(v) and not _looks_like_mac(v):
                 out["model"] = v; used.add(i); break
 
-    # ── Step 5: fill remaining pre-IP slots: area → room → location → type ─
+    # ── Step 5: fill remaining pre-IP slots: room → location → type ────────
     pre_ip_unused = [i for i in range(ip_col) if i not in used and vals[i]]
-    for slot, i in zip(["area", "room", "location", "type"], pre_ip_unused):
+    for slot, i in zip(["room", "location", "type"], pre_ip_unused):
         if not out[slot]:
             out[slot] = vals[i]; used.add(i)
 
@@ -9221,8 +9221,8 @@ def _row_to_device_by_position(row):
             out["vendor"] = v; used.add(i)
         elif not out["model"] and not _valid_ip(v) and not _looks_like_mac(v) and len(v) > 2 and len(v) < 40:
             out["model"] = v; used.add(i)
-        elif not out["rack_location"] and len(v) > 2:
-            out["rack_location"] = v; used.add(i)
+        elif not out["notes"] and len(v) > 2:
+            out["notes"] = v; used.add(i)
 
     return out
 

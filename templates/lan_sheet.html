@@ -179,8 +179,8 @@ function applyFilters(){
     if(status === 'present' && !e.present) return false;
     if(status === 'missing' && e.present) return false;
     if(search){
-      const hay = [e.area, e.room, e.name, e.location, e.vendor, e.model, e.vlan, e.ip,
-                   e.hostname, e.mac, e.serial, e.switch_port, e.rack_location, e.notes].join(' ').toLowerCase();
+      const hay = [e.room, e.name, e.location, e.vendor, e.model, e.vlan, e.ip,
+                   e.hostname, e.mac, e.serial, e.switch_port, e.notes].join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
     }
     return true;
