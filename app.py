@@ -3635,6 +3635,9 @@ def _live_device_ips():
         ip = str(d.get("ip") or "").strip()
         if not ip:
             continue
+        # Must have an actual network observation — first_seen alone means manually added
+        if not (d.get("last_seen") or d.get("last_reachable")):
+            continue
         label = _derive_device_freshness(d).get("freshness_label", "unknown")
         if label in ("fresh", "aging"):
             live.add(ip)

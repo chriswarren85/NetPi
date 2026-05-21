@@ -36,7 +36,7 @@
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" id="inventory-view-devices-tab" onclick="showInventoryView('devices')">Device List</button>
       <button class="btn" id="inventory-view-intake-tab" onclick="showInventoryView('intake')">Intake</button>
-      <button class="btn" id="inventory-view-lan-tab" onclick="showInventoryView('lan')">Project LAN Sheet</button>
+      <a class="btn" href="/tools/lan-sheet">Project LAN Sheet</a>
       <button class="btn" id="inventory-view-topology-tab" onclick="showInventoryView('topology')">Network Topology</button>
     </div>
   </div>
@@ -55,8 +55,6 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="focusAddDevice()">Add Device</button>
         <button class="btn" onclick="focusImportDevices()">Paste Import</button>
-        <a class="btn" href="/tools/requirements">Requirements</a>
-        <a class="btn" href="/tools/validation">Validation</a>
       </div>
     </div>
     <table>
