@@ -109,6 +109,11 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   {% block content %}{% endblock %}
 </div>
 <div id="toast-container"></div>
+<button id="global-save-settings-btn"
+  onclick="var f=document.getElementById('settings-form');if(f){f.submit();}else{window.location.href='/tools/settings';}"
+  style="position:fixed;bottom:1.25rem;left:1.25rem;z-index:1000;padding:8px 16px;background:#374151;border:1px solid #4b5563;border-radius:6px;color:#fff;font-size:12px;font-weight:500;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4)">
+  Save settings
+</button>
 <script>
 window.showToast = function(message, type, duration) {
   type = type || 'info';
