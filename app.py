@@ -72,7 +72,10 @@ except Exception:
     SNMP_HLAPI_AVAILABLE = False
 
 app = Flask(__name__)
-BASE_DIR = os.path.dirname(__file__)
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DEFAULT_PROJECT_ID = "default"
 CURRENT_PROJECT_STATE_FILE = os.path.join(DATA_DIR, "current_project.json")
@@ -2601,6 +2604,8 @@ def save_settings(data):
     except Exception:
         pass
 
+    increment_project_version("settings_saved")
+
 
 def infer_vlan_from_ip(ip, settings=None):
     ip_text = (ip or "").strip()
@@ -3444,6 +3449,41 @@ def _apply_observed_mac(device, observed_mac, observed_source):
 def save_devices_file(devices):
     devices = normalize_devices_for_save(devices, settings=load_settings())
     safe_write_json(_devices_file(), {"devices": devices})
+    increment_project_version("devices_saved")
+
+
+# ── W17.2  Project version counter ───────────────────────────────────────────
+
+_VERSION_LOCK = threading.Lock()
+_VERSION_MAX_HISTORY = 50
+
+
+def _version_file():
+    return get_project_path("version.json", ensure_parent=True)
+
+
+def get_project_version():
+    try:
+        data = json.loads(open(_version_file(), encoding="utf-8").read())
+        return int(data.get("version", 0))
+    except Exception:
+        return 0
+
+
+def increment_project_version(action_label="updated"):
+    with _VERSION_LOCK:
+        path = _version_file()
+        try:
+            data = json.loads(open(path, encoding="utf-8").read())
+        except Exception:
+            data = {"version": 0, "history": []}
+        version = int(data.get("version", 0)) + 1
+        history = data.get("history") or []
+        history.append({"version": version, "action": action_label, "at": utc_now_iso()})
+        if len(history) > _VERSION_MAX_HISTORY:
+            history = history[-_VERSION_MAX_HISTORY:]
+        safe_write_json(path, {"version": version, "history": history})
+        return version
 
 
 # ── W11.2  Append-only audit log ─────────────────────────────────────────────
@@ -6480,7 +6520,8 @@ def api_project_name():
 def _export_filename(stem):
     ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
     project_id = safe_sheet_name(get_active_project_id()).replace(" ", "_")
-    return f"netpi_{stem}_{project_id}_{ts}.xlsx"
+    version = get_project_version()
+    return f"netpi_{stem}_{project_id}_v{version}_{ts}.xlsx"
 
 
 def _build_ip_schedule_rows(devices, settings):
@@ -7115,7 +7156,7 @@ def api_projects_list():
 
 @app.route("/tools/api/projects/create", methods=["POST"])
 def api_projects_create():
-    payload = request.get_json(silent=True) if request.is_json else {}
+    payload = request.get_json(force=True, silent=True) or {}
     payload = payload if isinstance(payload, dict) else {}
     project_id = (
         payload.get("project_id")
@@ -7125,9 +7166,10 @@ def api_projects_create():
     )
     normalized = _sanitize_project_id(project_id)
     if not normalized:
+        received = project_id[:80] if project_id else "(empty)"
         return jsonify({
             "ok": False,
-            "error": "Invalid project_id. Use letters, numbers, dot, underscore, or dash.",
+            "error": f"Invalid project_id '{received}'. Use letters, numbers, dot, underscore, or dash. Must start with a letter or digit.",
         }), 400
     if _is_reserved_or_internal_project_id(normalized):
         return jsonify({
@@ -7178,6 +7220,23 @@ def api_projects_switch():
         "active_project_id": active,
         "projects": _list_project_ids(),
     })
+
+
+@app.route("/tools/api/project/version", methods=["GET"])
+def api_project_version():
+    path = _version_file()
+    try:
+        data = json.loads(open(path, encoding="utf-8").read())
+    except Exception:
+        data = {"version": 0, "history": []}
+    return jsonify({
+        "ok": True,
+        "project_id": get_active_project_id(),
+        "version": data.get("version", 0),
+        "history": (data.get("history") or [])[-20:],
+    })
+
+
 @app.route("/tools/api/project/snapshot", methods=["GET"])
 def api_project_snapshot():
     files, missing_optional, notes = _collect_snapshot_files()
