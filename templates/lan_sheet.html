@@ -41,7 +41,13 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Room</label>
+        <label>Area</label>
+        <select id="f-area" onchange="applyFilters()">
+          <option value="">All Areas</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Room / Zone</label>
         <select id="f-room" onchange="applyFilters()">
           <option value="">All Rooms</option>
         </select>
@@ -63,27 +69,34 @@
     <span id="table-count" style="font-size:13px;color:#9ca3af"></span>
     <div style="display:flex;align-items:center;gap:14px">
       <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:12px;color:#9ca3af;cursor:pointer;margin:0">
-        <input type="checkbox" id="group-by-room" onchange="renderSheet()" checked> Group by room
+        <input type="checkbox" id="group-by-room" onchange="renderSheet()" checked> Group by Area / Room
       </label>
     </div>
   </div>
   <div class="panel-body" style="padding:0;overflow-x:auto">
-    <table id="lan-table" style="min-width:900px">
+    <table id="lan-table" style="min-width:1600px;font-size:11px">
       <thead>
         <tr>
-          <th class="sortable" onclick="setSort('name')" style="cursor:pointer;white-space:nowrap">Name <span id="si-name" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('ip')" style="cursor:pointer;white-space:nowrap">IP <span id="si-ip" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('type')" style="cursor:pointer;white-space:nowrap">Type <span id="si-type" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('area')" style="cursor:pointer;white-space:nowrap">Area / Comm Rack <span id="si-area" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('room')" style="cursor:pointer;white-space:nowrap">Room / Zone <span id="si-room" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('name')" style="cursor:pointer;white-space:nowrap">Device <span id="si-name" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('location')" style="cursor:pointer;white-space:nowrap">Location <span id="si-location" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('vendor')" style="cursor:pointer;white-space:nowrap">Make / Model <span id="si-vendor" style="color:#6b7280"></span></th>
           <th class="sortable" onclick="setSort('vlan')" style="cursor:pointer;white-space:nowrap">VLAN <span id="si-vlan" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('vendor')" style="cursor:pointer;white-space:nowrap">Vendor / Model <span id="si-vendor" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('room')" style="cursor:pointer;white-space:nowrap">Room <span id="si-room" style="color:#6b7280"></span></th>
-          <th>Notes</th>
+          <th class="sortable" onclick="setSort('ip')" style="cursor:pointer;white-space:nowrap">IP / Subnet / GW <span id="si-ip" style="color:#6b7280"></span></th>
+          <th>Multicast</th>
+          <th class="sortable" onclick="setSort('hostname')" style="cursor:pointer;white-space:nowrap">Hostname <span id="si-hostname" style="color:#6b7280"></span></th>
+          <th>MAC Address</th>
+          <th>Serial No.</th>
+          <th class="sortable" onclick="setSort('switch_port')" style="cursor:pointer;white-space:nowrap">Switch / Port <span id="si-switch_port" style="color:#6b7280"></span></th>
+          <th>PoE Type</th>
+          <th>Rack / Location Detail</th>
           <th class="sortable" onclick="setSort('status')" style="cursor:pointer;white-space:nowrap">Status <span id="si-status" style="color:#6b7280"></span></th>
           <th></th>
         </tr>
       </thead>
       <tbody id="lan-tbody">
-        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1.5rem">Loading…</td></tr>
+        <tr><td colspan="16" style="color:#6b7280;text-align:center;padding:1.5rem">Loading…</td></tr>
       </tbody>
     </table>
   </div>
@@ -155,30 +168,29 @@ function sortEntries(entries){
 }
 
 function updateSortIndicators(){
-  ['name','ip','type','vlan','vendor','room','status'].forEach(col => {
+  ['area','room','name','location','vendor','vlan','ip','hostname','switch_port','status'].forEach(col => {
     const el = document.getElementById('si-' + col);
     if(!el) return;
-    if(sortState.col === col){
-      el.textContent = sortState.dir === 'asc' ? '▲' : '▼';
-    } else {
-      el.textContent = '';
-    }
+    el.textContent = sortState.col === col ? (sortState.dir === 'asc' ? '▲' : '▼') : '';
   });
 }
 
 function applyFilters(){
   const search = String(document.getElementById('f-search').value || '').toLowerCase().trim();
   const vlan = document.getElementById('f-vlan').value || '';
+  const area = (document.getElementById('f-area') || {}).value || '';
   const room = document.getElementById('f-room').value || '';
   const status = document.getElementById('f-status').value || '';
 
   filtered = lanEntries.filter(e => {
     if(vlan && e.vlan !== vlan) return false;
+    if(area && e.area !== area) return false;
     if(room && e.room !== room) return false;
     if(status === 'present' && !e.present) return false;
     if(status === 'missing' && e.present) return false;
     if(search){
-      const hay = [e.name, e.ip, e.type, e.vlan, e.vendor, e.model, e.room, e.notes].join(' ').toLowerCase();
+      const hay = [e.area, e.room, e.name, e.location, e.vendor, e.model, e.vlan, e.ip,
+                   e.hostname, e.mac, e.serial, e.switch_port, e.rack_location, e.notes].join(' ').toLowerCase();
       if(!hay.includes(search)) return false;
     }
     return true;
@@ -194,6 +206,14 @@ function populateRoomFilter(){
   sel.innerHTML = '<option value="">All Rooms</option>' + rooms.map(r =>
     `<option value="${escHtml(r)}"${r === cur ? ' selected' : ''}>${escHtml(r)}</option>`
   ).join('');
+  const areas = [...new Set(lanEntries.map(e => e.area).filter(Boolean))].sort();
+  const asel = document.getElementById('f-area');
+  if(asel){
+    const acur = asel.value;
+    asel.innerHTML = '<option value="">All Areas</option>' + areas.map(a =>
+      `<option value="${escHtml(a)}"${a === acur ? ' selected' : ''}>${escHtml(a)}</option>`
+    ).join('');
+  }
 }
 
 function populateVlanFilter(){
@@ -237,25 +257,52 @@ function updateStats(){
   el.innerHTML = html;
 }
 
+function editCell(ip, field){
+  return `<span class="editable-cell" data-ip="${ip}" data-field="${field}" title="Click to edit" style="cursor:pointer;min-width:30px;display:inline-block;color:#9ca3af">`
+    + '</span>';
+}
+
 function buildEntryRow(e){
   const ip = escHtml(e.ip || '');
+  const rawIp = e.ip || '';
   const statusBg = e.present ? '#0d2015' : '#1a0d0d';
   const statusColor = e.present ? '#86efac' : '#fca5a5';
+
   const vlanHtml = e.vlan
     ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:#1a1a2e;color:#a5b4fc">${escHtml(e.vlan)}</span>`
-    : '<span style="color:#374151;font-size:11px">—</span>';
-  const vm = escHtml([e.vendor, e.model].filter(Boolean).join(' / '));
+    : '<span style="color:#374151">—</span>';
+
+  const vm = [e.vendor, e.model].filter(Boolean).join(' / ');
+
+  // IP / Subnet / GW stacked cell
+  const ipCell = `<a href="http://${ip}" target="_blank" rel="noopener" style="font-family:monospace;color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">${ip}</a>`
+    + (e.subnet ? `<div style="font-size:10px;color:#4b5563;font-family:monospace">${escHtml(e.subnet)}</div>` : '')
+    + (e.gateway ? `<div style="font-size:10px;color:#4b5563;font-family:monospace">GW: ${escHtml(e.gateway)}</div>` : '');
+
+  const cell = (val, field, opts) => {
+    const extra = opts || '';
+    const safe = escHtml(val || '');
+    if(!field) return `<td style="${extra}">${safe || '<span style="color:#374151">—</span>'}</td>`;
+    return `<td style="${extra}"><span class="editable-cell" data-ip="${ip}" data-field="${field}" title="Click to edit" style="cursor:pointer;min-width:30px;display:inline-block">${safe || '<span style="color:#374151">—</span>'}</span></td>`;
+  };
 
   return '<tr>'
-    + `<td style="font-size:12px;color:#e5e7eb;white-space:nowrap">${escHtml(e.name || '')}</td>`
-    + `<td style="font-family:monospace;font-size:12px;white-space:nowrap"><a href="http://${ip}" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">${ip}</a></td>`
-    + `<td style="font-size:12px;color:#9ca3af">${escHtml(e.type || '')}</td>`
+    + cell(e.area, 'area', 'white-space:nowrap')
+    + cell(e.room, 'room', 'white-space:nowrap')
+    + `<td style="white-space:nowrap;color:#e5e7eb;font-weight:500">${escHtml(e.name || '') || '<span style="color:#374151">—</span>'}</td>`
+    + cell(e.location, 'location')
+    + `<td style="max-width:160px;color:#9ca3af">${escHtml(vm) || '<span style="color:#374151">—</span>'}</td>`
     + `<td>${vlanHtml}</td>`
-    + `<td style="font-size:11px;color:#9ca3af;max-width:180px">${vm}</td>`
-    + `<td style="font-size:12px;color:#6b7280">${escHtml(e.room || '')}</td>`
-    + `<td><span class="editable-cell" data-ip="${ip}" data-field="notes" title="Click to edit notes" style="font-size:11px;color:#6b7280;cursor:pointer;min-width:60px;display:inline-block">${escHtml(e.notes || '') || '<span style="color:#374151">—</span>'}</span></td>`
+    + `<td style="white-space:nowrap">${ipCell}</td>`
+    + cell(e.multicast, 'multicast', 'font-family:monospace;font-size:11px;color:#6b7280')
+    + cell(e.hostname, 'hostname', 'font-family:monospace;font-size:11px;color:#6b7280')
+    + `<td style="font-family:monospace;font-size:11px;color:#4b5563">${escHtml(e.mac || '') || '<span style="color:#374151">—</span>'}</td>`
+    + cell(e.serial, 'serial', 'font-family:monospace;font-size:11px;color:#6b7280')
+    + cell(e.switch_port, 'switch_port', 'font-family:monospace;font-size:11px;color:#6b7280')
+    + cell(e.poe_type, 'poe_type', 'font-size:11px;color:#6b7280')
+    + cell(e.rack_location, 'rack_location', 'font-size:11px;color:#6b7280')
     + `<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present ? 'Present' : 'Missing'}</span></td>`
-    + `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${ip.replace(/'/g,"\\'")}')">Remove</button></td>`
+    + `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${rawIp.replace(/'/g,"\\'")}')">Remove</button></td>`
     + '</tr>';
 }
 
@@ -269,7 +316,7 @@ function renderSheet(){
     (filtered.length < lanEntries.length ? ' (filtered from ' + lanEntries.length + ')' : '');
 
   if(!filtered.length){
-    tbody.innerHTML = '<tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1.5rem">' +
+    tbody.innerHTML = '<tr><td colspan="16" style="color:#4b5563;text-align:center;padding:1.5rem">' +
       (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet. Paste from Device Intake or sync from Device List.') +
       '</td></tr>';
     return;
@@ -278,28 +325,37 @@ function renderSheet(){
   const sorted = sortEntries(filtered);
 
   if(groupByRoom){
-    const groups = {};
-    const ORDER = [];
+    // Two-level grouping: Area → Room
+    const areaOrder = [], areaGroups = {};
     sorted.forEach(e => {
+      const a = e.area || '(No area)';
       const r = e.room || '(No room)';
-      if(!groups[r]){ groups[r] = []; ORDER.push(r); }
-      groups[r].push(e);
+      const key = a + '\x00' + r;
+      if(!areaGroups[a]){ areaGroups[a] = {}; areaOrder.push(a); }
+      if(!areaGroups[a][r]) areaGroups[a][r] = [];
+      areaGroups[a][r].push(e);
     });
 
     let html = '';
-    ORDER.forEach(room => {
-      const devs = groups[room];
-      const missing = devs.filter(d => !d.present).length;
-      const missingSpan = missing > 0
-        ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${missing} missing)</span>`
-        : '';
-      html += `<tr style="background:#111;border-top:2px solid #374151">
-        <td colspan="9" style="padding:8px 12px;font-weight:700;color:#e5e7eb;font-size:11px;letter-spacing:.06em;text-transform:uppercase">
-          ${escHtml(room)}
-          <span style="color:#6b7280;font-weight:400">&nbsp;—&nbsp;${devs.length} device${devs.length !== 1 ? 's' : ''}</span>
-          ${missingSpan}
+    areaOrder.forEach(area => {
+      const rooms = areaGroups[area];
+      const areaDevs = Object.values(rooms).flat();
+      const areaMissing = areaDevs.filter(d => !d.present).length;
+      const aMissing = areaMissing > 0 ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${areaMissing} missing)</span>` : '';
+      html += `<tr style="background:#0d0d0d;border-top:3px solid #4b5563">
+        <td colspan="16" style="padding:6px 12px;font-weight:700;color:#e5e7eb;font-size:12px;letter-spacing:.07em;text-transform:uppercase">
+          ${escHtml(area)} <span style="color:#6b7280;font-weight:400;font-size:11px">&nbsp;—&nbsp;${areaDevs.length} device${areaDevs.length!==1?'s':''}</span>${aMissing}
         </td></tr>`;
-      devs.forEach(e => { html += buildEntryRow(e); });
+      Object.keys(rooms).forEach(room => {
+        const devs = rooms[room];
+        const missing = devs.filter(d => !d.present).length;
+        const mSpan = missing > 0 ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${missing} missing)</span>` : '';
+        html += `<tr style="background:#111;border-top:1px solid #2e2e2e">
+          <td colspan="16" style="padding:5px 20px;font-weight:600;color:#9ca3af;font-size:11px;letter-spacing:.04em">
+            ${escHtml(room)} <span style="color:#4b5563;font-weight:400">&nbsp;·&nbsp;${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
+          </td></tr>`;
+        devs.forEach(e => { html += buildEntryRow(e); });
+      });
     });
     tbody.innerHTML = html;
   } else {

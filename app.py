@@ -8804,7 +8804,11 @@ def api_lan_sheet_patch_entry():
     ip = str((payload.get("ip") or "")).strip()
     field = str((payload.get("field") or "")).strip()
     value = str((payload.get("value") or "")).strip()
-    allowed = {"name", "type", "vlan", "vendor", "model", "room", "notes"}
+    allowed = {
+        "name", "type", "vlan", "vendor", "model", "room", "notes",
+        "area", "location", "hostname", "subnet", "gateway", "multicast",
+        "serial", "switch_port", "poe_type", "rack_location", "zone",
+    }
     if not ip or field not in allowed:
         return jsonify({"ok": False, "error": "ip and valid field required"}), 400
     entries = _load_lan_sheet()
@@ -8961,24 +8965,58 @@ def api_dns_delete():
 # =========================
 
 HEADER_ALIASES = {
-    "name": {"name", "device", "device name", "hostname", "host", "host name", "friendly name",
-             "device id", "id", "short name", "tag", "asset tag", "label", "device tag"},
-    "ip": {"ip", "ip address", "address", "ipv4", "ipv4 address", "ip addr", "management ip",
-           "primary ip", "ip address 1", "ip 1"},
-    "vlan": {"vlan", "vlan id", "network", "subnet", "vlan name", "network segment", "network name",
+    "area": {"area", "area/comm rack", "area / comm rack", "comm rack", "comm. rack",
+             "communications rack", "comms rack", "building area", "av zone", "area name",
+             "system area", "zone area"},
+    "name": {"name", "device", "equipment", "device name", "device description",
+             "short name", "tag", "asset tag", "label", "device tag", "device id"},
+    "hostname": {"hostname", "host name", "dns name", "fqdn", "computer name",
+                 "device hostname", "network name", "dhcp name"},
+    "ip": {"ip", "ip address", "address", "ipv4", "ipv4 address", "ip addr",
+           "management ip", "primary ip", "ip address 1", "ip 1", "static ip"},
+    "subnet": {"subnet", "subnet mask", "mask", "netmask", "network mask",
+               "cidr", "ip subnet", "network address", "ip/subnet"},
+    "gateway": {"gateway", "default gateway", "gw", "default gw", "router",
+                "next hop", "default route", "def gw"},
+    "vlan": {"vlan", "vlan id", "vlan name", "network segment", "network name",
              "vlan network", "av network", "audio network", "control network"},
-    "type": {"type", "device type", "role", "category", "class", "device description",
-             "classification", "device category", "equipment type", "description"},
-    "mac": {"mac", "mac address", "macaddr", "mac addr", "ethernet", "hw address", "hardware address"},
-    "vendor": {"vendor", "manufacturer", "make", "brand", "mfr", "supplier"},
-    "model": {"model", "device model", "model number", "model no", "part", "part number",
-              "part no", "product", "product model", "sku"},
-    "room": {"room", "location", "area", "zone", "space", "room name", "site", "floor",
-             "install location", "physical location", "room location"},
-    "notes": {"notes", "note", "comment", "comments", "remarks", "info"},
+    "multicast": {"multicast", "multicast address", "multicast ip", "mcast",
+                  "mcast address", "multicast addr", "mcast ip", "dante multicast",
+                  "audio multicast"},
+    "type": {"type", "device type", "role", "category", "class",
+             "classification", "device category", "equipment type"},
+    "vendor": {"vendor", "manufacturer", "make", "brand", "mfr", "supplier",
+               "manufacturer/make", "manufacturer / make"},
+    "model": {"model", "device model", "model number", "model no", "part",
+              "part number", "part no", "product", "product model", "sku",
+              "model/part no", "model / part no"},
+    "mac": {"mac", "mac address", "macaddr", "mac addr", "ethernet",
+            "hw address", "hardware address", "mac id", "mac addr."},
+    "serial": {"serial", "serial no", "serial no.", "serial number", "sn",
+               "s/n", "asset id", "asset number", "asset serial"},
+    "location": {"location", "install location", "device location",
+                 "mounting location", "position", "install site"},
+    "room": {"room", "room/zone", "room / zone", "zone", "space",
+             "room name", "room location", "room number", "room/location"},
+    "switch_port": {"switch/port", "switch / port", "switch port", "port",
+                    "connected port", "network port", "uplink port",
+                    "connected switch", "switch connection", "wall plate",
+                    "patch panel port", "network connection", "sw/port"},
+    "poe_type": {"poe", "poe type", "power", "power type", "poe standard",
+                 "power over ethernet", "poe+", "power source", "poe class"},
+    "rack_location": {"rack", "rack location", "rack/location detail",
+                      "rack / location detail", "rack detail", "rack unit",
+                      "rack position", "u position", "rack slot", "rack number",
+                      "mounting detail", "install detail", "ru", "rack u"},
+    "notes": {"notes", "note", "comment", "comments", "remarks", "info",
+              "additional info", "other"},
 }
 
-DEFAULT_COLUMN_ORDER = ["name", "ip", "vlan", "type", "mac", "vendor", "model", "room", "notes"]
+DEFAULT_COLUMN_ORDER = [
+    "area", "room", "name", "location", "vendor", "model", "vlan",
+    "ip", "subnet", "gateway", "multicast", "hostname", "mac",
+    "serial", "switch_port", "poe_type", "rack_location", "type", "notes"
+]
 
 # Short device-ID pattern: letters followed by dash/underscore and digits (e.g. dsp-01, amp-02, tp-01a)
 _DEVICE_ID_RE = re.compile(r'^[a-zA-Z]{1,8}[-_]\d{1,4}[a-zA-Z0-9\-_]{0,12}$')
@@ -9065,20 +9103,39 @@ def _looks_like_mac(value):
     )
 
 
+def _looks_like_subnet_mask(v):
+    return bool(re.match(r'^255\.\d+\.\d+\.\d+$', v))
+
+def _looks_like_cidr_subnet(v):
+    return bool(re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$', v))
+
+def _looks_like_multicast(v):
+    # AV multicast: 224-239.x.x.x
+    m = re.match(r'^(\d+)\.', v)
+    return bool(m and 224 <= int(m.group(1)) <= 239)
+
+def _looks_like_switch_port(v):
+    return bool(re.match(
+        r'^(Gi|Fa|Te|GE|TGe|Hu|Mg|eth|et|port[-\s]?)?\d+(/\d+)+$', v, re.I
+    ) or re.match(r'^(port|p)\s*\d+$', v, re.I))
+
+
 def _row_to_device_by_position(row):
     vals = [str(c).strip() for c in row]
-    out = {"name": "", "ip": "", "vlan": "", "type": "", "mac": "",
-           "vendor": "", "model": "", "room": "", "notes": ""}
+    out = {k: "" for k in DEFAULT_COLUMN_ORDER}
 
-    # Find IP column — scan all positions, take the first valid IP
+    # ── Step 1: anchor on device IP ───────────────────────────────────────
+    # Skip subnet masks, CIDR subnets, and multicast ranges when finding device IP
     ip_col = None
     for i, v in enumerate(vals):
-        if _valid_ip(v):
+        if (_valid_ip(v)
+                and not _looks_like_subnet_mask(v)
+                and not _looks_like_multicast(v)
+                and not _looks_like_cidr_subnet(v)):
             ip_col = i
             break
 
     if ip_col is None:
-        # No IP anywhere — fall back to default column order
         for i, key in enumerate(DEFAULT_COLUMN_ORDER):
             if i < len(vals):
                 out[key] = vals[i]
@@ -9087,76 +9144,85 @@ def _row_to_device_by_position(row):
     out["ip"] = vals[ip_col]
     used = {ip_col}
 
-    # Find MAC anywhere in the row
+    # ── Step 2: pattern-matched fields (order matters — most specific first) ──
+
+    # Subnet mask or CIDR
     for i, v in enumerate(vals):
-        if i in used:
-            continue
+        if i in used: continue
+        if _looks_like_subnet_mask(v) or _looks_like_cidr_subnet(v):
+            out["subnet"] = v; used.add(i); break
+
+    # Multicast address
+    for i, v in enumerate(vals):
+        if i in used: continue
+        if _looks_like_multicast(v):
+            out["multicast"] = v; used.add(i); break
+
+    # Gateway — next valid IP after device IP (not subnet, not multicast)
+    for i, v in enumerate(vals):
+        if i in used: continue
+        if (_valid_ip(v)
+                and not _looks_like_subnet_mask(v)
+                and not _looks_like_multicast(v)
+                and not _looks_like_cidr_subnet(v)):
+            out["gateway"] = v; used.add(i); break
+
+    # MAC address
+    for i, v in enumerate(vals):
+        if i in used: continue
         if _looks_like_mac(v):
-            out["mac"] = v
-            used.add(i)
-            break
+            out["mac"] = v; used.add(i); break
 
-    # Find VLAN column — any cell containing "vlan" keyword
+    # VLAN — cell containing "vlan" keyword or pure numeric VLAN ID after label
     for i, v in enumerate(vals):
-        if i in used:
-            continue
+        if i in used: continue
         if re.search(r'\bvlan\b', v, re.I):
-            out["vlan"] = _clean_vlan_text(v)
-            used.add(i)
-            break
+            out["vlan"] = _clean_vlan_text(v); used.add(i); break
 
-    # Look for device short-name (e.g. dsp-01, amp-02) in columns before IP
+    # Switch / port notation
+    for i, v in enumerate(vals):
+        if i in used: continue
+        if _looks_like_switch_port(v):
+            out["switch_port"] = v; used.add(i); break
+
+    # ── Step 3: named device ID before IP ─────────────────────────────────
     for i in range(ip_col):
-        if i in used:
-            continue
+        if i in used: continue
         v = vals[i]
         if _DEVICE_ID_RE.match(v) and len(v) <= 24:
-            out["name"] = v
-            used.add(i)
-            break
+            out["name"] = v; used.add(i); break
 
-    # Look for vendor name in columns before IP (check against known list)
+    # ── Step 4: vendor + adjacent model ───────────────────────────────────
     vendor_col = None
-    for i in range(ip_col):
-        if i in used:
-            continue
+    for i in range(len(vals)):
+        if i in used: continue
         v = vals[i]
         if v.lower() in _KNOWN_VENDORS:
-            out["vendor"] = v
-            used.add(i)
-            vendor_col = i
-            break
+            out["vendor"] = v; used.add(i); vendor_col = i; break
 
-    # Column immediately after vendor (and before IP) is likely the model
     if vendor_col is not None:
-        for i in range(vendor_col + 1, ip_col):
-            if i in used:
-                continue
+        for i in range(vendor_col + 1, len(vals)):
+            if i in used: continue
             v = vals[i]
-            # Skip if it looks like a duplicate location or VLAN
-            if v and not re.search(r'\bvlan\b', v, re.I) and not _valid_ip(v):
-                out["model"] = v
-                used.add(i)
-                break
+            if v and not re.search(r'\bvlan\b', v, re.I) and not _valid_ip(v) and not _looks_like_mac(v):
+                out["model"] = v; used.add(i); break
 
-    # Remaining pre-IP columns: first unused → room, second → type/description
-    pre_ip_unused = [i for i in range(ip_col) if i not in used]
-    slot_map = ["room", "type"]
-    for slot, i in zip(slot_map, pre_ip_unused):
+    # ── Step 5: fill remaining pre-IP slots: area → room → location → type ─
+    pre_ip_unused = [i for i in range(ip_col) if i not in used and vals[i]]
+    for slot, i in zip(["area", "room", "location", "type"], pre_ip_unused):
         if not out[slot]:
-            out[slot] = vals[i]
-            used.add(i)
+            out[slot] = vals[i]; used.add(i)
 
-    # Post-IP columns: look for vendor/model if not already set
+    # ── Step 6: post-IP leftovers → vendor/model/rack_location/notes ──────
     post_ip_unused = [i for i in range(ip_col + 1, len(vals)) if i not in used and vals[i]]
     for i in post_ip_unused:
         v = vals[i]
         if not out["vendor"] and v.lower() in _KNOWN_VENDORS:
-            out["vendor"] = v
-            used.add(i)
-        elif not out["model"] and not _valid_ip(v) and not _looks_like_mac(v) and len(v) > 2:
-            out["model"] = v
-            used.add(i)
+            out["vendor"] = v; used.add(i)
+        elif not out["model"] and not _valid_ip(v) and not _looks_like_mac(v) and len(v) > 2 and len(v) < 40:
+            out["model"] = v; used.add(i)
+        elif not out["rack_location"] and len(v) > 2:
+            out["rack_location"] = v; used.add(i)
 
     return out
 
