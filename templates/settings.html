@@ -4,7 +4,7 @@
 <div class="page-title">Settings</div>
 <div class="page-sub">Global project configuration — all tools use these settings</div>
 <div id="success" class="success-msg">Settings saved successfully.</div>
-<form method="POST" action="/tools/settings">
+<form id="settings-form" method="POST" action="/tools/settings">
   <div class="panel">
     <div class="panel-header">Project info</div>
     <div class="panel-body">
@@ -142,6 +142,11 @@
   </div>
   <button type="submit" class="btn btn-primary">Save settings</button>
 </form>
+
+<button type="button" onclick="document.getElementById('settings-form').submit()"
+  style="position:fixed;bottom:1.25rem;left:1.25rem;z-index:1000;padding:8px 16px;background:#374151;border:1px solid #4b5563;border-radius:6px;color:#fff;font-size:12px;font-weight:500;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4)">
+  Save settings
+</button>
 
 <div class="panel" style="margin-top:1rem">
   <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center">
