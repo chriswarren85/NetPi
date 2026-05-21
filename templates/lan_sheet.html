@@ -1,0 +1,431 @@
+{% extends 'base.html' %}
+{% block title %}— LAN Sheet{% endblock %}
+{% block content %}
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+  <div>
+    <div class="page-title">Project LAN Sheet</div>
+    <div class="page-sub">Committed IP register · <span style="color:#6b7280">{{ project_id }}</span></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:4px">
+    <button class="btn btn-primary" onclick="syncFromDeviceList()">Sync from Device List</button>
+    <button class="btn" onclick="inferVlans()">Infer VLANs from IP</button>
+    <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
+    <a class="btn" href="/tools/devices">Device List</a>
+  </div>
+</div>
+
+<div id="sheet-status" style="display:none;font-size:13px;margin:10px 0;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
+
+<div class="panel">
+  <div class="panel-body" style="padding:10px 14px">
+    <div id="sheet-stats" style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;color:#9ca3af">Loading…</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Filter</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group" style="flex:2;min-width:180px">
+        <label>Search</label>
+        <input id="f-search" oninput="applyFilters()" placeholder="Name, IP, type, notes…">
+      </div>
+      <div class="form-group">
+        <label>VLAN</label>
+        <select id="f-vlan" onchange="applyFilters()">
+          <option value="">All VLANs</option>
+          {% for v in vlans %}
+          <option value="{{ v.name }}">{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Room</label>
+        <select id="f-room" onchange="applyFilters()">
+          <option value="">All Rooms</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="f-status" onchange="applyFilters()">
+          <option value="">All</option>
+          <option value="present">Present</option>
+          <option value="missing">Missing</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-header">
+    <span id="table-count" style="font-size:13px;color:#9ca3af"></span>
+    <div style="display:flex;align-items:center;gap:14px">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:12px;color:#9ca3af;cursor:pointer;margin:0">
+        <input type="checkbox" id="group-by-room" onchange="renderSheet()" checked> Group by room
+      </label>
+    </div>
+  </div>
+  <div class="panel-body" style="padding:0;overflow-x:auto">
+    <table id="lan-table" style="min-width:900px">
+      <thead>
+        <tr>
+          <th class="sortable" onclick="setSort('name')" style="cursor:pointer;white-space:nowrap">Name <span id="si-name" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('ip')" style="cursor:pointer;white-space:nowrap">IP <span id="si-ip" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('type')" style="cursor:pointer;white-space:nowrap">Type <span id="si-type" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('vlan')" style="cursor:pointer;white-space:nowrap">VLAN <span id="si-vlan" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('vendor')" style="cursor:pointer;white-space:nowrap">Vendor / Model <span id="si-vendor" style="color:#6b7280"></span></th>
+          <th class="sortable" onclick="setSort('room')" style="cursor:pointer;white-space:nowrap">Room <span id="si-room" style="color:#6b7280"></span></th>
+          <th>Notes</th>
+          <th class="sortable" onclick="setSort('status')" style="cursor:pointer;white-space:nowrap">Status <span id="si-status" style="color:#6b7280"></span></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="lan-tbody">
+        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1.5rem">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+let lanEntries = [];
+let filtered = [];
+let sortState = { col: 'room', dir: 'asc' };
+
+function escHtml(s){
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showStatus(msg, tone){
+  const el = document.getElementById('sheet-status');
+  if(!el) return;
+  el.style.display = msg ? 'block' : 'none';
+  el.textContent = msg || '';
+  el.style.borderColor = tone === 'error' ? '#7f1d1d' : '#374151';
+  el.style.color = tone === 'error' ? '#e5e7eb' : '#d1d5db';
+}
+
+function ipToNum(ip){
+  const p = (ip || '').split('.').map(Number);
+  return p.length === 4 ? p.reduce((a,v) => a*256+v, 0) : 0;
+}
+
+function setSort(col){
+  if(sortState.col === col){
+    sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortState.col = col;
+    sortState.dir = 'asc';
+  }
+  renderSheet();
+}
+
+function sortEntries(entries){
+  const { col, dir } = sortState;
+  return [...entries].sort((a, b) => {
+    let av, bv;
+    if(col === 'ip'){
+      av = ipToNum(a.ip); bv = ipToNum(b.ip);
+      return dir === 'asc' ? av - bv : bv - av;
+    }
+    if(col === 'status'){
+      // missing first when asc
+      av = a.present ? 1 : 0; bv = b.present ? 1 : 0;
+      return dir === 'asc' ? av - bv : bv - av;
+    }
+    if(col === 'vendor'){
+      av = [a.vendor, a.model].filter(Boolean).join(' ').toLowerCase();
+      bv = [b.vendor, b.model].filter(Boolean).join(' ').toLowerCase();
+    } else {
+      av = String(a[col] || '').toLowerCase();
+      bv = String(b[col] || '').toLowerCase();
+    }
+    if(av < bv) return dir === 'asc' ? -1 : 1;
+    if(av > bv) return dir === 'asc' ? 1 : -1;
+    // Secondary sort: room then name
+    const ra = String(a.room || '').toLowerCase();
+    const rb = String(b.room || '').toLowerCase();
+    if(ra < rb) return -1; if(ra > rb) return 1;
+    const na = String(a.name || '').toLowerCase();
+    const nb = String(b.name || '').toLowerCase();
+    return na < nb ? -1 : na > nb ? 1 : 0;
+  });
+}
+
+function updateSortIndicators(){
+  ['name','ip','type','vlan','vendor','room','status'].forEach(col => {
+    const el = document.getElementById('si-' + col);
+    if(!el) return;
+    if(sortState.col === col){
+      el.textContent = sortState.dir === 'asc' ? '▲' : '▼';
+    } else {
+      el.textContent = '';
+    }
+  });
+}
+
+function applyFilters(){
+  const search = String(document.getElementById('f-search').value || '').toLowerCase().trim();
+  const vlan = document.getElementById('f-vlan').value || '';
+  const room = document.getElementById('f-room').value || '';
+  const status = document.getElementById('f-status').value || '';
+
+  filtered = lanEntries.filter(e => {
+    if(vlan && e.vlan !== vlan) return false;
+    if(room && e.room !== room) return false;
+    if(status === 'present' && !e.present) return false;
+    if(status === 'missing' && e.present) return false;
+    if(search){
+      const hay = [e.name, e.ip, e.type, e.vlan, e.vendor, e.model, e.room, e.notes].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  renderSheet();
+}
+
+function populateRoomFilter(){
+  const rooms = [...new Set(lanEntries.map(e => e.room).filter(Boolean))].sort();
+  const sel = document.getElementById('f-room');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All Rooms</option>' + rooms.map(r =>
+    `<option value="${escHtml(r)}"${r === cur ? ' selected' : ''}>${escHtml(r)}</option>`
+  ).join('');
+}
+
+function populateVlanFilter(){
+  const dataVlans = [...new Set(lanEntries.map(e => e.vlan).filter(Boolean))].sort();
+  const sel = document.getElementById('f-vlan');
+  const cur = sel.value;
+  // Keep settings-based options but add any additional from data
+  const existing = new Set([...sel.options].map(o => o.value).filter(Boolean));
+  dataVlans.forEach(v => {
+    if(!existing.has(v)){
+      const opt = document.createElement('option');
+      opt.value = v; opt.textContent = v;
+      sel.appendChild(opt);
+    }
+  });
+  sel.value = cur;
+}
+
+function updateStats(){
+  const total = lanEntries.length;
+  const present = lanEntries.filter(e => e.present).length;
+  const missing = total - present;
+
+  // VLAN breakdown
+  const byVlan = {};
+  lanEntries.forEach(e => {
+    const v = e.vlan || '(no VLAN)';
+    byVlan[v] = (byVlan[v] || 0) + 1;
+  });
+
+  const el = document.getElementById('sheet-stats');
+  if(!el) return;
+
+  let html = `<span><strong style="color:#e5e7eb">${total}</strong> devices</span>`;
+  html += `<span style="color:#86efac"><strong>${present}</strong> present</span>`;
+  html += `<span style="color:#fca5a5"><strong>${missing}</strong> missing</span>`;
+  html += '<span style="color:#374151">|</span>';
+  Object.keys(byVlan).sort().forEach(v => {
+    html += `<span style="color:#a5b4fc">${escHtml(v)}: <strong>${byVlan[v]}</strong></span>`;
+  });
+  el.innerHTML = html;
+}
+
+function buildEntryRow(e){
+  const ip = escHtml(e.ip || '');
+  const statusBg = e.present ? '#0d2015' : '#1a0d0d';
+  const statusColor = e.present ? '#86efac' : '#fca5a5';
+  const vlanHtml = e.vlan
+    ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:#1a1a2e;color:#a5b4fc">${escHtml(e.vlan)}</span>`
+    : '<span style="color:#374151;font-size:11px">—</span>';
+  const vm = escHtml([e.vendor, e.model].filter(Boolean).join(' / '));
+
+  return '<tr>'
+    + `<td style="font-size:12px;color:#e5e7eb;white-space:nowrap">${escHtml(e.name || '')}</td>`
+    + `<td style="font-family:monospace;font-size:12px;white-space:nowrap"><a href="http://${ip}" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">${ip}</a></td>`
+    + `<td style="font-size:12px;color:#9ca3af">${escHtml(e.type || '')}</td>`
+    + `<td>${vlanHtml}</td>`
+    + `<td style="font-size:11px;color:#9ca3af;max-width:180px">${vm}</td>`
+    + `<td style="font-size:12px;color:#6b7280">${escHtml(e.room || '')}</td>`
+    + `<td><span class="editable-cell" data-ip="${ip}" data-field="notes" title="Click to edit notes" style="font-size:11px;color:#6b7280;cursor:pointer;min-width:60px;display:inline-block">${escHtml(e.notes || '') || '<span style="color:#374151">—</span>'}</span></td>`
+    + `<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present ? 'Present' : 'Missing'}</span></td>`
+    + `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${ip.replace(/'/g,"\\'")}')">Remove</button></td>`
+    + '</tr>';
+}
+
+function renderSheet(){
+  updateSortIndicators();
+  const tbody = document.getElementById('lan-tbody');
+  const groupByRoom = document.getElementById('group-by-room').checked;
+
+  document.getElementById('table-count').textContent =
+    filtered.length + ' device' + (filtered.length !== 1 ? 's' : '') +
+    (filtered.length < lanEntries.length ? ' (filtered from ' + lanEntries.length + ')' : '');
+
+  if(!filtered.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1.5rem">' +
+      (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet. Paste from Device Intake or sync from Device List.') +
+      '</td></tr>';
+    return;
+  }
+
+  const sorted = sortEntries(filtered);
+
+  if(groupByRoom){
+    const groups = {};
+    const ORDER = [];
+    sorted.forEach(e => {
+      const r = e.room || '(No room)';
+      if(!groups[r]){ groups[r] = []; ORDER.push(r); }
+      groups[r].push(e);
+    });
+
+    let html = '';
+    ORDER.forEach(room => {
+      const devs = groups[room];
+      const missing = devs.filter(d => !d.present).length;
+      const missingSpan = missing > 0
+        ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${missing} missing)</span>`
+        : '';
+      html += `<tr style="background:#111;border-top:2px solid #374151">
+        <td colspan="9" style="padding:8px 12px;font-weight:700;color:#e5e7eb;font-size:11px;letter-spacing:.06em;text-transform:uppercase">
+          ${escHtml(room)}
+          <span style="color:#6b7280;font-weight:400">&nbsp;—&nbsp;${devs.length} device${devs.length !== 1 ? 's' : ''}</span>
+          ${missingSpan}
+        </td></tr>`;
+      devs.forEach(e => { html += buildEntryRow(e); });
+    });
+    tbody.innerHTML = html;
+  } else {
+    tbody.innerHTML = sorted.map(e => buildEntryRow(e)).join('');
+  }
+}
+
+async function loadSheet(){
+  try {
+    const res = await fetch('/tools/api/lan-sheet');
+    const data = await res.json();
+    if(!data.ok){ showStatus('Failed to load LAN sheet.', 'error'); return; }
+    lanEntries = Array.isArray(data.entries) ? data.entries : [];
+    populateRoomFilter();
+    populateVlanFilter();
+    updateStats();
+    applyFilters();
+  } catch(e) {
+    showStatus('Request failed: ' + e, 'error');
+  }
+}
+
+function removeEntry(ip){
+  fetch('/tools/api/lan-sheet/remove', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ip})
+  }).then(r => r.json()).then(d => {
+    if(d.ok){
+      lanEntries = lanEntries.filter(e => e.ip !== ip);
+      populateRoomFilter();
+      populateVlanFilter();
+      updateStats();
+      applyFilters();
+    } else {
+      showStatus('Remove failed: ' + (d.error || '?'), 'error');
+    }
+  }).catch(() => showStatus('Request failed', 'error'));
+}
+
+async function syncFromDeviceList(){
+  showStatus('Syncing from device list…', 'neutral');
+  try {
+    const devRes = await fetch('/tools/api/devices');
+    const devData = await devRes.json();
+    const devices = Array.isArray(devData.devices) ? devData.devices : [];
+    if(!devices.length){ showStatus('Device list is empty.', 'error'); return; }
+    const entries = devices.filter(d => d.ip).map(d => ({
+      name: d.name || '', ip: d.ip || '', mac: d.mac || d.mac_address || '',
+      type: d.type || '', vlan: d.vlan || '', vendor: d.vendor || '',
+      model: d.model || '', room: d.room || '', notes: d.notes || '',
+    }));
+    const res = await fetch('/tools/api/lan-sheet/add', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({entries})
+    });
+    const data = await res.json();
+    if(data.ok){
+      showStatus('Synced ' + data.total + ' devices (' + data.added + ' new, ' + data.updated + ' updated).', 'neutral');
+      loadSheet();
+    } else {
+      showStatus('Sync failed: ' + (data.error || '?'), 'error');
+    }
+  } catch(e) {
+    showStatus('Request failed: ' + e, 'error');
+  }
+}
+
+async function inferVlans(){
+  showStatus('Inferring VLANs from IP addresses…', 'neutral');
+  try {
+    const res = await fetch('/tools/api/lan-sheet/infer-vlans', {method:'POST'});
+    const data = await res.json();
+    if(data.ok){
+      lanEntries = Array.isArray(data.entries) ? data.entries : [];
+      populateRoomFilter();
+      populateVlanFilter();
+      updateStats();
+      applyFilters();
+      showStatus('VLAN inference complete — ' + data.updated + ' of ' + data.total + ' entries updated.', 'neutral');
+    } else {
+      showStatus('Infer failed: ' + (data.error || '?'), 'error');
+    }
+  } catch(e) {
+    showStatus('Request failed: ' + e, 'error');
+  }
+}
+
+// Inline cell editing (Notes field)
+document.addEventListener('click', function(ev){
+  const cell = ev.target.closest('.editable-cell');
+  if(!cell) return;
+  const ip = cell.dataset.ip;
+  const field = cell.dataset.field;
+  if(!ip || !field) return;
+
+  const entry = lanEntries.find(e => e.ip === ip);
+  const current = entry ? (entry[field] || '') : '';
+
+  const input = document.createElement('input');
+  input.value = current;
+  input.style.cssText = 'background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:2px 6px;font-size:11px;color:#d1d5db;width:160px';
+  cell.innerHTML = '';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+
+  const save = () => {
+    const val = input.value.trim();
+    fetch('/tools/api/lan-sheet/entry', {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ip, field, value: val})
+    }).then(r => r.json()).then(d => {
+      if(d.ok && entry) entry[field] = val;
+      applyFilters();
+    }).catch(() => { applyFilters(); });
+  };
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => {
+    if(e.key === 'Enter'){ e.preventDefault(); input.blur(); }
+    if(e.key === 'Escape'){ input.removeEventListener('blur', save); applyFilters(); }
+  });
+});
+
+loadSheet();
+</script>
+{% endblock %}

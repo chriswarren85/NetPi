@@ -2625,25 +2625,53 @@ def infer_vlan_from_ip(ip, settings=None):
         if not isinstance(vlan, dict):
             continue
 
-        subnet = (vlan.get("subnet") or "").strip()
         name = (vlan.get("name") or "").strip()
-        if not subnet or not name:
+        if not name:
             continue
 
-        try:
-            network = ipaddress.ip_network(subnet, strict=False)
-        except Exception:
-            continue
+        # Try explicit CIDR subnet first
+        subnet = (vlan.get("subnet") or "").strip()
+        if subnet:
+            try:
+                if ip_obj in ipaddress.ip_network(subnet, strict=False):
+                    return name
+                continue
+            except Exception:
+                pass
 
-        if ip_obj in network:
-            return name
+        # Derive from gateway + subnet_mask
+        gateway = (vlan.get("gateway") or "").strip()
+        mask = (vlan.get("subnet_mask") or "").strip()
+        if gateway and mask:
+            try:
+                if ip_obj in ipaddress.ip_network(f"{gateway}/{mask}", strict=False):
+                    return name
+                continue
+            except Exception:
+                pass
+
+        # Gateway first-3-octet prefix match (e.g. gateway 10.122.10.1 → /24)
+        if gateway:
+            try:
+                gw_parts = gateway.split(".")
+                ip_parts = ip_text.split(".")
+                if len(gw_parts) == 4 and len(ip_parts) == 4 and gw_parts[:3] == ip_parts[:3]:
+                    return name
+            except Exception:
+                pass
 
     return ""
 
 
-def assign_inferred_vlan(device, settings=None):
+def assign_inferred_vlan(device, settings=None, force=False):
+    """Assign VLAN from IP inference. Preserves existing VLAN unless force=True."""
     item = dict(device or {})
-    item["vlan"] = infer_vlan_from_ip(item.get("ip"), settings=settings)
+    existing = (item.get("vlan") or "").strip()
+    if existing and not force:
+        return item
+    inferred = infer_vlan_from_ip(item.get("ip"), settings=settings)
+    if inferred or force:
+        item["vlan"] = inferred
     return item
 
 
@@ -8623,6 +8651,65 @@ def api_lan_sheet_remove():
     entries = [e for e in _load_lan_sheet() if str(e.get("ip") or "").strip() != ip]
     _save_lan_sheet(entries)
     return jsonify({"ok": True, "total": len(entries)})
+
+
+@app.route("/tools/api/lan-sheet/infer-vlans", methods=["POST"])
+def api_lan_sheet_infer_vlans():
+    settings = load_settings()
+    entries = _load_lan_sheet()
+    updated = 0
+    new_entries = []
+    for e in entries:
+        row = dict(e)
+        inferred = infer_vlan_from_ip(row.get("ip"), settings=settings)
+        if inferred and row.get("vlan") != inferred:
+            updated += 1
+        if inferred:
+            row["vlan"] = inferred
+        new_entries.append(row)
+    _save_lan_sheet(new_entries)
+    live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
+    enriched = [dict(e, present=(str(e.get("ip") or "").strip() in live_ips)) for e in new_entries]
+    return jsonify({"ok": True, "updated": updated, "total": len(new_entries), "entries": enriched})
+
+
+@app.route("/tools/api/lan-sheet/entry", methods=["PATCH"])
+def api_lan_sheet_patch_entry():
+    payload = request.get_json(force=True, silent=True) or {}
+    ip = str((payload.get("ip") or "")).strip()
+    field = str((payload.get("field") or "")).strip()
+    value = str((payload.get("value") or "")).strip()
+    allowed = {"name", "type", "vlan", "vendor", "model", "room", "notes"}
+    if not ip or field not in allowed:
+        return jsonify({"ok": False, "error": "ip and valid field required"}), 400
+    entries = _load_lan_sheet()
+    found = False
+    for e in entries:
+        if str(e.get("ip") or "").strip() == ip:
+            e[field] = value
+            found = True
+            break
+    if not found:
+        return jsonify({"ok": False, "error": "entry not found"}), 404
+    _save_lan_sheet(entries)
+    return jsonify({"ok": True})
+
+
+@app.route("/tools/api/devices", methods=["GET"])
+def api_devices_list_get():
+    return jsonify({"ok": True, "devices": load_devices()})
+
+
+@app.route("/tools/lan-sheet")
+def lan_sheet_page():
+    s = load_settings()
+    vlans = s.get("vlans") or []
+    return render_template(
+        "lan_sheet.html",
+        s=s,
+        vlans=vlans,
+        project_id=get_active_project_id(),
+    )
 
 
 @app.route('/tools/api/scan', methods=['POST'])
