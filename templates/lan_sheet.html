@@ -11,6 +11,7 @@
     <button class="btn" onclick="createVlanGroups()">Create VLAN Groups for Project</button>
     <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
     <a class="btn" href="/tools/devices">Device List</a>
+    <button class="btn btn-danger" onclick="clearLanSheet()">Clear LAN Sheet</button>
   </div>
 </div>
 
@@ -353,6 +354,30 @@ function removeEntry(ip){
       showStatus('Remove failed: ' + (d.error || '?'), 'error');
     }
   }).catch(() => showStatus('Request failed', 'error'));
+}
+
+async function clearLanSheet(){
+  if(!confirm('Clear the entire LAN Sheet? All ' + lanEntries.length + ' entries will be removed. This cannot be undone.')) return;
+  try {
+    const res = await fetch('/tools/api/lan-sheet/save', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({entries: []})
+    });
+    const data = await res.json();
+    if(data.ok){
+      lanEntries = [];
+      populateRoomFilter();
+      populateVlanFilter();
+      updateStats();
+      applyFilters();
+      showStatus('LAN Sheet cleared.', 'neutral');
+    } else {
+      showStatus('Clear failed: ' + (data.error || '?'), 'error');
+    }
+  } catch(e) {
+    showStatus('Request failed: ' + e, 'error');
+  }
 }
 
 async function syncFromDeviceList(){

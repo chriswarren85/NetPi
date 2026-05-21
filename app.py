@@ -3626,6 +3626,21 @@ def _devices_with_freshness_view(devices):
     return enriched
 
 
+def _live_device_ips():
+    """IPs of devices confirmed on the network (not manually-added only, not stale)."""
+    live = set()
+    for d in load_devices():
+        if not isinstance(d, dict):
+            continue
+        ip = str(d.get("ip") or "").strip()
+        if not ip:
+            continue
+        label = _derive_device_freshness(d).get("freshness_label", "unknown")
+        if label in ("fresh", "aging"):
+            live.add(ip)
+    return live
+
+
 def load_fingerprints():
     fingerprints_file = _fingerprints_file()
     if not os.path.exists(fingerprints_file):
@@ -7250,6 +7265,25 @@ def api_projects_switch():
     })
 
 
+@app.route("/tools/api/projects/delete", methods=["POST"])
+def api_projects_delete():
+    payload = request.get_json(force=True, silent=True) or {}
+    project_id = str((payload.get("project_id") or "") if isinstance(payload, dict) else "").strip()
+    normalized = _sanitize_project_id(project_id)
+    if not normalized:
+        return jsonify({"ok": False, "error": "Invalid project_id."}), 400
+    if _is_reserved_or_internal_project_id(normalized):
+        return jsonify({"ok": False, "error": f"Project '{normalized}' is reserved and cannot be deleted."}), 400
+    if normalized == get_active_project_id():
+        return jsonify({"ok": False, "error": "Cannot delete the active project. Switch to another project first."}), 400
+    project_path = _project_dir(normalized)
+    if not os.path.isdir(project_path):
+        return jsonify({"ok": False, "error": f"Project '{normalized}' not found."}), 404
+    import shutil as _shutil
+    _shutil.rmtree(project_path)
+    return jsonify({"ok": True, "deleted": normalized, "projects": _list_project_ids()})
+
+
 @app.route("/tools/api/project/version", methods=["GET"])
 def api_project_version():
     path = _version_file()
@@ -8561,7 +8595,7 @@ def _save_lan_sheet(entries):
 @app.route("/tools/api/lan-sheet", methods=["GET"])
 def api_lan_sheet_get():
     entries = _load_lan_sheet()
-    live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
+    live_ips = _live_device_ips()
     enriched = []
     for e in entries:
         row = dict(e)
@@ -8671,7 +8705,7 @@ def api_lan_sheet_infer_vlans():
             row["vlan"] = inferred
         new_entries.append(row)
     _save_lan_sheet(new_entries)
-    live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
+    live_ips = _live_device_ips()
     enriched = [dict(e, present=(str(e.get("ip") or "").strip() in live_ips)) for e in new_entries]
     return jsonify({"ok": True, "updated": updated, "total": len(new_entries), "entries": enriched})
 
@@ -8733,7 +8767,7 @@ def api_lan_sheet_create_vlan_groups():
     entries = [assign_inferred_vlan(e, settings=new_settings, force=False) for e in entries]
     _save_lan_sheet(entries)
 
-    live_ips = {str((d or {}).get("ip") or "").strip() for d in load_devices() if isinstance(d, dict)}
+    live_ips = _live_device_ips()
     enriched = [dict(e, present=(str(e.get("ip") or "").strip() in live_ips)) for e in entries]
     return jsonify({
         "ok": True,

@@ -65,6 +65,7 @@
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button type="button" class="btn" onclick="switchProjectFromSettings()">Switch Project</button>
         <button type="button" class="btn" onclick="createProjectFromSettings()">Create Project</button>
+        <button type="button" class="btn btn-danger" onclick="deleteProjectFromSettings()">Delete Project</button>
       </div>
       <div id="project-workspace-msg" style="margin-top:10px;font-size:12px;color:#9ca3af"></div>
     </div>
@@ -253,6 +254,29 @@
     }
     input.value = '';
     msg.textContent = `Project created: ${data.project_id}`;
+    loadProjectWorkspaceState();
+  }
+
+  async function deleteProjectFromSettings(){
+    const select = document.getElementById('settings-project-switcher');
+    const msg = document.getElementById('project-workspace-msg');
+    if(!select) return;
+    const project_id = String(select.value || '').trim();
+    if(!project_id){ msg.textContent = 'Select a project to delete.'; return; }
+    if(!confirm(`Delete project "${project_id}"? This will permanently remove all project data and cannot be undone.`)) return;
+    const res = await fetch('/tools/api/projects/delete', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({project_id})
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok){
+      msg.style.color = '#f87171';
+      msg.textContent = data.error || 'Failed to delete project';
+      setTimeout(() => { msg.style.color = ''; }, 5000);
+      return;
+    }
+    msg.textContent = `Deleted: ${data.deleted}`;
     loadProjectWorkspaceState();
   }
 
