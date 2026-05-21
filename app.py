@@ -8749,16 +8749,36 @@ def api_dns_delete():
 # =========================
 
 HEADER_ALIASES = {
-    "name": {"name", "device", "device name", "hostname", "host", "host name", "friendly name"},
-    "ip": {"ip", "ip address", "address", "ipv4", "ipv4 address"},
-    "vlan": {"vlan", "vlan id", "network", "subnet"},
-    "type": {"type", "device type", "role", "category", "class"},
-    "mac": {"mac", "mac address", "macaddr", "mac addr", "ethernet", "hw address"},
-    "vendor": {"vendor", "manufacturer", "make", "brand"},
-    "notes": {"notes", "note", "comment", "comments", "description", "remarks"},
+    "name": {"name", "device", "device name", "hostname", "host", "host name", "friendly name",
+             "device id", "id", "short name", "tag", "asset tag", "label", "device tag"},
+    "ip": {"ip", "ip address", "address", "ipv4", "ipv4 address", "ip addr", "management ip",
+           "primary ip", "ip address 1", "ip 1"},
+    "vlan": {"vlan", "vlan id", "network", "subnet", "vlan name", "network segment", "network name",
+             "vlan network", "av network", "audio network", "control network"},
+    "type": {"type", "device type", "role", "category", "class", "device description",
+             "classification", "device category", "equipment type", "description"},
+    "mac": {"mac", "mac address", "macaddr", "mac addr", "ethernet", "hw address", "hardware address"},
+    "vendor": {"vendor", "manufacturer", "make", "brand", "mfr", "supplier"},
+    "model": {"model", "device model", "model number", "model no", "part", "part number",
+              "part no", "product", "product model", "sku"},
+    "room": {"room", "location", "area", "zone", "space", "room name", "site", "floor",
+             "install location", "physical location", "room location"},
+    "notes": {"notes", "note", "comment", "comments", "remarks", "info"},
 }
 
-DEFAULT_COLUMN_ORDER = ["name", "ip", "vlan", "type", "mac", "vendor", "notes"]
+DEFAULT_COLUMN_ORDER = ["name", "ip", "vlan", "type", "mac", "vendor", "model", "room", "notes"]
+
+# Short device-ID pattern: letters followed by dash/underscore and digits (e.g. dsp-01, amp-02, tp-01a)
+_DEVICE_ID_RE = re.compile(r'^[a-zA-Z]{1,8}[-_]\d{1,4}[a-zA-Z0-9\-_]{0,12}$')
+
+# Known AV vendor names for heuristic vendor detection in unheadered rows
+_KNOWN_VENDORS = {
+    "biamp", "crestron", "qsc", "shure", "extron", "atlona", "kramer", "barco",
+    "novastar", "sony", "samsung", "lg", "nec", "epson", "panasonic", "mersive",
+    "lightware", "blackmagic", "audinate", "apart", "axis", "cisco", "ubiquiti",
+    "netgear", "amd", "blustream", "teracom", "sennheiser", "bose", "yamaha",
+    "vaddio", "logitech", "poly", "plantronics", "haivision", "teradek",
+}
 
 
 def _norm_header(value):
@@ -8816,41 +8836,115 @@ def _detect_headers(first_row):
     return mapping if len(mapping) >= 2 else None
 
 
+def _clean_vlan_text(value):
+    """Strip '(VLAN XX)' suffix and bare VLAN-ID-only values from display text."""
+    v = (value or "").strip()
+    # "AV Control (VLAN 10)" → "AV Control"
+    cleaned = re.sub(r'\s*\(vlan\s*\d+\)\s*', '', v, flags=re.I).strip()
+    # If result is empty but original had content, keep original
+    return cleaned or v
+
+
+def _looks_like_mac(value):
+    v = (value or "").strip()
+    return bool(
+        re.match(r'^([0-9A-Fa-f]{2}[:\-.]){5}[0-9A-Fa-f]{2}$', v) or
+        re.match(r'^[0-9A-Fa-f]{12}$', v)
+    )
+
+
 def _row_to_device_by_position(row):
     vals = [str(c).strip() for c in row]
-    out = {
-        "name": "",
-        "ip": "",
-        "vlan": "",
-        "type": "",
-        "mac": "",
-        "vendor": "",
-        "notes": "",
-    }
+    out = {"name": "", "ip": "", "vlan": "", "type": "", "mac": "",
+           "vendor": "", "model": "", "room": "", "notes": ""}
 
-    if len(vals) >= 1 and _valid_ip(vals[0]):
-        out["ip"] = vals[0]
-        if len(vals) >= 2: out["name"] = vals[1]
-        if len(vals) >= 3: out["vlan"] = vals[2]
-        if len(vals) >= 4: out["type"] = vals[3]
-        if len(vals) >= 5: out["mac"] = vals[4]
-        if len(vals) >= 6: out["vendor"] = vals[5]
-        if len(vals) >= 7: out["notes"] = vals[6]
+    # Find IP column — scan all positions, take the first valid IP
+    ip_col = None
+    for i, v in enumerate(vals):
+        if _valid_ip(v):
+            ip_col = i
+            break
+
+    if ip_col is None:
+        # No IP anywhere — fall back to default column order
+        for i, key in enumerate(DEFAULT_COLUMN_ORDER):
+            if i < len(vals):
+                out[key] = vals[i]
         return out
 
-    if len(vals) >= 2 and _valid_ip(vals[1]):
-        out["name"] = vals[0]
-        out["ip"] = vals[1]
-        if len(vals) >= 3: out["vlan"] = vals[2]
-        if len(vals) >= 4: out["type"] = vals[3]
-        if len(vals) >= 5: out["mac"] = vals[4]
-        if len(vals) >= 6: out["vendor"] = vals[5]
-        if len(vals) >= 7: out["notes"] = vals[6]
-        return out
+    out["ip"] = vals[ip_col]
+    used = {ip_col}
 
-    for i, key in enumerate(DEFAULT_COLUMN_ORDER):
-        if i < len(vals):
-            out[key] = vals[i]
+    # Find MAC anywhere in the row
+    for i, v in enumerate(vals):
+        if i in used:
+            continue
+        if _looks_like_mac(v):
+            out["mac"] = v
+            used.add(i)
+            break
+
+    # Find VLAN column — any cell containing "vlan" keyword
+    for i, v in enumerate(vals):
+        if i in used:
+            continue
+        if re.search(r'\bvlan\b', v, re.I):
+            out["vlan"] = _clean_vlan_text(v)
+            used.add(i)
+            break
+
+    # Look for device short-name (e.g. dsp-01, amp-02) in columns before IP
+    for i in range(ip_col):
+        if i in used:
+            continue
+        v = vals[i]
+        if _DEVICE_ID_RE.match(v) and len(v) <= 24:
+            out["name"] = v
+            used.add(i)
+            break
+
+    # Look for vendor name in columns before IP (check against known list)
+    vendor_col = None
+    for i in range(ip_col):
+        if i in used:
+            continue
+        v = vals[i]
+        if v.lower() in _KNOWN_VENDORS:
+            out["vendor"] = v
+            used.add(i)
+            vendor_col = i
+            break
+
+    # Column immediately after vendor (and before IP) is likely the model
+    if vendor_col is not None:
+        for i in range(vendor_col + 1, ip_col):
+            if i in used:
+                continue
+            v = vals[i]
+            # Skip if it looks like a duplicate location or VLAN
+            if v and not re.search(r'\bvlan\b', v, re.I) and not _valid_ip(v):
+                out["model"] = v
+                used.add(i)
+                break
+
+    # Remaining pre-IP columns: first unused → room, second → type/description
+    pre_ip_unused = [i for i in range(ip_col) if i not in used]
+    slot_map = ["room", "type"]
+    for slot, i in zip(slot_map, pre_ip_unused):
+        if not out[slot]:
+            out[slot] = vals[i]
+            used.add(i)
+
+    # Post-IP columns: look for vendor/model if not already set
+    post_ip_unused = [i for i in range(ip_col + 1, len(vals)) if i not in used and vals[i]]
+    for i in post_ip_unused:
+        v = vals[i]
+        if not out["vendor"] and v.lower() in _KNOWN_VENDORS:
+            out["vendor"] = v
+            used.add(i)
+        elif not out["model"] and not _valid_ip(v) and not _looks_like_mac(v) and len(v) > 2:
+            out["model"] = v
+            used.add(i)
 
     return out
 
@@ -8896,7 +8990,8 @@ def parse_pasted_device_text(text):
 
     for idx, row in enumerate(data_rows, start=1):
         if header_map:
-            item = {"name": "", "ip": "", "vlan": "", "type": "", "mac": "", "vendor": "", "notes": ""}
+            item = {"name": "", "ip": "", "vlan": "", "type": "", "mac": "",
+                    "vendor": "", "model": "", "room": "", "notes": ""}
             for col_idx, canonical in header_map.items():
                 if col_idx < len(row):
                     item[canonical] = row[col_idx].strip()
@@ -8905,10 +9000,12 @@ def parse_pasted_device_text(text):
 
         item["name"] = (item.get("name") or "").strip()
         item["ip"] = (item.get("ip") or "").strip()
-        item["vlan"] = (item.get("vlan") or "").strip()
+        item["vlan"] = _clean_vlan_text(item.get("vlan") or "")
         item["type"] = (item.get("type") or "").strip()
         item["mac"] = _normalise_mac(item.get("mac"))
         item["vendor"] = (item.get("vendor") or "").strip()
+        item["model"] = (item.get("model") or "").strip()
+        item["room"] = (item.get("room") or "").strip()
         item["notes"] = (item.get("notes") or "").strip()
 
         if not item["ip"] or not _valid_ip(item["ip"]):

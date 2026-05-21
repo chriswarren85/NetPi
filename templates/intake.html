@@ -124,12 +124,12 @@
         <tr>
           <th style="width:40px"></th>
           <th>Name</th>
-          <th>Hostname</th>
           <th>IP</th>
-          <th>MAC</th>
           <th>Type</th>
           <th>VLAN</th>
-          <th>Vendor</th>
+          <th>Vendor / Model</th>
+          <th>Room</th>
+          <th>MAC</th>
           <th>Status</th>
         </tr>
       </thead>
@@ -721,15 +721,16 @@ function renderIntakeResults(){
       ? 'Conflict (' + row.conflict_reason + ')'
       : row.status;
 
+    const vendorModel = [row.vendor, row.model].filter(Boolean).join(' / ');
     return '<tr>'
       + '<td><input type="checkbox" ' + checked + ' ' + disabled + ' onchange="toggleRow(' + index + ')"></td>'
-      + '<td>' + escapeHtml(row.name || '') + '</td>'
-      + '<td>' + escapeHtml(row.hostname || '') + '</td>'
-      + '<td style="font-family:monospace"><a href="http://' + escapeHtml(row.ip || '') + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">' + escapeHtml(row.ip || '') + '</a></td>'
-      + '<td style="font-family:monospace">' + escapeHtml(row.mac || row.mac_address || '') + '</td>'
-      + '<td>' + escapeHtml(row.type || '') + '</td>'
-      + '<td>' + escapeHtml(row.vlan || '') + '</td>'
-      + '<td>' + escapeHtml(row.vendor || '') + '</td>'
+      + '<td style="font-size:12px">' + escapeHtml(row.name || '') + '</td>'
+      + '<td style="font-family:monospace;font-size:12px"><a href="http://' + escapeHtml(row.ip || '') + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">' + escapeHtml(row.ip || '') + '</a></td>'
+      + '<td style="font-size:12px">' + escapeHtml(row.type || '') + '</td>'
+      + '<td style="font-size:12px">' + escapeHtml(row.vlan || '') + '</td>'
+      + '<td style="font-size:11px;color:#9ca3af">' + escapeHtml(vendorModel) + '</td>'
+      + '<td style="font-size:11px;color:#9ca3af">' + escapeHtml(row.room || '') + '</td>'
+      + '<td style="font-family:monospace;font-size:11px;color:#6b7280">' + escapeHtml(row.mac || row.mac_address || '') + '</td>'
       + '<td style="' + statusTone + '">' + escapeHtml(statusText || '') + '</td>'
       + '</tr>';
   }).join('');
