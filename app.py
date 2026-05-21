@@ -392,6 +392,10 @@ def _runs_dir():
     return get_project_path("runs")
 
 
+def _audit_log_file():
+    return get_project_path("data/audit_log.json", ensure_parent=True)
+
+
 _initialize_project_state()
 
 
@@ -3442,6 +3446,108 @@ def save_devices_file(devices):
     safe_write_json(_devices_file(), {"devices": devices})
 
 
+# ── W11.2  Append-only audit log ─────────────────────────────────────────────
+
+_AUDIT_MAX_ENTRIES = 200
+_AUDIT_LOCK = threading.Lock()
+
+
+def append_audit_entry(action_type, detail="", device_id=None, old_value=None, new_value=None):
+    """Append one audit entry; rotate at _AUDIT_MAX_ENTRIES. Thread-safe."""
+    try:
+        log_file = _audit_log_file()
+        with _AUDIT_LOCK:
+            try:
+                with open(log_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                entries = data.get("entries") or []
+            except Exception:
+                entries = []
+            settings = load_settings()
+            operator = (
+                settings.get("point_of_contact")
+                or settings.get("requestor")
+                or settings.get("client_name")
+                or "operator"
+            )
+            entry = {
+                "timestamp": utc_now_iso(),
+                "operator": operator,
+                "action_type": str(action_type or ""),
+                "detail": str(detail or "")[:200],
+            }
+            if device_id is not None:
+                entry["device_id"] = str(device_id)
+            if old_value is not None:
+                entry["old_value"] = str(old_value)[:100]
+            if new_value is not None:
+                entry["new_value"] = str(new_value)[:100]
+            entries.append(entry)
+            if len(entries) > _AUDIT_MAX_ENTRIES:
+                entries = entries[-_AUDIT_MAX_ENTRIES:]
+            safe_write_json(log_file, {"entries": entries})
+    except Exception:
+        pass
+
+
+# ── W10.3  Stale device revalidation scheduler ────────────────────────────────
+
+_STALE_CACHE = {"stale_count": 0, "aging_count": 0, "stale_devices": [], "computed_at": ""}
+_STALE_CACHE_LOCK = threading.Lock()
+_STALE_SCHEDULER_THREAD = None
+
+
+def _stale_sweep():
+    """Recompute freshness for every device; cache a stale summary."""
+    try:
+        settings = load_settings()
+        threshold_minutes = int((settings or {}).get("stale_threshold_minutes") or 15)
+        threshold_seconds = threshold_minutes * 60
+        devices = load_devices()
+        stale_list = []
+        aging_count = 0
+        now = datetime.utcnow()
+        for device in devices:
+            freshness = _derive_device_freshness(device)
+            label = freshness.get("freshness_label", "unknown")
+            last_evidence_str = (
+                device.get("last_reachable") or device.get("last_seen") or ""
+            )
+            last_evidence_dt = _parse_freshness_timestamp(last_evidence_str)
+            if last_evidence_dt:
+                age_s = (now - last_evidence_dt.replace(tzinfo=None)).total_seconds()
+                if age_s > threshold_seconds:
+                    stale_list.append(
+                        {"ip": device.get("ip") or "", "name": device.get("name") or device.get("hostname") or ""}
+                    )
+                    continue
+            if label == "aging":
+                aging_count += 1
+        with _STALE_CACHE_LOCK:
+            _STALE_CACHE["stale_count"] = len(stale_list)
+            _STALE_CACHE["aging_count"] = aging_count
+            _STALE_CACHE["stale_devices"] = stale_list[:8]
+            _STALE_CACHE["computed_at"] = utc_now_iso()
+    except Exception:
+        pass
+
+
+def _start_stale_scheduler(interval_seconds=300):
+    global _STALE_SCHEDULER_THREAD
+    if _STALE_SCHEDULER_THREAD and _STALE_SCHEDULER_THREAD.is_alive():
+        return
+
+    def _loop():
+        time.sleep(30)
+        while True:
+            _stale_sweep()
+            time.sleep(interval_seconds)
+
+    t = threading.Thread(target=_loop, name="stale-scheduler", daemon=True)
+    t.start()
+    _STALE_SCHEDULER_THREAD = t
+
+
 def _devices_with_freshness_view(devices):
     enriched = []
     for device in devices or []:
@@ -5168,7 +5274,7 @@ def index():
 
 @app.route('/tools/diagnostics')
 def diagnostics():
-    return render_template('diagnostics.html', s=load_settings())
+    return redirect('/tools/intake')
 
 
 @app.route('/tools/dashboard')
@@ -5247,7 +5353,19 @@ def settings():
             vlans.append(vlan_row)
 
         s['vlans'] = vlans
+
+        ai_query = dict(s.get("ai_query") or {})
+        ai_query["backend"] = request.form.get("ai_query_backend", "disabled")
+        ai_query["ollama_model"] = request.form.get("ai_query_ollama_model", "")
+        ai_query["ollama_endpoint"] = request.form.get("ai_query_ollama_endpoint", "")
+        ai_query["anthropic_model"] = request.form.get("ai_query_anthropic_model", "")
+        raw_key = request.form.get("ai_query_anthropic_api_key", "")
+        if raw_key:
+            ai_query["anthropic_api_key"] = raw_key
+        s["ai_query"] = ai_query
+
         save_settings(s)
+        append_audit_entry("settings_saved", f"Project: {s.get('project_name') or ''}")
         saved = True
 
         if request.accept_mimetypes.best == 'application/json':
@@ -6468,8 +6586,9 @@ def _firewall_rule_criticality(rule):
     return "standard"
 
 
-def _build_firewall_sheet(ws, settings, title, rules):
+def _build_firewall_sheet(ws, settings, title, rules, op_notes=None):
     start = project_header_block(ws, settings, title)
+    op_notes = op_notes or {}
     rules = list(rules or [])
     pairs = sorted({
         f"{str(r.get('source_zone') or '')}->{str(r.get('destination_zone') or '')}"
@@ -6505,6 +6624,7 @@ def _build_firewall_sheet(ws, settings, title, rules):
         "confidence",
         "criticality",
         "notes",
+        "operator_notes",
     ]
     table_rows = []
     for rule in rules:
@@ -6520,6 +6640,7 @@ def _build_firewall_sheet(ws, settings, title, rules):
             "confidence": rule.get("confidence") or "",
             "criticality": _firewall_rule_criticality(rule),
             "notes": "; ".join(rule.get("evidence") or []),
+            "operator_notes": op_notes.get(str(rule.get("rule_id") or ""), ""),
         })
 
     meta = write_table(ws, headers, table_rows, start + 4)
@@ -6736,13 +6857,14 @@ def api_export_xlsx_firewall_plan():
     rules = list((firewall_plan or {}).get("rules") or [])
     min_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() == "min_required"]
     rec_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() != "min_required"]
+    _fw_op = (_load_operator_notes().get("firewall") or {})
 
     wb = Workbook()
     ws_min = wb.active
     ws_min.title = safe_sheet_name("Firewall - Min Required")
-    _build_firewall_sheet(ws_min, settings, "Firewall - Min Required", min_rules)
+    _build_firewall_sheet(ws_min, settings, "Firewall - Min Required", min_rules, op_notes=_fw_op)
     ws_rec = wb.create_sheet(title=safe_sheet_name("Firewall - Recommended"))
-    _build_firewall_sheet(ws_rec, settings, "Firewall - Recommended", rec_rules)
+    _build_firewall_sheet(ws_rec, settings, "Firewall - Recommended", rec_rules, op_notes=_fw_op)
 
     return _xlsx_response(wb, _export_filename("firewall_plan"))
 
@@ -6892,22 +7014,33 @@ def api_export_xlsx_commissioning_workbook():
         _build_ip_schedule_sheet(ws, settings, f"IP Schedule - {vlan}", vlan_grouped.get(vlan, []))
 
     rules = list((firewall_plan or {}).get("rules") or [])
+    _fw_op_notes = (_op_notes.get("firewall") or {})
+    for _r in rules:
+        _op_note = _fw_op_notes.get(str(_r.get("rule_id") or ""), "")
+        if _op_note:
+            existing_ev = "; ".join(_r.get("evidence") or [])
+            _r = dict(_r)
+            _r["_operator_notes"] = _op_note
     min_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() == "min_required"]
     rec_rules = [r for r in rules if str(r.get("requirement_level") or "").strip().lower() != "min_required"]
     ws_fw_min = wb.create_sheet(title=safe_sheet_name("Firewall - Min Required"))
-    _build_firewall_sheet(ws_fw_min, settings, "Firewall - Min Required", min_rules)
+    _build_firewall_sheet(ws_fw_min, settings, "Firewall - Min Required", min_rules, op_notes=_fw_op_notes)
     ws_fw_rec = wb.create_sheet(title=safe_sheet_name("Firewall - Recommended"))
-    _build_firewall_sheet(ws_fw_rec, settings, "Firewall - Recommended", rec_rules)
+    _build_firewall_sheet(ws_fw_rec, settings, "Firewall - Recommended", rec_rules, op_notes=_fw_op_notes)
 
     ws_validation = wb.create_sheet(title=safe_sheet_name("Validation Results"))
     combined_validation_rows = list(validation_device_rows or []) + list(validation_system_rows or [])
     _write_validation_sheet(ws_validation, settings, "Validation Results", combined_validation_rows)
 
+    _op_notes = _load_operator_notes()
+
     ws_recs = wb.create_sheet(title=safe_sheet_name("Recommendations"))
     rec_start = project_header_block(ws_recs, settings, "Recommendations")
-    rec_headers = ["severity", "category", "title", "finding", "impact", "suggested_action", "evidence_source", "affected_devices"]
+    rec_headers = ["severity", "category", "title", "finding", "impact", "suggested_action", "evidence_source", "affected_devices", "operator_notes"]
     rec_rows = []
     for rec in (recommendations or {}).get("recommendations") or []:
+        import urllib.parse as _urlparse
+        note_key = _urlparse.quote(rec.get("title") or "", safe="")
         rec_rows.append({
             "severity": rec.get("severity") or "",
             "category": rec.get("category") or "",
@@ -6917,6 +7050,7 @@ def api_export_xlsx_commissioning_workbook():
             "suggested_action": rec.get("suggested_action") or "",
             "evidence_source": ", ".join(rec.get("evidence_source") or []),
             "affected_devices": ", ".join(rec.get("affected_devices") or []),
+            "operator_notes": (_op_notes.get("recommendations") or {}).get(note_key, ""),
         })
     rec_meta = write_table(ws_recs, rec_headers, rec_rows, rec_start)
     freeze_header(ws_recs, rec_meta["header_row"])
@@ -6943,6 +7077,29 @@ def api_export_xlsx_commissioning_workbook():
     flow_meta = write_table(ws_flows, flow_headers, flow_rows, flow_start)
     freeze_header(ws_flows, flow_meta["header_row"])
     autofit_columns(ws_flows)
+
+    ws_audit = wb.create_sheet(title=safe_sheet_name("Audit Log"))
+    audit_start = project_header_block(ws_audit, settings, "Audit Log")
+    audit_headers = ["timestamp", "operator", "action_type", "detail", "device_id"]
+    audit_rows = []
+    try:
+        log_file = _audit_log_file()
+        if os.path.exists(log_file):
+            with open(log_file, "r", encoding="utf-8") as _f:
+                _audit_data = json.load(_f)
+            for entry in (_audit_data.get("entries") or []):
+                audit_rows.append({
+                    "timestamp": entry.get("timestamp") or "",
+                    "operator": entry.get("operator") or "",
+                    "action_type": entry.get("action_type") or "",
+                    "detail": entry.get("detail") or "",
+                    "device_id": entry.get("device_id") or "",
+                })
+    except Exception:
+        pass
+    audit_meta = write_table(ws_audit, audit_headers, audit_rows, audit_start)
+    freeze_header(ws_audit, audit_meta["header_row"])
+    autofit_columns(ws_audit)
 
     return _xlsx_response(wb, _export_filename("commissioning_workbook"))
 
@@ -7838,6 +7995,7 @@ def api_fingerprint_confirm():
         patterns_data["_meta"] = meta
 
         safe_write_json(ai_patterns_file, patterns_data)
+        append_audit_entry("fingerprint_confirmed", f"type={confirmed_type}", device_id=device_id)
 
         return jsonify({
             "ok": True,
@@ -7876,8 +8034,113 @@ def api_fingerprint_reject():
         patterns_data["rejected"] = rejected_list
 
         safe_write_json(ai_patterns_file, patterns_data)
+        append_audit_entry("fingerprint_rejected", f"type={rejected_type}", device_id=device_id)
 
         return jsonify({"ok": True, "message": "Rejection logged"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/devices/stale-stats", methods=["GET"])
+def api_devices_stale_stats():
+    """W10.3 — Return cached stale/aging device count for Dashboard attention panel."""
+    try:
+        with _STALE_CACHE_LOCK:
+            payload = dict(_STALE_CACHE)
+        if not payload.get("computed_at"):
+            _stale_sweep()
+            with _STALE_CACHE_LOCK:
+                payload = dict(_STALE_CACHE)
+        return jsonify({"ok": True, **payload})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+def _operator_notes_file():
+    return get_project_path("data/operator_notes.json", ensure_parent=True)
+
+
+def _load_operator_notes():
+    f = _operator_notes_file()
+    if not os.path.exists(f):
+        return {"devices": {}, "firewall": {}, "recommendations": {}}
+    try:
+        with open(f, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if not isinstance(data, dict):
+            data = {}
+        data.setdefault("devices", {})
+        data.setdefault("firewall", {})
+        data.setdefault("recommendations", {})
+        return data
+    except Exception:
+        return {"devices": {}, "firewall": {}, "recommendations": {}}
+
+
+@app.route("/tools/api/devices/<path:device_id>/notes", methods=["PATCH"])
+def api_device_notes(device_id):
+    """W11.3 — Update operator notes on a single device."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        notes = str(payload.get("notes") or "")
+        devices = load_devices()
+        target = next(
+            (d for d in devices if (d.get("ip") or "").strip() == device_id.strip()
+             or str(d.get("id") or "") == device_id.strip()),
+            None,
+        )
+        if target is None:
+            return jsonify({"ok": False, "error": "Device not found"}), 404
+        old = target.get("notes") or ""
+        target["notes"] = notes
+        save_devices_file(devices)
+        append_audit_entry("device_notes_updated", f"notes set", device_id=device_id, old_value=old[:60], new_value=notes[:60])
+        return jsonify({"ok": True, "device_id": device_id, "notes": notes})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/operator-notes", methods=["GET"])
+def api_operator_notes_get():
+    """W11.3 — Return all operator notes (devices overlay excluded — those are in devices.json)."""
+    try:
+        return jsonify({"ok": True, **_load_operator_notes()})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/operator-notes", methods=["PATCH"])
+def api_operator_notes_patch():
+    """W11.3 — Set operator notes for a firewall rule or recommendation."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        scope = str(payload.get("scope") or "").strip()
+        key = str(payload.get("key") or "").strip()
+        notes = str(payload.get("notes") or "")
+        if scope not in ("firewall", "recommendations"):
+            return jsonify({"ok": False, "error": "scope must be 'firewall' or 'recommendations'"}), 400
+        if not key:
+            return jsonify({"ok": False, "error": "key required"}), 400
+        data = _load_operator_notes()
+        data[scope][key] = notes
+        safe_write_json(_operator_notes_file(), data)
+        append_audit_entry(f"{scope}_notes_updated", f"key={key}", new_value=notes[:60])
+        return jsonify({"ok": True, "scope": scope, "key": key, "notes": notes})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/audit-log", methods=["GET"])
+def api_audit_log():
+    """W11.2 — Return last N audit log entries for Settings panel."""
+    try:
+        log_file = _audit_log_file()
+        if not os.path.exists(log_file):
+            return jsonify({"ok": True, "entries": []})
+        with open(log_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        entries = list(reversed(data.get("entries") or []))[:50]
+        return jsonify({"ok": True, "entries": entries})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -10761,6 +11024,7 @@ if __name__ == '__main__':
     atexit.register(lambda: print("NetPi process exited."))
     startup_checks()
     tool_check()
+    _start_stale_scheduler()
     app.run(host='0.0.0.0', port=5000, debug=False)
 
 

@@ -65,6 +65,24 @@
         <div id="dash-concern-list" style="font-size:12px;color:#6b7280;line-height:1.4">Run Validation to see system concerns.</div>
         <div style="margin-top:8px"><a class="btn" href="/tools/validation">Open Validation</a></div>
       </div>
+
+      <div style="background:#222222;border:1px solid #2e2e2e;border-radius:8px;padding:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px">Stale Devices</strong>
+          <span class="badge badge-red" id="dash-stale-count">—</span>
+        </div>
+        <div id="dash-stale-list" style="font-size:12px;color:#6b7280;line-height:1.4">Checking...</div>
+        <div style="margin-top:8px"><a class="btn" href="/tools/devices">Review Devices</a></div>
+      </div>
+
+      <div style="background:#222222;border:1px solid #2e2e2e;border-radius:8px;padding:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong style="font-size:13px">AI Intelligence</strong>
+          <span class="badge badge-blue" id="dash-fingerprint-count">—</span>
+        </div>
+        <div id="dash-fingerprint-info" style="font-size:12px;color:#6b7280;line-height:1.4">Loading...</div>
+        <div style="margin-top:8px"><a class="btn" href="/tools/devices">Classify Devices</a></div>
+      </div>
     </div>
   </div>
 </div>
@@ -201,6 +219,58 @@ function loadDashboard(){
 }
 
 loadDashboard();
+
+// ── W10.3 Stale device count ──────────────────────────────────────────────
+(function loadStaleStats() {
+  fetch('/tools/api/devices/stale-stats')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) return;
+      const count = data.stale_count || 0;
+      const el = document.getElementById('dash-stale-count');
+      if (el) el.textContent = String(count);
+      const listEl = document.getElementById('dash-stale-list');
+      if (!listEl) return;
+      if (!count) {
+        listEl.innerHTML = '<span style="color:#9ca3af">No stale devices detected.</span>';
+        return;
+      }
+      const items = (data.stale_devices || []).slice(0, 6);
+      listEl.innerHTML = '<ul style="margin:0;padding-left:16px">'
+        + items.map(d => '<li style="margin-bottom:4px">' + (d.name || d.ip || '?') + (d.ip && d.name ? ' (' + d.ip + ')' : '') + '</li>').join('')
+        + (count > items.length ? '<li style="color:#6b7280">…and ' + (count - items.length) + ' more</li>' : '')
+        + '</ul>';
+    })
+    .catch(() => {
+      const el = document.getElementById('dash-stale-list');
+      if (el) el.innerHTML = '<span style="color:#6b7280">Unable to load stale stats.</span>';
+    });
+})();
+
+// ── W13.2 Fingerprint confirmed count ────────────────────────────────────
+(function loadFingerprintStats() {
+  fetch('/tools/api/fingerprints/stats')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) return;
+      const count = data.confirmed_count || 0;
+      const el = document.getElementById('dash-fingerprint-count');
+      if (el) el.textContent = count + ' confirmed';
+      const infoEl = document.getElementById('dash-fingerprint-info');
+      if (!infoEl) return;
+      if (!count) {
+        infoEl.innerHTML = '<span style="color:#9ca3af">No confirmed AI fingerprints yet. Open a device and run AI classify.</span>';
+      } else {
+        const last = data.last_improved ? String(data.last_improved).replace('T',' ').replace('Z','').slice(0,16) : '';
+        infoEl.innerHTML = count + ' device type' + (count === 1 ? '' : 's') + ' confirmed by operator.'
+          + (last ? '<br><span style="color:#6b7280">Last improved: ' + last + '</span>' : '');
+      }
+    })
+    .catch(() => {
+      const el = document.getElementById('dash-fingerprint-info');
+      if (el) el.innerHTML = '<span style="color:#6b7280">Unable to load fingerprint stats.</span>';
+    });
+})();
 
 // ── W13.5 Topology Pattern Recognition ───────────────────────────────────
 

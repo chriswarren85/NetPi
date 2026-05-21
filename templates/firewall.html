@@ -115,6 +115,7 @@
 <script>
 let firewallAllRules = [];
 let firewallFilteredRules = [];
+let firewallOperatorNotes = {};
 
 function escapeHtml(str){
   return String(str || '')
@@ -180,15 +181,30 @@ function setFilterOptions(id, values){
   if(uniqueValues.includes(currentValue)) select.value = currentValue;
 }
 
+function saveFirewallNote(ruleId, btn) {
+  const ta = document.getElementById('fw-note-' + ruleId);
+  if (!ta) return;
+  const notes = ta.value;
+  if (btn) btn.textContent = 'Saving...';
+  fetch('/tools/api/operator-notes', {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({scope: 'firewall', key: ruleId, notes}),
+  }).then(r => r.json()).then(data => {
+    if (btn) btn.textContent = data.ok ? 'Saved' : 'Error';
+    if (data.ok) firewallOperatorNotes[ruleId] = notes;
+    setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 2000);
+  }).catch(() => { if (btn) btn.textContent = 'Error'; });
+}
+
 function loadFirewallPlan(){
   setFirewallStatus('Loading firewall plan...', '#6b7280');
-  fetch('/tools/api/generate_firewall_plan', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({})
-  })
-    .then(resp => resp.json())
-    .then(data => {
+  Promise.all([
+    fetch('/tools/api/generate_firewall_plan', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r => r.json()),
+    fetch('/tools/api/operator-notes').then(r => r.json()).catch(() => ({})),
+  ])
+    .then(([data, notesData]) => {
+      firewallOperatorNotes = (notesData && notesData.firewall) || {};
       if(!data || data.ok !== true){
         throw new Error((data && data.error) || 'Firewall plan request failed');
       }
@@ -281,21 +297,27 @@ function renderFirewallRows(id, rows){
     tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:1rem">No rules for selected filters.</td></tr>';
     return;
   }
-  tbody.innerHTML = rows.map(rule => (
-    '<tr>'
-    + '<td>' + formatRuleLabel(rule) + '</td>'
-    + '<td>' + escapeHtml(rule.source_zone) + '</td>'
-    + '<td>' + escapeHtml(rule.destination_zone) + '</td>'
-    + '<td>' + escapeHtml(formatPorts(rule)) + '</td>'
-    + '<td>' + escapeHtml(rule.protocol) + '</td>'
-    + '<td>' + escapeHtml(rule.direction) + '</td>'
-    + '<td>' + escapeHtml(rule.purpose) + '</td>'
-    + '<td>' + escapeHtml(rule.business_justification) + '</td>'
-    + '<td>' + escapeHtml(rule.av_justification) + '</td>'
-    + '<td>' + escapeHtml(rule.confidence) + '</td>'
-    + '<td>' + escapeHtml(formatNotes(rule)) + buildFirewallWhyHtml(rule) + '</td>'
-    + '</tr>'
-  )).join('');
+  tbody.innerHTML = rows.map(rule => {
+    const rid = escapeHtml(rule.rule_id || '');
+    const savedNote = escapeHtml(firewallOperatorNotes[rule.rule_id || ''] || '');
+    const noteCell = '<div style="margin-top:6px">'
+      + '<textarea id="fw-note-' + rid + '" rows="2" style="width:100%;background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:4px 6px;color:#e2e8f0;font-size:11px;resize:vertical" placeholder="Operator notes...">' + savedNote + '</textarea>'
+      + '<button onclick="saveFirewallNote(' + JSON.stringify(rule.rule_id||'') + ',this)" style="margin-top:3px;font-size:10px;padding:2px 8px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:3px;cursor:pointer;">Save</button>'
+      + '</div>';
+    return '<tr>'
+      + '<td>' + formatRuleLabel(rule) + '</td>'
+      + '<td>' + escapeHtml(rule.source_zone) + '</td>'
+      + '<td>' + escapeHtml(rule.destination_zone) + '</td>'
+      + '<td>' + escapeHtml(formatPorts(rule)) + '</td>'
+      + '<td>' + escapeHtml(rule.protocol) + '</td>'
+      + '<td>' + escapeHtml(rule.direction) + '</td>'
+      + '<td>' + escapeHtml(rule.purpose) + '</td>'
+      + '<td>' + escapeHtml(rule.business_justification) + '</td>'
+      + '<td>' + escapeHtml(rule.av_justification) + '</td>'
+      + '<td>' + escapeHtml(rule.confidence) + '</td>'
+      + '<td>' + escapeHtml(formatNotes(rule)) + buildFirewallWhyHtml(rule) + noteCell + '</td>'
+      + '</tr>';
+  }).join('');
 }
 
 function updateRuleCounts(minimum, recommended){

@@ -116,7 +116,7 @@
 
 
 <script>
-let deviceList = {{ devices | tojson }};
+let deviceList = {{ devices | tojson | safe }};
 let topologyState = { topology: [], count: 0, generated_at: '', switches_considered: 0, switches_queried: 0, note: '' };
 let activeInventoryView = 'devices';
 
@@ -1665,6 +1665,12 @@ function renderTable(){
           + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">open ports</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">' + escapeHtml(openPorts) + '</div></div>'
           + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">MAC</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb;font-family:monospace">MAC (' + escapeHtml(drawerMacSource) + '): ' + escapeHtml(drawerMacDisplay) + '</div></div>'
           + '<div style="grid-column:1 / -1">'
+          + '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px">Operator Notes</div>'
+          + '<textarea id="notes-' + escapeHtml(d.ip||'') + '" rows="2" style="width:100%;background:#1a1a1a;border:1px solid #374151;border-radius:5px;padding:6px 8px;color:#e2e8f0;font-size:12px;resize:vertical" placeholder="Add notes for handover / client context...">' + escapeHtml(d.notes||'') + '</textarea>'
+          + '<button onclick="saveDeviceNotes(' + JSON.stringify(d.ip||'') + ')" style="margin-top:4px;font-size:11px;padding:3px 10px;background:#1e1e1e;color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;">Save notes</button>'
+          + '<span id="notes-status-' + escapeHtml(d.ip||'') + '" style="margin-left:8px;font-size:11px;color:#9ca3af"></span>'
+          + '</div>'
+          + '<div style="grid-column:1 / -1">'
           + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
           + '<summary style="cursor:pointer;color:#d1d5db;font-size:12px;">Why this type?</summary>'
           + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4">' + escapeHtml(typeWhyText) + '</div>'
@@ -1789,6 +1795,29 @@ function rejectAiClassify(deviceId, rejectedType, btn) {
     if (parent) parent.innerHTML = '<div style="font-size:11px;color:#9ca3af">Suggestion rejected</div>';
   }).catch(() => {
     btn.disabled = false;
+  });
+}
+
+// ── W11.3 Operator Notes ──────────────────────────────────────────────────
+
+function saveDeviceNotes(ip) {
+  const ta = document.getElementById('notes-' + ip);
+  const statusEl = document.getElementById('notes-status-' + ip);
+  if (!ta) return;
+  const notes = ta.value;
+  if (statusEl) statusEl.textContent = 'Saving...';
+  fetch('/tools/api/devices/' + encodeURIComponent(ip) + '/notes', {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({notes}),
+  }).then(r => r.json()).then(data => {
+    if (statusEl) statusEl.textContent = data.ok ? 'Saved' : ('Error: ' + (data.error || '?'));
+    if (data.ok) {
+      const d = deviceList.find(x => x.ip === ip);
+      if (d) d.notes = notes;
+    }
+  }).catch(() => {
+    if (statusEl) statusEl.textContent = 'Request failed';
   });
 }
 

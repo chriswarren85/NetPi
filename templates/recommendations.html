@@ -64,6 +64,7 @@ const categoryLabels = {
   commissioning_readiness: 'Commissioning Readiness'
 };
 let recommendationRows = [];
+let recommendationOperatorNotes = {};
 
 function escapeHtml(str){
   return String(str || '')
@@ -199,32 +200,54 @@ function renderRecommendations(){
       '<div class="panel-header">' + escapeHtml(label) + ' <span style="font-size:11px;color:#9ca3af">' + cards.length + ' recommendation(s)</span></div>'
       + '<div class="panel-body">'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px;">'
-      + cards.map(card => (
-        '<div style="border:1px solid #374151;border-radius:8px;padding:10px;background:#111111;">'
-        + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px;">'
-        + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title || '') + '</div>'
-        + severityBadge(card.severity)
-        + '</div>'
-        + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Suggested action</div>'
-        + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.suggested_action || '') + '</div>'
-        + buildRecommendationWhyHtml(card)
-        + '</div>'
-      )).join('')
+      + cards.map(card => {
+        const noteKey = encodeURIComponent(card.title || '');
+        const savedNote = escapeHtml(recommendationOperatorNotes[noteKey] || '');
+        return '<div style="border:1px solid #374151;border-radius:8px;padding:10px;background:#111111;">'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;margin-bottom:6px;">'
+          + '<div style="font-size:13px;font-weight:600;color:#e5e7eb;line-height:1.3;">' + escapeHtml(card.title || '') + '</div>'
+          + severityBadge(card.severity)
+          + '</div>'
+          + '<div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Suggested action</div>'
+          + '<div style="font-size:12px;color:#d1d5db;margin-bottom:6px;">' + escapeHtml(card.suggested_action || '') + '</div>'
+          + buildRecommendationWhyHtml(card)
+          + '<div style="margin-top:8px">'
+          + '<div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.02em;margin-bottom:3px">Operator notes</div>'
+          + '<textarea id="rec-note-' + escapeHtml(noteKey) + '" rows="2" style="width:100%;background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:4px 6px;color:#e2e8f0;font-size:11px;resize:vertical" placeholder="Add context or decision notes...">' + savedNote + '</textarea>'
+          + '<button onclick="saveRecommendationNote(' + JSON.stringify(noteKey) + ',this)" style="margin-top:3px;font-size:10px;padding:2px 8px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:3px;cursor:pointer;">Save</button>'
+          + '</div>'
+          + '</div>';
+      }).join('')
       + '</div>'
       + '</div>';
     root.appendChild(panel);
   });
 }
 
+function saveRecommendationNote(key, btn) {
+  const ta = document.getElementById('rec-note-' + key);
+  if (!ta) return;
+  const notes = ta.value;
+  if (btn) btn.textContent = 'Saving...';
+  fetch('/tools/api/operator-notes', {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({scope: 'recommendations', key, notes}),
+  }).then(r => r.json()).then(data => {
+    if (btn) btn.textContent = data.ok ? 'Saved' : 'Error';
+    if (data.ok) recommendationOperatorNotes[key] = notes;
+    setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 2000);
+  }).catch(() => { if (btn) btn.textContent = 'Error'; });
+}
+
 function loadRecommendations(){
   setStatus('Loading recommendations...');
-  fetch('/tools/api/recommendations', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({})
-  })
-    .then(resp => resp.json())
-    .then(data => {
+  Promise.all([
+    fetch('/tools/api/recommendations', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r => r.json()),
+    fetch('/tools/api/operator-notes').then(r => r.json()).catch(() => ({})),
+  ])
+    .then(([data, notesData]) => {
+      recommendationOperatorNotes = (notesData && notesData.recommendations) || {};
       if(!data || data.ok !== true){
         throw new Error((data && data.error) || 'Recommendations request failed');
       }

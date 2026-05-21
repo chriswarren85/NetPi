@@ -79,6 +79,40 @@
     </div>
   </div>
   <div class="panel">
+    <div class="panel-header">AI Query Configuration</div>
+    <div class="panel-body">
+      <p style="margin:0 0 10px 0;color:#6b7280;font-size:12px">Configure the AI query backend used by the Network Query panel on the Dashboard.</p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Backend</label>
+          <select name="ai_query_backend" id="ai_query_backend">
+            <option value="disabled" {% if not s.ai_query or s.ai_query.backend in ('', 'disabled', None) %}selected{% endif %}>Disabled</option>
+            <option value="ollama" {% if s.ai_query and s.ai_query.backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
+            <option value="anthropic" {% if s.ai_query and s.ai_query.backend == 'anthropic' %}selected{% endif %}>Anthropic API</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Ollama model (default: mistral)</label>
+          <input name="ai_query_ollama_model" value="{{ (s.ai_query or {}).get('ollama_model', '') }}" placeholder="mistral">
+        </div>
+        <div class="form-group">
+          <label>Ollama endpoint</label>
+          <input name="ai_query_ollama_endpoint" value="{{ (s.ai_query or {}).get('ollama_endpoint', '') }}" placeholder="http://localhost:11434/api/generate">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Anthropic model (default: claude-haiku-4-5-20251001)</label>
+          <input name="ai_query_anthropic_model" value="{{ (s.ai_query or {}).get('anthropic_model', '') }}" placeholder="claude-haiku-4-5-20251001">
+        </div>
+        <div class="form-group">
+          <label>Anthropic API key</label>
+          <input name="ai_query_anthropic_api_key" type="password" value="{{ (s.ai_query or {}).get('anthropic_api_key', '') }}" placeholder="sk-ant-...">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
     <div class="panel-header">Excel exports</div>
     <div class="panel-body">
       <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -92,6 +126,19 @@
   </div>
   <button type="submit" class="btn btn-primary">Save settings</button>
 </form>
+
+<div class="panel" style="margin-top:1rem">
+  <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Recent Activity <span style="font-size:11px;font-weight:400;color:#9ca3af">last 50 operator actions</span></span>
+    <span id="audit-status" style="font-size:11px;color:#6b7280"></span>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <table>
+      <thead><tr><th>Time</th><th>Action</th><th>Detail</th><th>Device</th><th>Operator</th></tr></thead>
+      <tbody id="audit-log-body"><tr><td colspan="5" style="color:#6b7280;text-align:center">Loading...</td></tr></tbody>
+    </table>
+  </div>
+</div>
 <script>
   {% if request.method == 'POST' %}
   document.getElementById('success').style.display='block';
@@ -188,5 +235,38 @@
   }
 
   loadProjectWorkspaceState();
+
+  function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function loadAuditLog(){
+    fetch('/tools/api/audit-log')
+      .then(r => r.json())
+      .then(data => {
+        const tbody = document.getElementById('audit-log-body');
+        const status = document.getElementById('audit-status');
+        if (!tbody) return;
+        if (!data.ok || !data.entries || !data.entries.length){
+          tbody.innerHTML = '<tr><td colspan="5" style="color:#6b7280;text-align:center">No activity recorded yet.</td></tr>';
+          return;
+        }
+        if (status) status.textContent = data.entries.length + ' entries';
+        tbody.innerHTML = data.entries.map(e => {
+          const ts = String(e.timestamp||'').replace('T',' ').replace('Z','').slice(0,19);
+          return '<tr>'
+            + '<td style="color:#9ca3af;font-family:monospace;font-size:11px">' + escHtml(ts) + '</td>'
+            + '<td><span class="badge badge-blue">' + escHtml(e.action_type||'') + '</span></td>'
+            + '<td style="color:#d1d5db">' + escHtml(e.detail||'') + '</td>'
+            + '<td style="color:#9ca3af;font-family:monospace">' + escHtml(e.device_id||'—') + '</td>'
+            + '<td style="color:#9ca3af">' + escHtml(e.operator||'') + '</td>'
+            + '</tr>';
+        }).join('');
+      })
+      .catch(() => {
+        const tbody = document.getElementById('audit-log-body');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="5" style="color:#6b7280;text-align:center">Unable to load audit log.</td></tr>';
+      });
+  }
+
+  loadAuditLog();
 </script>
 {% endblock %}
