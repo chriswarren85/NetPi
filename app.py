@@ -2917,6 +2917,64 @@ def enrich_device_runtime(device):
     return item
 
 
+def _enrich_device_static(device):
+    """Enrich a device using only stored data — no live network probes.
+
+    Produces the same shape as enrich_device_runtime but skips
+    run_validation and _best_effort_snmp_enrich_device, making it safe
+    for planning-mode generators where devices may not be reachable.
+    """
+    item = dict(device or {})
+    # Minimal stub validation built from stored device fields only
+    validation = {
+        "device": item.get("name") or item.get("ip") or "Unnamed device",
+        "name": item.get("name") or item.get("ip") or "Unnamed device",
+        "ip": item.get("ip", ""),
+        "type": item.get("type", "generic"),
+        "original_type": item.get("type", "generic"),
+        "latency_ms": 0,
+        "open_ports": [],
+        "service_map": {},
+        "http": {},
+        "fingerprint": {},
+        "observed_platform": {},
+        "evidence": {},
+        "results": [],
+        "overall": "skip",
+    }
+    auto_type = decide_auto_promoted_type(item, validation)
+    type_suggestion = build_type_suggestion(item, validation)
+    guessed_type = auto_type.get("proposed_type") or ""
+    effective_type = resolve_effective_type(item, guessed_type, type_suggestion, validation)
+    promotion = evaluate_safe_type_promotion(item, type_suggestion)
+    runtime_override_type = resolve_runtime_type_conflict_override(item, type_suggestion, validation)
+
+    item["guessed_type"] = guessed_type
+    item["type_suggestion"] = type_suggestion
+    item["suggested_type"] = type_suggestion.get("suggested_type") or ""
+    item["effective_type"] = effective_type
+    item["_resolved_type"] = resolve_runtime_type(item, effective_type, type_suggestion, validation)
+    item["_runtime_promotion"] = promotion
+    item["_runtime_override_reason"] = "live_high_conflict_override" if runtime_override_type else ""
+
+    validation_context = dict(validation)
+    validation_context["auto_type"] = auto_type
+    validation_context["type_suggestion"] = type_suggestion
+    validation_context["suggested_type"] = item["suggested_type"]
+    validation_context["effective_type"] = effective_type
+    validation_context["confidence_score"] = type_suggestion.get("confidence_score", 0)
+    validation_context["confidence_label"] = type_suggestion.get("confidence_label") or "none"
+    validation_context["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
+
+    role = infer_av_role(item, validation_context)
+    if role:
+        item["av_role"] = role
+        validation_context["av_role"] = role
+
+    item["_validation_result"] = validation_context
+    return item
+
+
 def build_runtime_system_groups(devices):
     if not isinstance(devices, list):
         return []
@@ -10375,7 +10433,7 @@ def _build_system_requirements_payload(payload):
     if vlan:
         devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
 
-    enriched_devices = [enrich_device_runtime(device) for device in devices]
+    enriched_devices = [_enrich_device_static(device) for device in devices]
     validations_by_ip = {}
     ip_to_device = {}
     for item in enriched_devices:
@@ -10801,16 +10859,9 @@ def _build_recommendation_context(payload):
     if isinstance(validate_all_payload, dict) and isinstance(validate_all_payload.get("results"), list):
         validate_all = validate_all_payload
     else:
-        validation_results = run_validation_for_all(devices)
-        for device, result in zip(devices, validation_results):
-            auto_type = decide_auto_promoted_type(device, result)
-            type_suggestion = build_type_suggestion(device, result)
-            result["type_suggestion"] = type_suggestion
-            result["suggested_type"] = type_suggestion.get("suggested_type") or ""
-            result["effective_type"] = resolve_effective_type(device, auto_type.get("proposed_type") or "", type_suggestion, result)
-            result["confidence_score"] = type_suggestion.get("confidence_score", 0)
-            result["confidence_label"] = type_suggestion.get("confidence_label") or "none"
-            result["suggestion_reasons"] = list(type_suggestion.get("suggestion_reasons") or [])
+        # Static enrichment — no live network probes; safe for planning-mode generation
+        _enriched_for_validate = [_enrich_device_static(d) for d in devices]
+        validation_results = [dict(item.get("_validation_result") or {}) for item in _enriched_for_validate]
         validate_all = {
             "ok": True,
             "count": len(validation_results),
@@ -10821,7 +10872,7 @@ def _build_recommendation_context(payload):
     if isinstance(validate_systems_payload, dict) and isinstance(validate_systems_payload.get("results"), list):
         validate_systems = validate_systems_payload
     else:
-        enriched_devices = [enrich_device_runtime(device) for device in devices]
+        enriched_devices = [_enrich_device_static(device) for device in devices]
         validations_by_ip = {}
         for item in enriched_devices:
             validation_result = dict(item.get("_validation_result") or {})
