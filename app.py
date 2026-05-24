@@ -35,7 +35,7 @@ from checks.validation import (
 )
 try:
     from openpyxl import Workbook, load_workbook
-    from openpyxl.styles import PatternFill, Font
+    from openpyxl.styles import PatternFill, Font, Alignment
     from openpyxl.utils import get_column_letter
     OPENPYXL_AVAILABLE = True
 except Exception:
@@ -43,6 +43,7 @@ except Exception:
     load_workbook = None
     PatternFill = None
     Font = None
+    Alignment = None
     get_column_letter = None
     OPENPYXL_AVAILABLE = False
 from checks.flows import (
@@ -6598,6 +6599,7 @@ def _build_ip_schedule_rows(devices, settings):
             "DNS": dns_value,
             "vendor": item.get("vendor") or "",
             "model": item.get("model") or "",
+            "firmware_version": item.get("firmware_version") or "",
             "type": item.get("effective_type") or item.get("_resolved_type") or item.get("type") or "",
             "room/zone": item.get("room") or item.get("zone") or "",
             "addressing mode: DHCP/reserved/static": _device_addressing_mode(item),
@@ -6622,6 +6624,7 @@ def _build_ip_schedule_sheet(ws, settings, title, sheet_rows):
         "DNS",
         "vendor",
         "model",
+        "firmware_version",
         "type",
         "room/zone",
         "addressing mode: DHCP/reserved/static",
@@ -7069,7 +7072,7 @@ def api_export_xlsx_commissioning_workbook():
     autofit_columns(cover)
 
     register = wb.create_sheet(title=safe_sheet_name("Device Register"))
-    register_headers = ["name", "hostname", "IP", "MAC", "type", "vendor", "model", "VLAN", "room", "zone", "last_seen", "notes"]
+    register_headers = ["name", "hostname", "IP", "MAC", "type", "vendor", "model", "firmware_version", "serial", "VLAN", "room/zone", "addressing mode", "last_seen", "notes"]
     register_rows = []
     for d in devices:
         register_rows.append({
@@ -7080,9 +7083,11 @@ def api_export_xlsx_commissioning_workbook():
             "type": d.get("effective_type") or d.get("type") or "",
             "vendor": d.get("vendor") or "",
             "model": d.get("model") or "",
+            "firmware_version": d.get("firmware_version") or "",
+            "serial": d.get("serial") or "",
             "VLAN": d.get("vlan") or "",
-            "room": d.get("room") or "",
-            "zone": d.get("zone") or "",
+            "room/zone": d.get("room") or d.get("zone") or "",
+            "addressing mode": _device_addressing_mode(d),
             "last_seen": d.get("last_reachable") or d.get("last_seen") or "",
             "notes": d.get("notes") or "",
         })
@@ -7188,6 +7193,60 @@ def api_export_xlsx_commissioning_workbook():
     audit_meta = write_table(ws_audit, audit_headers, audit_rows, audit_start)
     freeze_header(ws_audit, audit_meta["header_row"])
     autofit_columns(ws_audit)
+
+    # ── W20.4 Config Scripts sheet ────────────────────────────────────────
+    try:
+        from template_engine import render_config_script
+        ws_cfg = wb.create_sheet(title=safe_sheet_name("Config Scripts"))
+        cfg_headers = ["hostname", "IP", "device_type", "template_used", "ai_generated", "config_script"]
+        cfg_rows = []
+        matched_count = 0
+        ai_count = 0
+        no_template_count = 0
+        for d in devices:
+            result = render_config_script(d, settings)
+            is_ai = bool(result.get("ai_generated"))
+            template_name = result.get("template_name") or result.get("display_name") or ""
+            if result.get("ok"):
+                matched_count += 1
+            else:
+                no_template_count += 1
+            if is_ai:
+                ai_count += 1
+            cfg_rows.append({
+                "hostname": d.get("hostname") or d.get("name") or "",
+                "IP": d.get("ip") or "",
+                "device_type": d.get("effective_type") or d.get("type") or "",
+                "template_used": template_name,
+                "ai_generated": "Yes" if is_ai else "No",
+                "config_script": result.get("script") or "",
+            })
+        # Summary row at top (row 1), table starts at row 3
+        summary_text = (
+            f"Config Scripts — {len(cfg_rows)} devices | "
+            f"{matched_count} matched templates | "
+            f"{ai_count} AI-generated | "
+            f"{no_template_count} no template"
+        )
+        ws_cfg["A1"] = summary_text
+        if Font:
+            ws_cfg["A1"].font = Font(italic=True, size=10)
+        cfg_meta = write_table(ws_cfg, cfg_headers, cfg_rows, 3)
+        # Apply Courier New + wrap_text to the config_script column
+        script_col = cfg_meta["column_map"].get("config_script")
+        if script_col:
+            courier_font = Font(name="Courier New", size=9) if Font else None
+            wrap_align = Alignment(wrap_text=True, vertical="top") if Alignment else None
+            for row_idx in range(cfg_meta["data_start_row"], cfg_meta["last_row"] + 1):
+                cell = ws_cfg.cell(row=row_idx, column=script_col)
+                if courier_font:
+                    cell.font = courier_font
+                if wrap_align:
+                    cell.alignment = wrap_align
+            ws_cfg.column_dimensions[get_column_letter(script_col)].width = 80
+        freeze_header(ws_cfg, cfg_meta["header_row"])
+    except Exception:
+        pass
 
     return _xlsx_response(wb, _export_filename("commissioning_workbook"))
 
@@ -8458,6 +8517,205 @@ def add_all_discovered_devices():
     })
 
 
+@app.route("/tools/api/device_types", methods=["GET"])
+def api_get_device_types():
+    path = os.path.join(os.path.dirname(__file__), "configs", "device_types.json")
+    if not os.path.exists(path):
+        return jsonify({"ok": False, "error": "device_types.json not found"}), 404
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return jsonify({"ok": True, "device_types": data.get("device_types", [])})
+
+
+@app.route("/tools/api/config-script", methods=["GET"])
+def api_config_script():
+    from template_engine import render_config_script, get_template_name, get_template_display_name
+
+    ip = str(request.args.get("ip") or "").strip()
+    if not ip:
+        return jsonify({"ok": False, "error": "ip parameter is required"}), 400
+
+    devices = load_devices()
+    device = next((d for d in devices if str(d.get("ip") or "").strip() == ip), None)
+    if not device:
+        return jsonify({"ok": False, "error": f"Device not found: {ip}"}), 404
+
+    settings = load_settings()
+    result = render_config_script(device, settings)
+
+    if not result["ok"]:
+        ai_settings = settings.get("ai_query") or {}
+        cfg_settings = settings.get("config_scripts") or {}
+        ai_fallback_enabled = cfg_settings.get("ai_fallback", False)
+        backend = str(ai_settings.get("backend") or "disabled").strip().lower()
+
+        if ai_fallback_enabled and backend == "anthropic":
+            try:
+                from ai.query.interface import query_anthropic
+                from template_engine import _build_context, MISSING_MARKER
+
+                context = _build_context(device, settings)
+                device_type = (
+                    str(device.get("effective_type") or "").strip()
+                    or str(device.get("type") or "").strip()
+                )
+
+                def ctx_val(k):
+                    v = context.get(k, "")
+                    return "" if v == MISSING_MARKER else v
+
+                question = (
+                    f"Generate a minimal network configuration CLI block for the following AV device.\n"
+                    f"Produce only the configuration commands in plain text. No prose, no markdown, no code fences.\n"
+                    f"If you don't know the exact CLI syntax, produce a best-effort reference config block with inline comments.\n\n"
+                    f"Device Type:     {device_type}\n"
+                    f"Device Name:     {ctx_val('device_name')}\n"
+                    f"Hostname:        {ctx_val('hostname')}\n"
+                    f"IP Address:      {ctx_val('ip')}\n"
+                    f"Subnet Mask:     {ctx_val('subnet')}\n"
+                    f"Default Gateway: {ctx_val('gateway')}\n"
+                    f"DNS Primary:     {ctx_val('dns_primary')}\n"
+                    f"NTP Server:      {ctx_val('ntp_server')}\n"
+                    f"VLAN ID:         {ctx_val('vlan_id')}\n"
+                    f"Vendor:          {ctx_val('vendor')}\n"
+                    f"Model:           {ctx_val('model')}\n"
+                )
+                api_key = (
+                    str(ai_settings.get("anthropic_api_key") or "").strip()
+                    or os.environ.get("ANTHROPIC_API_KEY", "")
+                )
+                model = str(ai_settings.get("anthropic_model") or "claude-haiku-4-5-20251001").strip()
+                ai_script = query_anthropic(question, "", api_key=api_key, model=model)
+                if ai_script:
+                    ai_header = (
+                        "# ⚠ AI-GENERATED — NOT VERIFIED. REVIEW EVERY LINE BEFORE APPLYING.\n"
+                        f"# Device: {ctx_val('device_name')} ({ctx_val('ip')}) | Type: {device_type}\n"
+                        "# ============================================================\n\n"
+                    )
+                    return jsonify({
+                        "ok": True,
+                        "script": ai_header + ai_script,
+                        "template_name": None,
+                        "display_name": f"AI-Generated — {device_type}",
+                        "missing_fields": [],
+                        "ai_generated": True,
+                        "error": None,
+                    })
+            except Exception as ai_err:
+                pass
+
+    return jsonify(result)
+
+
+@app.route("/tools/api/project/config-scripts/export", methods=["GET"])
+def api_export_config_scripts_zip():
+    import io
+    import zipfile
+    import re as _re
+    from template_engine import render_config_script
+
+    devices = load_devices()
+    settings = load_settings()
+    ai_settings = settings.get("ai_query") or {}
+    cfg_settings = settings.get("config_scripts") or {}
+    ai_fallback_enabled = cfg_settings.get("ai_fallback", False)
+    backend = str(ai_settings.get("backend") or "disabled").strip().lower()
+
+    def safe_filename(hostname, ip):
+        raw = f"{hostname}_{ip}" if hostname else ip
+        return _re.sub(r"[^A-Za-z0-9_.\-]", "_", raw)[:60]
+
+    included = []
+    ai_generated = []
+    no_template = []
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for device in devices:
+            ip = str(device.get("ip") or "").strip()
+            hostname = str(device.get("hostname") or device.get("name") or "").strip()
+            device_type = (
+                str(device.get("effective_type") or "").strip()
+                or str(device.get("type") or "").strip()
+            )
+            result = render_config_script(device, settings)
+            fname_stem = safe_filename(hostname, ip)
+
+            if result["ok"]:
+                zf.writestr(f"{fname_stem}_config.txt", result["script"])
+                included.append({"ip": ip, "hostname": hostname, "template": result["template_name"]})
+            else:
+                if ai_fallback_enabled and backend == "anthropic":
+                    try:
+                        from ai.query.interface import query_anthropic
+                        from template_engine import _build_context, MISSING_MARKER
+
+                        context = _build_context(device, settings)
+                        def ctx_val(k):
+                            v = context.get(k, "")
+                            return "" if v == MISSING_MARKER else v
+
+                        question = (
+                            f"Generate a minimal network configuration CLI block for the following AV device.\n"
+                            f"Produce only the configuration commands in plain text. No prose, no markdown.\n\n"
+                            f"Device Type: {device_type}\nDevice Name: {ctx_val('device_name')}\n"
+                            f"IP: {ctx_val('ip')}\nSubnet: {ctx_val('subnet')}\nGateway: {ctx_val('gateway')}\n"
+                            f"DNS: {ctx_val('dns_primary')}\nNTP: {ctx_val('ntp_server')}\n"
+                            f"Vendor: {ctx_val('vendor')}\nModel: {ctx_val('model')}\n"
+                        )
+                        api_key = (
+                            str(ai_settings.get("anthropic_api_key") or "").strip()
+                            or os.environ.get("ANTHROPIC_API_KEY", "")
+                        )
+                        model = str(ai_settings.get("anthropic_model") or "claude-haiku-4-5-20251001").strip()
+                        ai_script = query_anthropic(question, "", api_key=api_key, model=model)
+                        if ai_script:
+                            header = (
+                                "# AI-GENERATED — NOT VERIFIED. REVIEW EVERY LINE BEFORE APPLYING.\n"
+                                f"# Device: {ctx_val('device_name')} ({ip}) | Type: {device_type}\n\n"
+                            )
+                            zf.writestr(f"ai_generated/{fname_stem}_config.txt", header + ai_script)
+                            ai_generated.append({"ip": ip, "hostname": hostname, "type": device_type})
+                            continue
+                    except Exception:
+                        pass
+                note = f"No template available for device type: {device_type or '(unknown)'}\n"
+                zf.writestr(f"no_template/{fname_stem}_no_template.txt", note)
+                no_template.append({"ip": ip, "hostname": hostname, "type": device_type})
+
+        project_id = get_active_project_id()
+        readme_lines = [
+            f"Config Scripts Export — {project_id}",
+            f"Generated: {utc_now_iso()}",
+            "",
+            f"Total devices processed: {len(devices)}",
+            f"Templates applied:       {len(included)}",
+            f"AI-generated:            {len(ai_generated)}",
+            f"No template available:   {len(no_template)}",
+            "",
+            "── Included Devices ──",
+        ]
+        for item in included:
+            readme_lines.append(f"  {item['ip']:<18} {item['hostname']:<24} template={item['template']}")
+        if ai_generated:
+            readme_lines += ["", "── AI-Generated (in ai_generated/ subfolder) ──"]
+            for item in ai_generated:
+                readme_lines.append(f"  {item['ip']:<18} {item['hostname']:<24} type={item['type']}")
+        if no_template:
+            readme_lines += ["", "── No Template Available (in no_template/ subfolder) ──"]
+            for item in no_template:
+                readme_lines.append(f"  {item['ip']:<18} {item['hostname']:<24} type={item['type']}")
+        zf.writestr("README.txt", "\n".join(readme_lines))
+
+    buf.seek(0)
+    ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%dT%H%M%SZ")
+    fname = f"netpi_config_scripts_{safe_filename(project_id, ts)}.zip"
+    response = make_response(buf.read())
+    response.headers["Content-Type"] = "application/zip"
+    response.headers["Content-Disposition"] = f"attachment; filename={fname}"
+    return response
+
+
 @app.route("/tools/api/devices/add_manual", methods=["POST"])
 def api_add_manual_device():
     payload = request.get_json(silent=True) or {}
@@ -8495,6 +8753,10 @@ def api_add_manual_device():
     preferred_name = str(normalized.get("name") or normalized.get("hostname") or "").strip()
     generated_name = generate_device_name(devices, device_type, preferred_name)
 
+    addressing_mode = str(normalized.get("addressing_mode") or "").strip().lower()
+    if addressing_mode not in {"dhcp", "reserved", "static"}:
+        addressing_mode = ""
+
     record = {
         "name": generated_name,
         "hostname": str(normalized.get("hostname") or "").strip(),
@@ -8506,6 +8768,8 @@ def api_add_manual_device():
         "vendor": str(normalized.get("vendor") or "").strip(),
         "model": str(normalized.get("model") or "").strip(),
         "serial": str(normalized.get("serial") or "").strip(),
+        "firmware_version": str(normalized.get("firmware_version") or "")[:30].strip(),
+        "addressing_mode": addressing_mode,
         "notes": str(normalized.get("notes") or "").strip(),
         "mac": normalized_mac or "",
         "mac_address": normalized_mac or None,
@@ -8969,7 +9233,9 @@ def api_dns_delete():
 
 HEADER_ALIASES = {
     "name": {"name", "device", "equipment", "device name", "device description",
-             "short name", "tag", "asset tag", "label", "device tag", "device id"},
+             "short name", "tag", "asset tag", "label", "device tag", "device id",
+             # extended AV schedule variants
+             "description", "make/model"},
     "hostname": {"hostname", "host name", "dns name", "fqdn", "computer name",
                  "device hostname", "network name", "dhcp name"},
     "ip": {"ip", "ip address", "address", "ipv4", "ipv4 address", "ip addr",
@@ -8979,32 +9245,44 @@ HEADER_ALIASES = {
     "gateway": {"gateway", "default gateway", "gw", "default gw", "router",
                 "next hop", "default route", "def gw"},
     "vlan": {"vlan", "vlan id", "vlan name", "network segment", "network name",
-             "vlan network", "av network", "audio network", "control network"},
+             "vlan network", "av network", "audio network", "control network",
+             # extended AV schedule variants
+             "patch panel reference"},
     "multicast": {"multicast", "multicast address", "multicast ip", "mcast",
                   "mcast address", "multicast addr", "mcast ip", "dante multicast",
                   "audio multicast"},
     "type": {"type", "device type", "role", "category", "class",
-             "classification", "device category", "equipment type"},
+             "classification", "device category", "equipment type",
+             # extended AV schedule variants
+             "service"},
     "vendor": {"vendor", "manufacturer", "make", "brand", "mfr", "supplier",
                "manufacturer/make", "manufacturer / make"},
     "model": {"model", "device model", "model number", "model no", "part",
               "part number", "part no", "product", "product model", "sku",
               "model/part no", "model / part no"},
     "mac": {"mac", "mac address", "macaddr", "mac addr", "ethernet",
-            "hw address", "hardware address", "mac id", "mac addr."},
+            "hw address", "hardware address", "mac id", "mac addr.",
+            # extended AV schedule variants
+            "device mac address"},
     "serial": {"serial", "serial no", "serial no.", "serial number", "sn",
                "s/n", "asset id", "asset number", "asset serial"},
     "location": {"location", "install location", "device location",
-                 "mounting location", "position", "install site"},
+                 "mounting location", "position", "install site",
+                 # extended AV schedule variants
+                 "level", "floor"},
     "room": {"room", "room/zone", "room / zone", "zone", "space",
              "room name", "room location", "room number", "room/location",
              "area", "area/comm rack", "area / comm rack", "comm rack", "comm. rack",
              "communications rack", "comms rack", "building area", "av zone", "area name",
-             "system area", "zone area", "area/room", "area / room"},
+             "system area", "zone area", "area/room", "area / room",
+             # extended AV schedule variants
+             "comms room", "room no"},
     "switch_port": {"switch/port", "switch / port", "switch port", "port",
                     "connected port", "network port", "uplink port",
                     "connected switch", "switch connection", "wall plate",
-                    "patch panel port", "network connection", "sw/port"},
+                    "patch panel port", "network connection", "sw/port",
+                    # extended AV schedule variants
+                    "patch ref"},
     "poe_type": {"poe", "poe type", "power", "power type", "poe standard",
                  "power over ethernet", "poe+", "power source", "poe class"},
     "rack_location": {"rack", "rack location", "rack/location detail",
@@ -9012,13 +9290,22 @@ HEADER_ALIASES = {
                       "rack position", "u position", "rack slot", "rack number",
                       "mounting detail", "install detail", "ru", "rack u"},
     "notes": {"notes", "note", "comment", "comments", "remarks", "info",
-              "additional info", "other"},
+              "additional info", "other",
+              # extended AV schedule variants
+              "wifi ssid", "dhcp"},
 }
 
 DEFAULT_COLUMN_ORDER = [
     "room", "name", "location", "vendor", "model", "vlan",
     "ip", "subnet", "gateway", "multicast", "hostname", "mac",
     "serial", "switch_port", "poe_type", "type", "notes"
+]
+
+# Regex-based header overrides — tested against the original (un-normalised) cell text
+# when no static HEADER_ALIASES entry matches.  Add patterns here, not to HEADER_ALIASES.
+_HEADER_PATTERN_OVERRIDES = [
+    # "MP_FAC_AV_2", "MP_FAC_CTRL_1", etc. → VLAN name column
+    (re.compile(r'^MP[\s_]FAC', re.I), "vlan"),
 ]
 
 # Short device-ID pattern: letters followed by dash/underscore and digits (e.g. dsp-01, amp-02, tp-01a)
@@ -9056,6 +9343,30 @@ def _normalise_mac(value):
     return (value or "").strip()
 
 
+# Patterns that flag a MAC cell as containing a placeholder / prose value
+_MAC_PROSE_RE = re.compile(
+    r'\bn/?a\b|not\s+supplied|not\s+applicable|\btbd\b|\bunknown\b|\bnone\b|\bpending\b',
+    re.I,
+)
+
+
+def _sanitise_mac(value):
+    """Return ``(normalised_mac_or_empty, warning_or_None)``.
+
+    Prose placeholders like "N/A", "Not Supplied", strings longer than 20
+    characters, or values with more than 2 whitespace-separated words are
+    treated as an absent MAC rather than being stored as garbage or raising
+    a parse error.  The warning string (if any) is suitable for the
+    ``parse_warnings`` list returned by ``parse_pasted_device_text``.
+    """
+    v = (value or "").strip()
+    if not v:
+        return "", None
+    if len(v) > 20 or _MAC_PROSE_RE.search(v) or len(v.split()) > 2:
+        return "", f"MAC field skipped (looks like prose or placeholder): {v!r}"
+    return _normalise_mac(v), None
+
+
 def _detect_delimiter(text):
     sample = "\n".join((text or "").splitlines()[:5])
     if "\t" in sample:
@@ -9073,8 +9384,15 @@ def _read_pasted_rows(text):
         cleaned = [c.strip() for c in row]
         while cleaned and cleaned[-1] == "":
             cleaned.pop()
-        if any(c != "" for c in cleaned):
-            rows.append(cleaned)
+        populated = [c for c in cleaned if c]
+        # Skip fully-empty rows (already handled by the old `any` check).
+        if not populated:
+            continue
+        # Skip single-cell rows that are NOT a bare IP address — these are
+        # section-separator / group-heading rows common in AV schedules.
+        if len(populated) == 1 and not _valid_ip(populated[0]):
+            continue
+        rows.append(cleaned)
     return rows
 
 
@@ -9082,19 +9400,31 @@ def _detect_headers(first_row):
     mapping = {}
     for idx, cell in enumerate(first_row):
         norm = _norm_header(cell)
+        matched = False
         for canonical, aliases in HEADER_ALIASES.items():
             if norm in aliases:
                 mapping[idx] = canonical
+                matched = True
                 break
+        if not matched:
+            # Fall back to regex patterns (e.g. MP_FAC_* VLAN columns)
+            for pattern, canonical in _HEADER_PATTERN_OVERRIDES:
+                if pattern.search(cell):
+                    mapping[idx] = canonical
+                    break
     return mapping if len(mapping) >= 2 else None
 
 
 def _clean_vlan_text(value):
-    """Strip '(VLAN XX)' suffix and bare VLAN-ID-only values from display text."""
+    """Pass VLAN value through unchanged; only strip a trailing '(VLAN XX)' annotation.
+
+    Arbitrary descriptive names — 'MP_FAC_AV_2', 'AV_Control', 'DANTE', numeric
+    IDs like '20' — are all accepted as-is.  Nothing is rejected or blanked here.
+    """
     v = (value or "").strip()
     # "AV Control (VLAN 10)" → "AV Control"
     cleaned = re.sub(r'\s*\(vlan\s*\d+\)\s*', '', v, flags=re.I).strip()
-    # If result is empty but original had content, keep original
+    # If stripping left an empty string, keep the original (e.g. bare "(VLAN 10)")
     return cleaned or v
 
 
@@ -9256,13 +9586,16 @@ def parse_pasted_device_text(text):
     rows = _read_pasted_rows(text or "")
     parsed = []
     invalid_rows = []
+    parse_warnings = []          # non-fatal issues collected during parsing
 
     if not rows:
         return {
             "headers_detected": False,
             "header_map": {},
+            "header_row": [],
             "devices": [],
             "invalid_rows": [],
+            "parse_warnings": [],
             "row_count": 0,
         }
 
@@ -9272,22 +9605,49 @@ def parse_pasted_device_text(text):
     for idx, row in enumerate(data_rows, start=1):
         if header_map:
             item = {"name": "", "ip": "", "vlan": "", "type": "", "mac": "",
-                    "vendor": "", "model": "", "room": "", "notes": ""}
+                    "vendor": "", "model": "", "room": "", "notes": "", "serial": ""}
             for col_idx, canonical in header_map.items():
                 if col_idx < len(row):
                     item[canonical] = row[col_idx].strip()
+
+            # ── IP anchor fallback ─────────────────────────────────────────
+            # If the header map didn't produce an IP (e.g. column wasn't
+            # recognised), scan every cell in the row for a valid device IP
+            # so we don't silently discard a row that clearly has an address.
+            if not item["ip"]:
+                for cell in row:
+                    v = cell.strip()
+                    if (_valid_ip(v)
+                            and not _looks_like_subnet_mask(v)
+                            and not _looks_like_multicast(v)
+                            and not _looks_like_cidr_subnet(v)):
+                        item["ip"] = v
+                        parse_warnings.append({
+                            "row_index": idx,
+                            "field": "ip",
+                            "message": f"IP {v!r} found by cell scan — not in a mapped IP column",
+                        })
+                        break
         else:
             item = _row_to_device_by_position(row)
+            item.setdefault("serial", "")
 
-        item["name"] = (item.get("name") or "").strip()
-        item["ip"] = (item.get("ip") or "").strip()
-        item["vlan"] = _clean_vlan_text(item.get("vlan") or "")
-        item["type"] = (item.get("type") or "").strip()
-        item["mac"] = _normalise_mac(item.get("mac"))
+        # ── Field normalisation ────────────────────────────────────────────
+        item["name"]   = (item.get("name")   or "").strip()
+        item["ip"]     = (item.get("ip")     or "").strip()
+        item["vlan"]   = _clean_vlan_text(item.get("vlan") or "")
+        item["type"]   = (item.get("type")   or "").strip()
         item["vendor"] = (item.get("vendor") or "").strip()
-        item["model"] = (item.get("model") or "").strip()
-        item["room"] = (item.get("room") or "").strip()
-        item["notes"] = (item.get("notes") or "").strip()
+        item["model"]  = (item.get("model")  or "").strip()
+        item["room"]   = (item.get("room")   or "").strip()
+        item["notes"]  = (item.get("notes")  or "").strip()
+        # Serial: accept any string as-is — no format validation
+        item["serial"] = (item.get("serial") or "").strip()
+        # MAC: sanitise prose/placeholder values before normalising
+        mac_val, mac_warn = _sanitise_mac(item.get("mac"))
+        item["mac"] = mac_val
+        if mac_warn:
+            parse_warnings.append({"row_index": idx, "field": "mac", "message": mac_warn})
 
         if not item["ip"] or not _valid_ip(item["ip"]):
             invalid_rows.append({
@@ -9308,8 +9668,10 @@ def parse_pasted_device_text(text):
     return {
         "headers_detected": bool(header_map),
         "header_map": header_map or {},
+        "header_row": list(rows[0]) if header_map else [],
         "devices": parsed,
         "invalid_rows": invalid_rows,
+        "parse_warnings": parse_warnings,
         "row_count": len(rows),
     }
 
@@ -9366,6 +9728,7 @@ def preview_pasted_devices():
         "ok": True,
         "headers_detected": result["headers_detected"],
         "header_map": result["header_map"],
+        "header_row": result.get("header_row", []),
         "rows_total": result["row_count"],
         "rows_valid": len(preview_devices),
         "rows_invalid": len(result["invalid_rows"]),
@@ -9374,6 +9737,7 @@ def preview_pasted_devices():
         "rows_duplicate_mac": sum(1 for r in preview_devices if r.get("duplicate_mac")),
         "devices": preview_devices,
         "invalid_rows": result["invalid_rows"],
+        "parse_warnings": result.get("parse_warnings", []),
     })
 
 
@@ -9412,16 +9776,24 @@ def import_pasted_devices():
         preferred_name = (normalized.get("name") or "").strip()
         generated_name = generate_device_name(devices, device_type, preferred_name)
 
+        paste_addressing = str(normalized.get("addressing_mode") or "").strip().lower()
+        if paste_addressing not in {"dhcp", "reserved", "static"}:
+            paste_addressing = ""
         devices.append({
             "name": generated_name,
             "ip": ip,
             "type": device_type,
             "vlan": (normalized.get("vlan") or "").strip(),
+            "room": (normalized.get("room") or "").strip(),
+            "vendor": (normalized.get("vendor") or "").strip(),
+            "model": (normalized.get("model") or "").strip(),
+            "serial": (normalized.get("serial") or "").strip(),
+            "firmware_version": str(normalized.get("firmware_version") or "")[:30].strip(),
+            "addressing_mode": paste_addressing,
             "notes": (normalized.get("notes") or "").strip() or f"Pasted import ({normalized.get('vendor', '')})".strip(),
             "mac": normalized_mac or "",
             "mac_address": normalized_mac or None,
             "mac_source": _canonicalize_mac_source(normalized.get("mac_source"), has_mac=bool(normalized_mac)),
-            "vendor": (normalized.get("vendor") or "").strip()
         })
         added += 1
         existing_ips.add(ip)
