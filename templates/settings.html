@@ -138,6 +138,23 @@
         <a class="btn" href="/tools/api/export/xlsx/change_request">Download IT Change Request XLSX</a>
         <a class="btn" href="/tools/api/export/xlsx/commissioning_workbook">Download Commissioning Workbook XLSX</a>
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #1f2937;">
+        <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Config Scripts</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <a class="btn" href="/tools/api/project/config-scripts/export">Download Config Scripts ZIP</a>
+          <span style="font-size:11px;color:#6b7280">One <code>.txt</code> file per device with ready-to-apply network commands.</span>
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;max-width:600px">
+          <input type="checkbox" name="config_scripts_ai_fallback"
+            {% if (s.config_scripts or {}).get('ai_fallback') %}checked{% endif %}
+            style="margin-top:3px;flex-shrink:0">
+          <span>
+            <span style="font-size:13px;color:#d1d5db;font-weight:600">Enable AI fallback for config scripts</span><br>
+            <span style="font-size:11px;color:#6b7280">When no template exists for a device type, generate a best-effort config script using the Anthropic AI backend (requires Anthropic API key above).
+            Output is clearly marked <strong style="color:#fbbf24">AI-GENERATED</strong> and must be reviewed before applying. Off by default.</span>
+          </span>
+        </label>
+      </div>
     </div>
   </div>
   <button type="submit" class="btn btn-primary">Save settings</button>

@@ -5452,6 +5452,10 @@ def settings():
             ai_query["anthropic_api_key"] = raw_key
         s["ai_query"] = ai_query
 
+        cfg_scripts = dict(s.get("config_scripts") or {})
+        cfg_scripts["ai_fallback"] = request.form.get("config_scripts_ai_fallback") == "on"
+        s["config_scripts"] = cfg_scripts
+
         save_settings(s)
         append_audit_entry("settings_saved", f"Project: {s.get('project_name') or ''}")
         saved = True
