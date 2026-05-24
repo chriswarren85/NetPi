@@ -151,6 +151,7 @@
 </div>
 
 <div id="inventory-view-intake-panel" style="display:none">
+<datalist id="device-type-list"></datalist>
 <div id="intake-status" style="display:none;font-size:13px;margin:0 0 14px 0;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
 
 <div class="panel" id="manual-add-panel">
@@ -163,31 +164,112 @@
       <div class="form-group"><label>MAC</label><input id="manual-mac" placeholder="e.g. AA:BB:CC:DD:EE:FF"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Type</label><input id="manual-type" placeholder="e.g. qsys"></div>
-      <div class="form-group"><label>VLAN</label><input id="manual-vlan" placeholder="e.g. AV_Control"></div>
-      <div class="form-group"><label>Room</label><input id="manual-room" placeholder="e.g. Room A"></div>
-      <div class="form-group"><label>Zone</label><input id="manual-zone" placeholder="e.g. Stage Left"></div>
+      <div class="form-group">
+        <label>Type <span id="manual-type-custom-badge" style="display:none;font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px;background:#374151;color:#9ca3af;margin-left:4px">Custom</span></label>
+        <input id="manual-type" list="device-type-list" autocomplete="off" placeholder="Search or type a device type…" oninput="onDeviceTypeInput(this.value)">
+      </div>
+      <div class="form-group">
+        <label>VLAN</label>
+        <select id="manual-vlan">
+          <option value="">— select VLAN —</option>
+          {% for v in s.vlans %}
+          <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group"><label>Room / Zone</label><input id="manual-room" placeholder="e.g. Meeting Room 1"></div>
+      <div class="form-group">
+        <label>IP Assignment</label>
+        <select id="manual-ip-assignment">
+          <option value="">— unknown —</option>
+          <option value="dhcp">DHCP</option>
+          <option value="reserved">DHCP Reserved</option>
+          <option value="static">Static</option>
+        </select>
+      </div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>Vendor</label><input id="manual-vendor" placeholder="e.g. QSC"></div>
-      <div class="form-group"><label>Model</label><input id="manual-model" placeholder="e.g. Core"></div>
-      <div class="form-group"><label>Serial</label><input id="manual-serial" placeholder="e.g. SN12345"></div>
-      <div class="form-group"><label>Notes</label><input id="manual-notes" placeholder="Optional notes"></div>
+      <div class="form-group"><label>Vendor / Manufacturer</label><input id="manual-vendor" placeholder="e.g. QSC"></div>
+      <div class="form-group"><label>Model</label><input id="manual-model" placeholder="e.g. Core 110f"></div>
+      <div class="form-group"><label>Serial Number</label><input id="manual-serial" placeholder="e.g. SN12345" maxlength="50"></div>
+      <div class="form-group"><label>Firmware Version</label><input id="manual-firmware" placeholder="e.g. 9.10.1" maxlength="30"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:1;min-width:240px"><label>Notes</label><textarea id="manual-notes" placeholder="Optional notes" maxlength="500" style="width:100%;min-height:56px;resize:vertical"></textarea></div>
     </div>
     <button class="btn btn-primary" onclick="addManualDevice()">Add Manual Device</button>
   </div>
 </div>
 
 <div class="panel" id="paste-list-panel">
-  <div class="panel-header">Paste Device List</div>
+  <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
+    <span>Paste Device List</span>
+    <button class="btn" style="font-size:11px;padding:3px 10px;height:auto" onclick="togglePasteHelp()">? Format Help</button>
+  </div>
   <div class="panel-body">
-    <textarea id="pasted-device-text" style="width:100%;min-height:170px;font-family:monospace;" placeholder="Name,IP,Type,VLAN&#10;DSP-01,192.168.1.20,qsys,AV_Control&#10;192.168.1.30"></textarea>
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="previewPasteDevices()">Preview Parse</button>
+
+    <!-- ── Format Help ─────────────────────────────────────── -->
+    <div id="paste-format-help" style="display:none;margin-bottom:14px;padding:12px 14px;background:#0d0d0d;border:1px solid #374151;border-radius:8px;font-size:12px;line-height:1.7">
+      <div style="font-weight:700;color:#d1d5db;margin-bottom:8px">Accepted Formats</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px">With headers (recommended)</div>
+          <pre style="margin:0;font-size:11px;color:#9ca3af;background:#111;padding:8px;border-radius:4px;border:1px solid #374151;overflow-x:auto">Name&#9;IP&#9;Type&#9;VLAN
+DSP-01&#9;192.168.1.20&#9;qsys&#9;AV_Control
+AMP-01&#9;192.168.1.21&#9;amplifier&#9;AV_Control</pre>
+          <div style="color:#6b7280;margin-top:4px;font-size:11px">Tabs, commas, or semicolons all work. Copy from Excel/Sheets with tab separation.</div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px">Without headers (positional)</div>
+          <pre style="margin:0;font-size:11px;color:#9ca3af;background:#111;padding:8px;border-radius:4px;border:1px solid #374151;overflow-x:auto">192.168.1.20
+DSP-01&#9;192.168.1.20
+DSP-01&#9;192.168.1.20&#9;qsys</pre>
+          <div style="color:#6b7280;margin-top:4px;font-size:11px">Parser anchors on the IP address and assigns surrounding columns by position and pattern.</div>
+        </div>
+      </div>
+      <div style="font-weight:700;color:#d1d5db;margin-bottom:6px">Recognized Column Header Names</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;color:#9ca3af">
+        <div><span style="color:#d1d5db;font-weight:600">IP</span> <span style="color:#ef4444">★ required</span><br><span style="color:#6b7280">ip, ip address, address, ipv4, management ip, static ip</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Name</span><br><span style="color:#6b7280">name, device, equipment, description, tag, label, asset tag, device id</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Type</span><br><span style="color:#6b7280">type, device type, role, category, class, service</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">VLAN</span><br><span style="color:#6b7280">vlan, vlan id, vlan name, network segment, av network, MP_FAC_* columns</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">MAC</span><br><span style="color:#6b7280">mac, mac address, device mac address, hw address, ethernet</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Vendor</span><br><span style="color:#6b7280">vendor, manufacturer, make, brand, mfr</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Model</span><br><span style="color:#6b7280">model, model number, part number, sku, product</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Room</span><br><span style="color:#6b7280">room, zone, area, room/zone, area/room, comms room, av zone</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Serial / Notes / Switch Port</span><br><span style="color:#6b7280">serial, sn, s/n · notes, comment, dhcp · switch port, port, patch ref</span></div>
+      </div>
+    </div>
+
+    <!-- ── Column guide header ─────────────────────────────── -->
+    <div style="display:grid;grid-template-columns:14% 14% 12% 12% 16% 11% 13% 1fr;background:#111;border:1px solid #374151;border-bottom:2px solid #4b5563;border-radius:6px 6px 0 0;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;overflow:hidden">
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Name</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d;color:#ef4444">IP ★</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Type</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">VLAN</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">MAC</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Vendor</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Model</div>
+      <div style="padding:5px 8px">Room</div>
+    </div>
+    <textarea id="pasted-device-text" style="width:100%;min-height:160px;font-family:monospace;font-size:12px;line-height:1.65;border-radius:0 0 6px 6px;border-top:none;box-sizing:border-box;tab-size:12;-moz-tab-size:12;resize:vertical" placeholder="DSP-01&#9;192.168.1.20&#9;qsys&#9;AV_Control&#9;&#9;QSC&#9;Core 110f&#9;Main Hall&#10;AMP-01&#9;192.168.1.21&#9;amplifier&#9;AV_Control&#9;&#9;Crown&#9;DCI8|600N&#9;Stage&#10;SW-CORE&#9;10.0.1.1&#9;switch&#9;Mgmt&#9;AA:BB:CC:DD:EE:FF&#9;Cisco&#9;C9300-48U&#9;IDF-1"></textarea>
+
+    <!-- ── Buttons ─────────────────────────────────────────── -->
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" onclick="previewPasteDevices()">Preview Parse</button>
+      <button class="btn" onclick="copyPasteTemplate()" title="Copy TSV header row to clipboard">📋 Copy Template</button>
       <button class="btn" onclick="clearPaste()">Clear</button>
     </div>
-    <div id="paste-summary" style="margin-top:10px;"></div>
-    <div id="paste-invalid" style="margin-top:10px;"></div>
+
+    <!-- ── Parse Report (shown after Preview) ─────────────── -->
+    <div id="paste-parse-report" style="display:none;margin-top:14px">
+      <div id="paste-summary" style="margin-bottom:10px"></div>
+      <div id="paste-header-mapping" style="margin-bottom:10px;padding:10px 12px;background:#0d0d0d;border:1px solid #374151;border-radius:6px;font-size:12px;line-height:1.7"></div>
+      <div id="paste-preview-table" style="overflow-x:auto;margin-bottom:10px"></div>
+      <div id="paste-invalid"></div>
+    </div>
+
+    <!-- ── Save section ────────────────────────────────────── -->
     <div id="paste-save-section" style="display:none;margin-top:14px;padding:12px;background:#111;border:1px solid #374151;border-radius:8px">
       <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;margin-bottom:10px">Save parsed rows</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1858,6 +1940,20 @@ function renderTable(){
           + '<div id="ai-suggest-' + escapeHtml(String(d.ip || d.name || '')) + '" style="margin-top:8px;">'
           + buildAiSuggestionPanelHtml(d)
           + '</div>'
+          + '<div style="margin-top:8px;">'
+          + '<details style="border:1px solid #1e1e1e;border-radius:6px;padding:6px 8px;background:#0a1628;">'
+          + '<summary style="cursor:pointer;color:#9ca3af;font-size:12px;display:flex;align-items:center;gap:6px;">'
+          + '<span style="font-size:10px;background:#1e2433;color:#93c5fd;padding:1px 6px;border-radius:3px;font-weight:700;letter-spacing:.04em;border:1px solid #1e3a5f">CFG</span>'
+          + 'Config Script'
+          + '</summary>'
+          + '<div style="margin-top:8px;">'
+          + '<button onclick="openConfigScriptModal(' + JSON.stringify(d.ip || d.name || '') + ', event)" '
+          + 'style="font-size:11px;padding:3px 10px;background:#1e1e1e;color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;">'
+          + 'Generate Config Script</button>'
+          + '<div style="font-size:11px;color:#6b7280;margin-top:4px">Renders network configuration commands for this device.</div>'
+          + '</div>'
+          + '</details>'
+          + '</div>'
           + '</div>'
           + '</td>';
         if(freshness.label === 'stale'){
@@ -2199,6 +2295,38 @@ window.showInventoryView = showInventoryView;
 restoreFilterState();
 // ── Intake Tab Functions ──────────────────────────────────────────────────
 
+let deviceTypeLibrary = [];
+
+async function loadDeviceTypeLibrary(){
+  try {
+    const res = await fetch('/tools/api/device_types');
+    const data = await res.json();
+    if(!res.ok || !data.ok) return;
+    deviceTypeLibrary = Array.isArray(data.device_types) ? data.device_types : [];
+    const dl = document.getElementById('device-type-list');
+    if(!dl) return;
+    dl.innerHTML = deviceTypeLibrary.map(dt => {
+      const mfr = (dt.manufacturer_examples || []).join(', ');
+      const label = dt.category + ' — ' + dt.display_name + (mfr ? ' (' + mfr + ')' : '');
+      return '<option value="' + escapeHtml(dt.id) + '">' + escapeHtml(label) + '</option>';
+    }).join('');
+  } catch(e) {}
+}
+
+function onDeviceTypeInput(value){
+  const badge = document.getElementById('manual-type-custom-badge');
+  const matched = deviceTypeLibrary.find(dt => dt.id === value.trim());
+  if(matched){
+    if(badge) badge.style.display = 'none';
+    const vendorEl = document.getElementById('manual-vendor');
+    if(vendorEl && !vendorEl.value && matched.manufacturer_examples && matched.manufacturer_examples.length){
+      vendorEl.value = matched.manufacturer_examples[0];
+    }
+  } else {
+    if(badge) badge.style.display = value.trim() ? 'inline' : 'none';
+  }
+}
+
 function statusBadge(s){
   const map = {
     ok: '<span class="badge badge-green">OK</span>',
@@ -2247,17 +2375,28 @@ function collectManualPayload(){
     type: document.getElementById('manual-type').value.trim(),
     vlan: document.getElementById('manual-vlan').value.trim(),
     room: document.getElementById('manual-room').value.trim(),
-    zone: document.getElementById('manual-zone').value.trim(),
     vendor: document.getElementById('manual-vendor').value.trim(),
     model: document.getElementById('manual-model').value.trim(),
     serial: document.getElementById('manual-serial').value.trim(),
+    firmware_version: document.getElementById('manual-firmware').value.trim(),
+    addressing_mode: document.getElementById('manual-ip-assignment').value.trim(),
     notes: document.getElementById('manual-notes').value.trim()
   };
 }
 
 function clearManualForm(){
-  ['manual-name','manual-hostname','manual-ip','manual-mac','manual-type','manual-vlan','manual-room','manual-zone','manual-vendor','manual-model','manual-serial','manual-notes']
+  ['manual-name','manual-hostname','manual-ip','manual-mac','manual-vendor','manual-model','manual-serial','manual-firmware','manual-notes']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const typeEl = document.getElementById('manual-type');
+  if(typeEl) typeEl.value = '';
+  const vlanEl = document.getElementById('manual-vlan');
+  if(vlanEl) vlanEl.value = '';
+  const roomEl = document.getElementById('manual-room');
+  if(roomEl) roomEl.value = '';
+  const assignEl = document.getElementById('manual-ip-assignment');
+  if(assignEl) assignEl.value = '';
+  const badge = document.getElementById('manual-type-custom-badge');
+  if(badge) badge.style.display = 'none';
 }
 
 async function addManualDevice(){
@@ -2275,6 +2414,20 @@ async function addManualDevice(){
   } catch(e){ showIntakeStatus('Manual add failed: ' + e, 'error'); }
 }
 
+function togglePasteHelp(){
+  const el = document.getElementById('paste-format-help');
+  if(el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function copyPasteTemplate(){
+  const template = 'Name\tIP\tType\tVLAN\tMAC\tVendor\tModel\tRoom';
+  navigator.clipboard.writeText(template).then(() => {
+    showIntakeStatus('TSV header template copied — paste into Excel/Sheets, fill rows, then copy back here.', 'success');
+  }).catch(() => {
+    showIntakeStatus('Copy failed — header template: Name  IP  Type  VLAN  MAC  Vendor  Model  Room', 'error');
+  });
+}
+
 async function previewPasteDevices(){
   const pasted = document.getElementById('pasted-device-text').value.trim();
   if(!pasted){ showIntakeStatus('Paste device rows first.', 'error'); return; }
@@ -2282,6 +2435,7 @@ async function previewPasteDevices(){
     const res = await fetch('/tools/api/devices/preview_pasted', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: pasted }) });
     const data = await res.json();
     if(!res.ok || !data.ok){ showIntakeStatus(data.error || 'Preview failed.', 'error'); return; }
+
     intakeRows = (Array.isArray(data.devices) ? data.devices : []).map((row, idx) => {
       const duplicate = !!row.duplicate;
       const duplicateIp = !!row.duplicate_ip;
@@ -2289,21 +2443,105 @@ async function previewPasteDevices(){
       let reason = duplicateIp && duplicateMac ? 'duplicate_ip+duplicate_mac' : (duplicateIp ? 'duplicate_ip' : (duplicateMac ? 'duplicate_mac' : ''));
       return { id: idx+1, selected: !duplicate, source: 'paste', committed: false, status: duplicate ? 'Conflict' : 'Ready', conflict_reason: reason, ...row };
     });
-    document.getElementById('paste-summary').innerHTML = '<div style="color:#9ca3af"><strong>Preview:</strong> valid ' + (data.rows_valid||0) + ' | invalid ' + (data.rows_invalid||0) + ' | duplicate IP ' + (data.rows_duplicate_ip||0) + ' | headers detected: ' + (data.headers_detected?'yes':'no') + '</div>';
+
+    // ── Show parse report ──────────────────────────────────────
+    document.getElementById('paste-parse-report').style.display = '';
+
+    // Summary bar
+    const valid = data.rows_valid || 0, invalid = data.rows_invalid || 0;
+    const dup = data.rows_duplicate || 0, dupIp = data.rows_duplicate_ip || 0, dupMac = data.rows_duplicate_mac || 0;
+    document.getElementById('paste-summary').innerHTML =
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px">'
+      + '<span style="color:#4ade80;font-weight:700">✓ ' + valid + ' valid</span>'
+      + (invalid ? '<span style="color:#ef4444;font-weight:700">✗ ' + invalid + ' invalid</span>' : '')
+      + (dup ? '<span style="color:#f59e0b;font-weight:600">⚠ ' + dup + ' duplicate'
+              + (dupIp ? ' (' + dupIp + ' IP)' : '') + (dupMac ? ' (' + dupMac + ' MAC)' : '') + '</span>' : '')
+      + '</div>';
+
+    // Column mapping
+    const headerMap = data.header_map || {}, headerRow = Array.isArray(data.header_row) ? data.header_row : [];
+    let mappingHtml = '';
+    if(data.headers_detected){
+      const recognizedIdxs = new Set(Object.keys(headerMap).map(Number));
+      const chips = Object.entries(headerMap).map(([colIdx, field]) => {
+        const orig = headerRow[parseInt(colIdx)] || '';
+        const same = orig.toLowerCase().replace(/[\s_\-]/g,'') === field.replace(/[\s_\-]/g,'');
+        return '<span style="display:inline-flex;align-items:center;gap:4px;background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:2px 8px;font-size:11px;margin:2px">'
+          + (same ? '' : '<span style="color:#6b7280">' + escapeHtml(orig) + ' →</span> ')
+          + '<strong style="color:#93c5fd">' + escapeHtml(field) + '</strong></span>';
+      }).join('');
+      const unrecognized = headerRow.filter((_,i) => !recognizedIdxs.has(i) && headerRow[i]);
+      const unrecHtml = unrecognized.length
+        ? '<div style="margin-top:6px;color:#f59e0b;font-size:11px">⚠ Unrecognized columns (ignored): '
+          + unrecognized.map(h => '<code style="background:#1a1a1a;padding:1px 5px;border-radius:3px">' + escapeHtml(h) + '</code>').join(' ') + '</div>'
+        : '';
+      mappingHtml = '<div style="color:#4ade80;font-size:11px;font-weight:700;margin-bottom:6px">✓ Headers detected — columns mapped:</div>'
+        + '<div style="line-height:2">' + chips + '</div>' + unrecHtml;
+    } else {
+      mappingHtml = '<div style="color:#f59e0b;font-size:12px;font-weight:700;margin-bottom:4px">⚠ No column headers found — positional mode</div>'
+        + '<div style="color:#9ca3af;font-size:11px">The parser anchored on the IP address and assigned surrounding columns by position and pattern. '
+        + 'For best results, add a header row first. Click <strong>📋 Copy Template</strong> to get a header row you can paste into your spreadsheet.</div>';
+    }
+    document.getElementById('paste-header-mapping').innerHTML = mappingHtml;
+
+    // Parsed rows preview table
+    const COLS = ['name','ip','type','vlan','mac','vendor','model','room'];
+    const LABELS = {name:'Name',ip:'IP',type:'Type',vlan:'VLAN',mac:'MAC',vendor:'Vendor',model:'Model',room:'Room'};
+    const devices = Array.isArray(data.devices) ? data.devices : [];
+    let tblHtml = '<table style="font-size:11px;width:100%;border-collapse:collapse"><thead><tr style="background:#111">'
+      + COLS.map(c => '<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #374151;white-space:nowrap">' + LABELS[c] + '</th>').join('')
+      + '<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #374151">Status</th>'
+      + '</tr></thead><tbody>';
+    tblHtml += devices.length ? devices.map(row => {
+      const dup = !!row.duplicate;
+      const statusCell = dup
+        ? '<td style="color:#f59e0b;font-size:11px;white-space:nowrap">⚠ ' + (row.duplicate_ip && row.duplicate_mac ? 'Dup IP+MAC' : row.duplicate_ip ? 'Dup IP' : 'Dup MAC') + '</td>'
+        : '<td style="color:#4ade80;font-size:11px">✓ Ready</td>';
+      return '<tr style="border-bottom:1px solid #1f1f1f' + (dup ? ';opacity:0.55' : '') + '">'
+        + COLS.map(c => {
+            const v = escapeHtml(row[c] || '');
+            const mono = (c==='ip'||c==='mac') ? 'font-family:monospace;' : '';
+            const dim = !v ? 'color:#374151' : (c==='ip' ? 'color:#d1d5db;font-weight:600' : '');
+            return '<td style="padding:5px 8px;' + mono + dim + '">' + (v || '—') + '</td>';
+          }).join('')
+        + statusCell + '</tr>';
+    }).join('') : '<tr><td colspan="' + (COLS.length+1) + '" style="padding:14px;text-align:center;color:#6b7280">No valid rows parsed.</td></tr>';
+    tblHtml += '</tbody></table>';
+    document.getElementById('paste-preview-table').innerHTML = tblHtml;
+
+    // Invalid rows table
     const invalidRows = Array.isArray(data.invalid_rows) ? data.invalid_rows : [];
-    document.getElementById('paste-invalid').innerHTML = invalidRows.length ? ('<details><summary><strong>Invalid rows (' + invalidRows.length + ')</strong></summary><pre style="white-space:pre-wrap;font-size:11px;color:#9ca3af">' + escapeHtml(JSON.stringify(invalidRows,null,2)) + '</pre></details>') : '';
+    document.getElementById('paste-invalid').innerHTML = invalidRows.length
+      ? '<div style="margin-top:6px"><div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:6px">✗ ' + invalidRows.length + ' row(s) rejected:</div>'
+        + '<table style="font-size:11px;width:100%;border-collapse:collapse"><thead><tr style="background:#111">'
+        + '<th style="padding:4px 8px;color:#6b7280;border-bottom:1px solid #374151;white-space:nowrap">Row #</th>'
+        + '<th style="padding:4px 8px;color:#6b7280;border-bottom:1px solid #374151">Raw content</th>'
+        + '<th style="padding:4px 8px;color:#6b7280;border-bottom:1px solid #374151">Reason</th></tr></thead><tbody>'
+        + invalidRows.map(r => {
+            const raw = Array.isArray(r.raw) ? r.raw.join('\t') : String(r.raw||'');
+            return '<tr style="border-bottom:1px solid #1f1f1f">'
+              + '<td style="padding:5px 8px;color:#6b7280;font-family:monospace">' + escapeHtml(String(r.row_index||'')) + '</td>'
+              + '<td style="padding:5px 8px;font-family:monospace;color:#9ca3af;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(raw) + '">' + escapeHtml(raw) + '</td>'
+              + '<td style="padding:5px 8px;color:#ef4444">' + escapeHtml(r.reason||'Unknown') + '</td></tr>';
+          }).join('')
+        + '</tbody></table></div>'
+      : '';
+
     renderIntakeResults();
-    showIntakeStatus('Paste preview generated. Review rows, then commit or save to LAN Sheet.', 'success');
     const saveSection = document.getElementById('paste-save-section');
-    if(saveSection) saveSection.style.display = (data.rows_valid > 0) ? '' : 'none';
+    if(saveSection) saveSection.style.display = (valid > 0) ? '' : 'none';
+    showIntakeStatus(valid + ' row(s) parsed and staged. Review the table below, then commit.', 'success');
   } catch(e){ showIntakeStatus('Preview failed: ' + e, 'error'); }
 }
 
 function clearPaste(){
   const text = document.getElementById('pasted-device-text');
   if(text) text.value = '';
-  document.getElementById('paste-summary').innerHTML = '';
-  document.getElementById('paste-invalid').innerHTML = '';
+  const report = document.getElementById('paste-parse-report');
+  if(report) report.style.display = 'none';
+  ['paste-summary','paste-header-mapping','paste-preview-table','paste-invalid'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.innerHTML = '';
+  });
   const saveSection = document.getElementById('paste-save-section');
   if(saveSection) saveSection.style.display = 'none';
   const saveStatus = document.getElementById('paste-save-status');
@@ -2419,7 +2657,7 @@ async function discoverHostsForIntake(){
 function selectAllRows(nextValue){ intakeRows=intakeRows.map(row=>({...row,selected:!!nextValue&&!row.committed&&row.status!=='Conflict'})); renderIntakeResults(); }
 function toggleRow(index){ const row=intakeRows[index]; if(!row||row.committed||row.status==='Conflict') return; row.selected=!row.selected; }
 
-function buildCommitPayload(rows){ return rows.map(row=>({ name:row.name||'', hostname:row.hostname||'', ip:row.ip||'', mac:row.mac||row.mac_address||'', type:row.type||'', vlan:row.vlan||'', room:row.room||'', zone:row.zone||'', vendor:row.vendor||'', model:row.model||'', serial:row.serial||'', notes:row.notes||'' })); }
+function buildCommitPayload(rows){ return rows.map(row=>({ name:row.name||'', hostname:row.hostname||'', ip:row.ip||'', mac:row.mac||row.mac_address||'', type:row.type||'', vlan:row.vlan||'', room:row.room||'', vendor:row.vendor||'', model:row.model||'', serial:row.serial||'', firmware_version:row.firmware_version||'', addressing_mode:row.addressing_mode||'', notes:row.notes||'' })); }
 
 async function commitRows(rows){
   if(!rows.length){ showIntakeStatus('No intake rows selected for commit.','error'); return; }
@@ -2481,8 +2719,112 @@ renderTable();
 refreshRequirementsStateFromEndpoint();
 showInventoryView('devices');
 loadTopologyData();
+loadDeviceTypeLibrary();
 if(window.location.hash === '#intake') showInventoryView('intake');
+
+// ── W20.1 Config Script Modal ─────────────────────────────────────────────
+
+function openConfigScriptModal(ip, event) {
+  if (event) event.stopPropagation();
+  const modal = document.getElementById('config-script-modal');
+  const body = document.getElementById('config-script-body');
+  const title = document.getElementById('config-script-title');
+  const warn = document.getElementById('config-script-missing-warn');
+  const aiBadge = document.getElementById('config-script-ai-badge');
+  if (!modal || !body) return;
+
+  body.textContent = 'Loading…';
+  title.textContent = '';
+  warn.style.display = 'none';
+  aiBadge.style.display = 'none';
+  modal.style.display = 'flex';
+  modal.dataset.ip = ip;
+
+  fetch('/tools/api/config-script?ip=' + encodeURIComponent(ip))
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        body.textContent = 'Error: ' + (data.error || 'unknown');
+        title.textContent = '';
+        return;
+      }
+      title.textContent = data.display_name || data.template_name || '';
+      body.textContent = data.script || '';
+      modal.dataset.script = data.script || '';
+      modal.dataset.hostname = ip;
+
+      if (data.ai_generated) {
+        aiBadge.style.display = 'inline-block';
+        modal.querySelector('#config-script-content').style.borderColor = '#d97706';
+      } else {
+        modal.querySelector('#config-script-content').style.borderColor = '#374151';
+      }
+
+      const missing = Array.isArray(data.missing_fields) ? data.missing_fields : [];
+      if (missing.length) {
+        warn.style.display = 'block';
+        warn.textContent = 'Missing fields (shown as [MISSING — enter manually]): ' + missing.join(', ');
+      } else {
+        warn.style.display = 'none';
+      }
+    })
+    .catch(err => {
+      body.textContent = 'Request failed: ' + err;
+    });
+}
+
+function closeConfigScriptModal() {
+  const modal = document.getElementById('config-script-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function copyConfigScript() {
+  const body = document.getElementById('config-script-body');
+  if (!body) return;
+  const btn = document.getElementById('config-script-copy-btn');
+  navigator.clipboard.writeText(body.textContent || '').then(() => {
+    if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1800); }
+  }).catch(() => {
+    if (btn) btn.textContent = 'Failed';
+  });
+}
+
+function downloadConfigScript() {
+  const modal = document.getElementById('config-script-modal');
+  if (!modal) return;
+  const script = modal.dataset.script || '';
+  const ip = (modal.dataset.hostname || 'device').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const blob = new Blob([script], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = ip + '_config.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 </script>
+
+<!-- W20.1 Config Script Modal -->
+<div id="config-script-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:16px;">
+  <div id="config-script-content" style="background:#111827;border:1px solid #374151;border-radius:8px;width:100%;max-width:760px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1f2937;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <span style="font-size:10px;background:#1e2433;color:#93c5fd;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;border:1px solid #1e3a5f;white-space:nowrap">CFG</span>
+        <span id="config-script-title" style="font-size:13px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <span id="config-script-ai-badge" style="display:none;font-size:10px;background:#451a03;color:#fbbf24;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;border:1px solid #92400e;white-space:nowrap">AI-GENERATED</span>
+      </div>
+      <button onclick="closeConfigScriptModal()" style="font-size:16px;background:none;border:none;color:#9ca3af;cursor:pointer;padding:2px 6px;line-height:1;flex-shrink:0;">&times;</button>
+    </div>
+    <div id="config-script-missing-warn" style="display:none;margin:8px 14px 0;padding:7px 10px;background:#451a03;border:1px solid #92400e;border-radius:5px;font-size:11px;color:#fbbf24;flex-shrink:0;"></div>
+    <pre id="config-script-body" style="flex:1;overflow:auto;margin:0;padding:14px;font-family:'Courier New',Courier,monospace;font-size:12px;color:#e2e8f0;background:#0d1117;white-space:pre;tab-size:4;"></pre>
+    <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid #1f2937;flex-shrink:0;">
+      <button id="config-script-copy-btn" onclick="copyConfigScript()" style="font-size:12px;padding:5px 14px;background:#1e2433;color:#93c5fd;border:1px solid #1e3a5f;border-radius:4px;cursor:pointer;">Copy</button>
+      <button onclick="downloadConfigScript()" style="font-size:12px;padding:5px 14px;background:#1e2433;color:#93c5fd;border:1px solid #1e3a5f;border-radius:4px;cursor:pointer;">Download .txt</button>
+      <button onclick="closeConfigScriptModal()" style="font-size:12px;padding:5px 14px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:4px;cursor:pointer;margin-left:auto;">Close</button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 
