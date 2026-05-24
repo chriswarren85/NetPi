@@ -383,3 +383,16 @@
   - LAN sheet fields (`name`, `ip`, `mac`, `type`, `vlan`, `vendor`, `model`, `room`, `notes`) are identical to the device fields the generators use — no field mapping was required
   - `_load_lan_sheet()` already returns `[]` on any read error (try/except), so the `_load_lan_sheet() or load_devices()` pattern is safe
   - Change is purely additive: two one-line edits, nothing removed, no write paths touched
+
+### Last Update
+- Feature: Model field now contributes to device type inference
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - `_suggestion_text_blob` now includes `device.get("model")` in its `raw_parts` list so AV token scoring (barco, crestron, novastar, etc.) picks up model strings when a device has no vendor set
+  - `guess_type_from_vendor` accepts an optional `model_raw=""` parameter; when vendor yields no signal it tries the model string against the same vendor_map, with a `model_prefix` table (`['dm-nvx', 'nvx'] → nvx`) checked first to resolve product-line tokens before the parent brand keyword fires
+  - Call site in `build_type_suggestion` updated: `guess_type_from_vendor(device.get("vendor", ""), device.get("model", ""))`
+  - Three test cases verified: `vendor="", model="Barco ClickShare C-10"` → `barco_ctrl`; `vendor="", model="Novastar H2 KLCOB12V2"` → `novastar`; `vendor="", model="Crestron DM-NVX-350"` → `nvx`
+  - Backward compatibility preserved: all callers that pass only `vendor_raw` continue to work unchanged; the model fallback only activates when vendor produces no match
+  - Known limitation: `effective_type` stays `generic` in the full pipeline for model-only devices because suggestion scoring (max ~38 pts from text + vendor_guess combined) does not reliably reach the 60-pt auto-promotion threshold — operators must still set `type` explicitly on the LAN sheet for firewall rules to generate from that device

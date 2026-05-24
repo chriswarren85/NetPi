@@ -403,7 +403,7 @@ def _audit_log_file():
 _initialize_project_state()
 
 
-def guess_type_from_vendor(vendor_raw):
+def guess_type_from_vendor(vendor_raw, model_raw=""):
     vendor = (vendor_raw or "").lower()
 
     vendor_map = [
@@ -440,6 +440,17 @@ def guess_type_from_vendor(vendor_raw):
     for keys, result in vendor_map:
         if any(k in vendor for k in keys):
             return result
+
+    # If vendor gave no signal, try the model string with the same logic.
+    # model_prefix is checked first so model-specific product-line tokens
+    # (e.g. "DM-NVX") are resolved before the manufacturer keyword catches
+    # the parent brand (e.g. "crestron").
+    model = (model_raw or "").lower()
+    if model:
+        model_prefix = [(['dm-nvx', 'nvx'], 'nvx')]
+        for keys, result in model_prefix + vendor_map:
+            if any(k in model for k in keys):
+                return result
 
     return 'generic'
 
@@ -5666,6 +5677,7 @@ def _suggestion_text_blob(device, validation, evidence_record=None):
         device.get("name"),
         device.get("hostname"),
         device.get("vendor"),
+        device.get("model"),
         device.get("notes"),
         device.get("type"),
         title_text,
@@ -5870,7 +5882,7 @@ def build_type_suggestion(device, validation=None):
     evidence_record = _resolve_evidence_record(device, validation)
     ports = _suggestion_port_set(validation)
     text = _suggestion_text_blob(device, validation, evidence_record=evidence_record)
-    vendor_guess = guess_type_from_vendor(device.get("vendor", ""))
+    vendor_guess = guess_type_from_vendor(device.get("vendor", ""), device.get("model", ""))
     evidence_match_kind = ((evidence_record or {}).get("_match_kind") or "").strip().lower()
     evidence_match_weight = _identity_match_weight(evidence_match_kind)
     current_mac = _normalize_identity_mac(current_observation.get("mac"))
