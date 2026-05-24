@@ -5396,7 +5396,7 @@ def recommendations():
 
 @app.route('/tools/ipschedule')
 def ipschedule():
-    return render_template('ipschedule.html', s=load_settings())
+    return redirect('/tools/lan-sheet', code=301)
 
 
 @app.route('/tools/settings', methods=['GET', 'POST'])
