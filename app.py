@@ -10368,7 +10368,7 @@ def _build_system_requirements_payload(payload):
     devices = payload.get("devices")
     explicit_devices = isinstance(devices, list) and bool(devices)
     if not explicit_devices:
-        devices = load_devices()
+        devices = _load_lan_sheet() or load_devices()
 
     if vlan:
         devices = [device for device in devices if str(device.get("vlan") or "").strip() == vlan]
@@ -10789,7 +10789,7 @@ def _build_recommendation_context(payload):
     devices = payload.get("devices")
     explicit_devices = isinstance(devices, list) and bool(devices)
     if not explicit_devices:
-        devices = load_devices()
+        devices = _load_lan_sheet() or load_devices()
 
     vlan = str(payload.get("vlan") or "").strip()
     if vlan:

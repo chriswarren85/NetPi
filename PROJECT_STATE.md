@@ -371,3 +371,15 @@
   - Intake layout now follows manual add -> paste -> run checks/discovery -> intake results -> commit actions.
   - Diagnostics route remains live and now includes a compatibility notice linking operators to Device Intake as the primary workflow entry point.
   - Active-project save isolation remains intact because commit continues to use existing project-aware import/manual-add endpoints.
+
+### Last Update
+- Feature: Firewall and recommendations generators prefer LAN sheet as device source
+- Files modified:
+  - app.py
+  - PROJECT_STATE.md
+- Summary of changes:
+  - `_build_system_requirements_payload` and `_build_recommendation_context` now prefer `_load_lan_sheet()` as their device source when no explicit devices list is passed in the payload
+  - If the LAN sheet is empty or unavailable, both functions fall back to `load_devices()` (devices.json) silently — existing behaviour is fully preserved
+  - LAN sheet fields (`name`, `ip`, `mac`, `type`, `vlan`, `vendor`, `model`, `room`, `notes`) are identical to the device fields the generators use — no field mapping was required
+  - `_load_lan_sheet()` already returns `[]` on any read error (try/except), so the `_load_lan_sheet() or load_devices()` pattern is safe
+  - Change is purely additive: two one-line edits, nothing removed, no write paths touched
