@@ -40,8 +40,16 @@
 <div class="panel">
   <div class="panel-header">
     <span>Requirement Views</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="exportRequirementsCsv()">Export CSV</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" id="req-generate-btn" onclick="startRequirementsGeneration()">Generate</button>
+      <button class="btn btn-danger" id="req-stop-btn" onclick="stopRequirementsGeneration()" style="display:none">Stop</button>
+      <select id="req-refresh-select" onchange="handleRequirementsAutoRefreshChange(this.value)" style="width:auto;padding:5px 8px;font-size:12px" title="Auto-refresh interval">
+        <option value="0">No auto-refresh</option>
+        <option value="30">Refresh every 30s</option>
+        <option value="60">Refresh every 1m</option>
+        <option value="300">Refresh every 5m</option>
+      </select>
+      <button class="btn" onclick="exportRequirementsCsv()">Export CSV</button>
     </div>
   </div>
   <div class="panel-body" style="padding-bottom:10px">
@@ -53,7 +61,7 @@
       <button class="btn" data-tab="By Service" onclick="setRequirementTab('By Service', this)">By Service</button>
     </div>
     <div id="requirements-view-note" style="margin-top:10px;font-size:12px;color:#9ca3af">
-      Loading generated requirement rows from live backend.
+      Press Generate to build requirement rows from the current inventory.
     </div>
   </div>
 </div>
@@ -98,8 +106,10 @@ let requirementDevices = [];
 let unmappedDevices = [];
 let portsByDeviceId = {};  // device_id -> array of port entry objects
 let requirementsSummary = { total: 0, mapped: 0, unmapped: 0, types_seen: 0, multicast_required: 0, igmp_required: 0 };
-let requirementsLoadState = 'loading'; // loading | ready | empty | error
+let requirementsLoadState = 'idle'; // idle | loading | ready | empty | error
 let requirementsErrorMessage = '';
+let _reqController = null;   // AbortController for in-flight fetch
+let _reqRefreshInterval = 0; // seconds; 0 = off
 
 let activeRequirementTab = 'By Device';
 let expandedRequirementIndex = -1;
@@ -189,8 +199,12 @@ function updateSummaryCards(){
 function updateRequirementsViewNote(){
   const note = document.getElementById('requirements-view-note');
   if(!note) return;
+  if(requirementsLoadState === 'idle'){
+    note.textContent = 'Press Generate to build requirement rows from the current inventory.';
+    return;
+  }
   if(requirementsLoadState === 'loading'){
-    note.textContent = 'Loading generated requirements for ' + activeRequirementTab + ' view...';
+    note.textContent = 'Loading generated requirements for ' + activeRequirementTab + ' view…';
     return;
   }
   if(requirementsLoadState === 'error'){
@@ -208,8 +222,12 @@ function renderUnmappedDevices(){
   const el = document.getElementById('requirements-unmapped');
   if(!el) return;
 
+  if(requirementsLoadState === 'idle'){
+    el.textContent = 'No generation results yet. Press Generate above.';
+    return;
+  }
   if(requirementsLoadState === 'loading'){
-    el.textContent = 'Loading unmapped device status...';
+    el.textContent = 'Loading unmapped device status…';
     return;
   }
   if(requirementsLoadState === 'error'){
@@ -346,18 +364,70 @@ function persistRequirementsStateForDevices(results, unmapped){
   }
 }
 
-async function loadGeneratedRequirements(){
+function _setReqButtons(running){
+  const genBtn  = document.getElementById('req-generate-btn');
+  const stopBtn = document.getElementById('req-stop-btn');
+  if(genBtn)  genBtn.style.display  = running ? 'none' : '';
+  if(stopBtn) stopBtn.style.display = running ? '' : 'none';
+}
+
+function stopRequirementsGeneration(){
+  if(_reqController){
+    _reqController.abort();
+    _reqController = null;
+  }
+  window.netpiStatus && window.netpiStatus.cancelAll('Requirements — cancelled by user', 'REQUIREMENTS');
+  _setReqButtons(false);
+  requirementsLoadState = 'idle';
+  updateRequirementsViewNote();
+  renderRequirementRows();
+  renderUnmappedDevices();
+}
+
+function handleRequirementsAutoRefreshChange(val){
+  _reqRefreshInterval = Number(val) || 0;
+  window.netpiStatus && window.netpiStatus.stopCountdown();
+  if(_reqRefreshInterval > 0 && requirementsLoadState === 'ready'){
+    // kick off a countdown immediately so user sees it
+    _scheduleRequirementsRefresh();
+  }
+}
+
+function _scheduleRequirementsRefresh(){
+  if(!_reqRefreshInterval) return;
+  const lbl = _reqRefreshInterval >= 60
+    ? Math.round(_reqRefreshInterval/60) + 'm'
+    : _reqRefreshInterval + 's';
+  window.netpiStatus && window.netpiStatus.startCountdown(
+    _reqRefreshInterval,
+    'Req refresh',
+    function(){ startRequirementsGeneration(); },
+    'REQUIREMENTS'
+  );
+}
+
+async function startRequirementsGeneration(){
+  // Cancel any previous in-flight request
+  if(_reqController){
+    _reqController.abort();
+  }
+  _reqController = new AbortController();
+
+  _setReqButtons(true);
   requirementsLoadState = 'loading';
   requirementsErrorMessage = '';
   updateRequirementsViewNote();
   renderUnmappedDevices();
   renderRequirementRows();
 
+  window.netpiStatus && window.netpiStatus.startTimer('Requirements', 'REQUIREMENTS');
+
   try {
     const res = await fetch('/tools/api/generate_requirements', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
+      signal: _reqController.signal
     });
     const data = await res.json();
     if(!res.ok || !data || !data.ok){
@@ -390,12 +460,26 @@ async function loadGeneratedRequirements(){
     });
 
     requirementsLoadState = results.length ? 'ready' : 'empty';
+    _reqController = null;
+    _setReqButtons(false);
     updateSummaryCards();
     updateRequirementsViewNote();
     renderUnmappedDevices();
     renderRequirementRows();
     persistRequirementsStateForDevices(results, unmappedDevices);
+
+    const msg = 'Requirements — ' + (requirementsSummary.mapped || 0) + ' mapped, '
+      + requirementRows.length + ' rows';
+    window.netpiStatus && window.netpiStatus.stopTimer(msg, 'success', 'REQUIREMENTS');
+
+    // Schedule auto-refresh if configured
+    if(_reqRefreshInterval > 0) _scheduleRequirementsRefresh();
+
   } catch (error) {
+    const aborted = error && error.name === 'AbortError';
+    _reqController = null;
+    _setReqButtons(false);
+    if(aborted) return; // user-cancelled — already handled by stopRequirementsGeneration()
     requirementsLoadState = 'error';
     requirementsErrorMessage = String((error && error.message) || error || 'Unknown error');
     requirementRows = [];
@@ -406,8 +490,12 @@ async function loadGeneratedRequirements(){
     updateRequirementsViewNote();
     renderUnmappedDevices();
     renderRequirementRows();
+    window.netpiStatus && window.netpiStatus.stopTimer('Requirements failed: ' + requirementsErrorMessage, 'error', 'REQUIREMENTS');
   }
 }
+
+/* Keep old name for any legacy callers */
+function loadGeneratedRequirements(){ startRequirementsGeneration(); }
 
 function buildPortDetailTable(deviceId){
   const ports = portsByDeviceId[deviceId] || [];
@@ -442,8 +530,13 @@ function renderRequirementRows(){
   if(!tbody) return;
   tbody.innerHTML = '';
 
+  if(requirementsLoadState === 'idle'){
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#6b7280;text-align:center;padding:1rem">Press Generate to produce requirement rows.</td></tr>';
+    return;
+  }
+
   if(requirementsLoadState === 'loading'){
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#9ca3af;text-align:center;padding:1rem">Loading generated requirements...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#9ca3af;text-align:center;padding:1rem">Generating requirements…</td></tr>';
     return;
   }
 
@@ -608,10 +701,12 @@ function exportRequirementsCsv(){
   downloadText(lines.join('\r\n'), 'requirements.csv', 'text/csv;charset=utf-8');
 }
 
+/* Initial render — idle state, no auto-load */
 updateSummaryCards();
 updateRequirementsViewNote();
 renderRequirementRows();
 renderUnmappedDevices();
-loadGeneratedRequirements();
+_setReqButtons(false);
+window.netpiStatus && window.netpiStatus.post('Requirements page ready — press Generate to begin', 'info', 'REQUIREMENTS');
 </script>
 {% endblock %}

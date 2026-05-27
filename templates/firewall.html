@@ -7,8 +7,15 @@
 <div class="panel">
   <div class="panel-header">
     <span>Filter Rules</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="loadFirewallPlan()">Generate Firewall Plan</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" id="fw-generate-btn" onclick="startFirewallGeneration()">Generate Firewall Plan</button>
+      <button class="btn btn-danger" id="fw-stop-btn" onclick="stopFirewallGeneration()" style="display:none">Stop</button>
+      <select id="fw-refresh-select" onchange="handleFirewallAutoRefreshChange(this.value)" style="width:auto;padding:5px 8px;font-size:12px" title="Auto-refresh interval">
+        <option value="0">No auto-refresh</option>
+        <option value="30">Refresh every 30s</option>
+        <option value="60">Refresh every 1m</option>
+        <option value="300">Refresh every 5m</option>
+      </select>
       <button class="btn" onclick="applyFirewallFilters()">Apply</button>
       <button class="btn" onclick="resetFirewallFilters()">Reset</button>
     </div>
@@ -42,7 +49,7 @@
         </select>
       </div>
     </div>
-    <div id="fw-status" style="margin-top:8px;font-size:11px;color:#6b7280">Loading firewall plan...</div>
+    <div id="fw-status" style="margin-top:8px;font-size:11px;color:#6b7280">Press Generate Firewall Plan to begin.</div>
   </div>
 </div>
 
@@ -127,6 +134,8 @@ let firewallAllRules = [];
 let firewallFilteredRules = [];
 let firewallOperatorNotes = {};
 let firewallZoneMembers = {};
+let _fwController = null;   // AbortController for in-flight fetch
+let _fwRefreshInterval = 0; // seconds; 0 = off
 
 function escapeHtml(str){
   return String(str || '')
@@ -213,49 +222,118 @@ function saveFirewallNote(ruleId, btn) {
   }).catch(() => { if (btn) btn.textContent = 'Error'; });
 }
 
-function loadFirewallPlan(){
-  setFirewallStatus('Loading firewall plan...', '#6b7280');
-  Promise.all([
-    fetch('/tools/api/generate_firewall_plan', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'}).then(r => r.json()),
-    fetch('/tools/api/operator-notes').then(r => r.json()).catch(() => ({})),
-  ])
-    .then(([data, notesData]) => {
-      firewallOperatorNotes = (notesData && notesData.firewall) || {};
-      if(!data || data.ok !== true){
-        throw new Error((data && data.error) || 'Firewall plan request failed');
-      }
-      const plan = data.firewall_plan || {};
-      const rules = Array.isArray(plan.rules) ? plan.rules : [];
-      firewallAllRules = rules.map(normalizeRule);
-      firewallZoneMembers = (plan.zone_members && typeof plan.zone_members === 'object') ? plan.zone_members : {};
-      setFilterOptions('fw-source-vlan', firewallAllRules.map(r => r.source_zone));
-      setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
-      setFilterOptions('fw-system', firewallAllRules.flatMap(r => r.source_systems));
-      applyFirewallFilters();
-      renderZoneSummary();
-      const summary = plan.summary || {};
-      const flowCount = summary.flow_rules || 0;
-      const reqCount = summary.requirements_rules || 0;
-      if(firewallAllRules.length){
-        const sourceNote = (flowCount || reqCount)
-          ? ' (flows: ' + flowCount + ', port-profiles: ' + reqCount + ')'
-          : '';
-        setFirewallStatus('Loaded ' + firewallAllRules.length + ' firewall rule' + (firewallAllRules.length === 1 ? '' : 's') + sourceNote + '.', '#6b7280');
-      } else {
-        setFirewallStatus('No firewall rules generated yet. Add devices and assign types first.', '#6b7280');
-      }
-    })
-    .catch(err => {
-      firewallAllRules = [];
-      firewallFilteredRules = [];
-      firewallZoneMembers = {};
-      renderFirewallRows('fw-min-rows', []);
-      renderFirewallRows('fw-rec-rows', []);
-      updateRuleCounts([], []);
-      renderZoneSummary();
-      setFirewallStatus('Unable to load firewall plan: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
-    });
+function _setFwButtons(running){
+  const genBtn  = document.getElementById('fw-generate-btn');
+  const stopBtn = document.getElementById('fw-stop-btn');
+  if(genBtn)  genBtn.style.display  = running ? 'none' : '';
+  if(stopBtn) stopBtn.style.display = running ? '' : 'none';
 }
+
+function stopFirewallGeneration(){
+  if(_fwController){
+    _fwController.abort();
+    _fwController = null;
+  }
+  window.netpiStatus && window.netpiStatus.cancelAll('Firewall — cancelled by user', 'FIREWALL');
+  _setFwButtons(false);
+  setFirewallStatus('Generation cancelled.', '#6b7280');
+}
+
+function handleFirewallAutoRefreshChange(val){
+  _fwRefreshInterval = Number(val) || 0;
+  window.netpiStatus && window.netpiStatus.stopCountdown();
+  if(_fwRefreshInterval > 0 && firewallAllRules.length){
+    _scheduleFwRefresh();
+  }
+}
+
+function _scheduleFwRefresh(){
+  if(!_fwRefreshInterval) return;
+  const lbl = _fwRefreshInterval >= 60
+    ? Math.round(_fwRefreshInterval/60) + 'm'
+    : _fwRefreshInterval + 's';
+  window.netpiStatus && window.netpiStatus.startCountdown(
+    _fwRefreshInterval,
+    'FW refresh',
+    function(){ startFirewallGeneration(); },
+    'FIREWALL'
+  );
+}
+
+async function startFirewallGeneration(){
+  if(_fwController){ _fwController.abort(); }
+  _fwController = new AbortController();
+  const signal = _fwController.signal;
+
+  _setFwButtons(true);
+  setFirewallStatus('Generating firewall plan…', '#6b7280');
+  window.netpiStatus && window.netpiStatus.startTimer('Firewall', 'FIREWALL');
+
+  try {
+    const [data, notesData] = await Promise.all([
+      fetch('/tools/api/generate_firewall_plan', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:'{}',
+        signal
+      }).then(r => r.json()),
+      fetch('/tools/api/operator-notes', {signal}).then(r => r.json()).catch(() => ({})),
+    ]);
+
+    firewallOperatorNotes = (notesData && notesData.firewall) || {};
+    if(!data || data.ok !== true){
+      throw new Error((data && data.error) || 'Firewall plan request failed');
+    }
+    const plan = data.firewall_plan || {};
+    const rules = Array.isArray(plan.rules) ? plan.rules : [];
+    firewallAllRules = rules.map(normalizeRule);
+    firewallZoneMembers = (plan.zone_members && typeof plan.zone_members === 'object') ? plan.zone_members : {};
+    setFilterOptions('fw-source-vlan', firewallAllRules.map(r => r.source_zone));
+    setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
+    setFilterOptions('fw-system', firewallAllRules.flatMap(r => r.source_systems));
+    applyFirewallFilters();
+    renderZoneSummary();
+
+    const summary = plan.summary || {};
+    const flowCount = summary.flow_rules || 0;
+    const reqCount = summary.requirements_rules || 0;
+    _fwController = null;
+    _setFwButtons(false);
+
+    let statusMsg;
+    if(firewallAllRules.length){
+      const sourceNote = (flowCount || reqCount)
+        ? ' (flows: ' + flowCount + ', port-profiles: ' + reqCount + ')'
+        : '';
+      statusMsg = 'Loaded ' + firewallAllRules.length + ' firewall rule' + (firewallAllRules.length === 1 ? '' : 's') + sourceNote + '.';
+    } else {
+      statusMsg = 'No firewall rules generated yet. Add devices and assign types first.';
+    }
+    setFirewallStatus(statusMsg, '#6b7280');
+    window.netpiStatus && window.netpiStatus.stopTimer('Firewall — ' + firewallAllRules.length + ' rules', 'success', 'FIREWALL');
+
+    if(_fwRefreshInterval > 0) _scheduleFwRefresh();
+
+  } catch(err){
+    const aborted = err && err.name === 'AbortError';
+    _fwController = null;
+    _setFwButtons(false);
+    if(aborted) return;
+    firewallAllRules = [];
+    firewallFilteredRules = [];
+    firewallZoneMembers = {};
+    renderFirewallRows('fw-min-rows', []);
+    renderFirewallRows('fw-rec-rows', []);
+    updateRuleCounts([], []);
+    renderZoneSummary();
+    const errMsg = 'Unable to load firewall plan: ' + (err && err.message ? err.message : 'unknown error');
+    setFirewallStatus(errMsg, '#374151');
+    window.netpiStatus && window.netpiStatus.stopTimer(errMsg, 'error', 'FIREWALL');
+  }
+}
+
+/* Keep old name for any legacy callers */
+function loadFirewallPlan(){ startFirewallGeneration(); }
 
 function getFilters(){
   return {
@@ -504,6 +582,11 @@ function exportFirewallJson(){
   downloadText(JSON.stringify(payload, null, 2), 'firewall_plan.json', 'application/json;charset=utf-8');
 }
 
-loadFirewallPlan();
+/* Initial render — idle state, no auto-load */
+renderFirewallRows('fw-min-rows', []);
+renderFirewallRows('fw-rec-rows', []);
+updateRuleCounts([], []);
+_setFwButtons(false);
+window.netpiStatus && window.netpiStatus.post('Firewall plan page ready — press Generate to begin', 'info', 'FIREWALL');
 </script>
 {% endblock %}
