@@ -287,12 +287,39 @@ async function loadFromCommProfiles(){
   try {
     const res  = await fetch('/tools/api/requirements/saved');
     const data = await res.json();
-    if(!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
+
+    // "Not generated yet" — friendly guide, not an error
+    if(!data.ok){
+      const notGenerated = !res.ok === false && (
+        (data.error || '').toLowerCase().includes('no saved') ||
+        (data.error || '').toLowerCase().includes('no requirements') ||
+        (data.error || '').toLowerCase().includes('cache')
+      );
+      if(notGenerated || res.status === 404 || !res.ok){
+        _setSaStatusHtml(
+          'Communication Profiles haven\'t been generated for this project yet. '
+          + '<a href="/tools/requirements" style="color:#7a9cb8;text-decoration:underline">Go to Communication Profiles →</a> '
+          + 'press <strong>Generate</strong>, then come back here and click Load.',
+          '#9ca3af'
+        );
+        window.netpiStatus && window.netpiStatus.post('Communication Profiles not yet generated — generate them first', 'warn', 'SEC ARCH');
+        if(btn) btn.disabled = false;
+        return;
+      }
+      throw new Error(data.error || 'Failed to load');
+    }
+
     if(!Array.isArray(data.results) || !data.results.length){
-      setSaStatus('Communication Profiles are empty — go to Communication Profiles and press Generate first.', '#9ca3af');
+      _setSaStatusHtml(
+        'Communication Profiles exist but contain no results. '
+        + '<a href="/tools/requirements" style="color:#7a9cb8;text-decoration:underline">Go to Communication Profiles →</a> '
+        + 'and press <strong>Generate</strong> to populate them.',
+        '#9ca3af'
+      );
       if(btn) btn.disabled = false;
       return;
     }
+
     saSourceTs = data.ts || null;
     saRows = flattenToRows(data.results, saRows);  // preserve existing edits
     _rebuildFilters();
@@ -306,7 +333,7 @@ async function loadFromCommProfiles(){
     if(srcEl) srcEl.textContent = 'Source: Communication Profiles · ' + tsLabel;
     window.netpiStatus && window.netpiStatus.post('Security Architecture — ' + saRows.length + ' rules loaded', 'success', 'SEC ARCH');
   } catch(e){
-    setSaStatus('Error loading profiles: ' + (e.message || 'unknown'), '#ef4444');
+    setSaStatus('Load failed: ' + (e.message || 'unknown error'), '#b87a7a');
     window.netpiStatus && window.netpiStatus.post('Load failed: ' + e.message, 'error', 'SEC ARCH');
   }
   if(btn) btn.disabled = false;
@@ -558,10 +585,14 @@ function renderZoneMembership(){
     + '</div>';
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
+// ── Status helpers ────────────────────────────────────────────────────────────
 function setSaStatus(msg, color){
   const el = document.getElementById('sa-status'); if(!el) return;
   el.textContent = msg; el.style.color = color || '#6b7280';
+}
+function _setSaStatusHtml(html, color){
+  const el = document.getElementById('sa-status'); if(!el) return;
+  el.innerHTML = html; el.style.color = color || '#6b7280';
 }
 
 // ── Generate Deliverable (opens print-ready HTML in new tab) ──────────────────
@@ -725,8 +756,13 @@ function generateDeliverable(){
     if(srcEl && saSourceTs) srcEl.textContent = 'Source: Communication Profiles · ' + new Date(saSourceTs).toLocaleString('en-GB');
     window.netpiStatus && window.netpiStatus.post('Security Architecture — restored ' + saRows.length + ' rules', 'info', 'SEC ARCH');
   } else {
-    setSaStatus('No saved Security Architecture. Press "Load from Communication Profiles" to begin.', '#6b7280');
-    window.netpiStatus && window.netpiStatus.post('Security Architecture — press Load to begin', 'info', 'SEC ARCH');
+    _setSaStatusHtml(
+      'No saved Security Architecture for this project. First '
+      + '<a href="/tools/requirements" style="color:#7a9cb8;text-decoration:underline">generate Communication Profiles →</a>'
+      + ' then press <strong>⟳ Load from Communication Profiles</strong> above.',
+      '#6b7280'
+    );
+    window.netpiStatus && window.netpiStatus.post('Security Architecture — generate Comm Profiles first, then Load', 'info', 'SEC ARCH');
   }
 })();
 </script>
