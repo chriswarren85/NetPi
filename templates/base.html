@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NetPi {% block title %}{% endblock %}</title>
+<title>AV NetWorker {% block title %}{% endblock %}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111111;color:#e2e8f0;min-height:100vh;display:flex}
@@ -105,7 +105,7 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 </head>
 <body>
 <div class="sidebar">
-  <div class="sidebar-logo">Net<span>Pi</span></div>
+  <div class="sidebar-logo">AV <span>NetWorker</span></div>
   <div class="project-label" id="sidebar-project">No project loaded</div>
   <div class="project-switch-wrap">
     <select id="sidebar-project-switcher"></select>
@@ -116,11 +116,11 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   <a href="/tools/devices" class="nav-item {% if request.path == '/tools/devices' %}active{% endif %}"><span class="nav-dot blue"></span>Devices</a>
   <a href="/tools/lan-sheet" class="nav-item {% if request.path == '/tools/lan-sheet' %}active{% endif %}"><span class="nav-dot blue"></span>LAN Sheet</a>
   <div class="nav-section s-planning">Planning</div>
-  <a href="/tools/requirements" class="nav-item {% if request.path == '/tools/requirements' %}active{% endif %}"><span class="nav-dot blue"></span>Requirements</a>
-  <a href="/tools/firewall" class="nav-item {% if request.path == '/tools/firewall' %}active{% endif %}"><span class="nav-dot amber"></span>Firewall plan</a>
+  <a href="/tools/requirements" class="nav-item {% if request.path == '/tools/requirements' %}active{% endif %}"><span class="nav-dot blue"></span>Communication Profiles</a>
+  <a href="/tools/firewall" class="nav-item {% if request.path == '/tools/firewall' %}active{% endif %}"><span class="nav-dot amber"></span>Security Architecture</a>
   <div class="nav-section s-validation">Validation</div>
   <a href="/tools/validation" class="nav-item {% if request.path == '/tools/validation' %}active{% endif %}"><span class="nav-dot red"></span>Validation</a>
-  <a href="/tools/recommendations" class="nav-item {% if request.path == '/tools/recommendations' %}active{% endif %}"><span class="nav-dot blue"></span>Recommendations</a>
+  <a href="/tools/recommendations" class="nav-item {% if request.path == '/tools/recommendations' %}active{% endif %}"><span class="nav-dot blue"></span>Commissioning Recommendations</a>
   <div class="nav-section s-network">Network</div>
   <a href="/tools/scanner" class="nav-item {% if request.path == '/tools/scanner' %}active{% endif %}"><span class="nav-dot green"></span>Device scanner</a>
   <a href="/tools/dns" class="nav-item {% if request.path == '/tools/dns' %}active{% endif %}"><span class="nav-dot green"></span>DNS records</a>
@@ -146,7 +146,7 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 <div id="netpi-statusbar">
   <div id="nsb-bar">
     <span id="nsb-dot"></span>
-    <span id="nsb-label">NETPI</span>
+    <span id="nsb-label">NETWORKER</span>
     <span id="nsb-text">Ready</span>
     <span id="nsb-elapsed" style="display:none"></span>
     <span id="nsb-countdown" style="display:none"></span>
@@ -172,7 +172,7 @@ window.showToast = function(message, type, duration) {
 };
 </script>
 <script>
-/* ── NetPi global status bar ────────────────────────────────────────────── */
+/* ── AV NetWorker global status bar ─────────────────────────────────────── */
 window.netpiStatus = (function(){
   'use strict';
   var _logs       = [];
@@ -330,7 +330,7 @@ window.netpiStatus = (function(){
 
   /* initialise */
   _dot('');
-  _setLabel('NETPI');
+  _setLabel('NETWORKER');
 
   return {
     post:           post,

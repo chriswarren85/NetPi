@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
-{% block title %}- Requirements{% endblock %}
+{% block title %}- Communication Profiles{% endblock %}
 {% block content %}
-<div class="page-title">Requirements</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Generated per-device network requirements from live inventory intelligence</div>
+<div class="page-title">Communication Profiles</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Per-device communication requirements generated from live inventory — the foundation for Security Architecture</div>
 
 <div class="cards">
   <div class="card">
@@ -371,7 +371,7 @@ function stopRequirementsGeneration(){
     _reqController.abort();
     _reqController = null;
   }
-  window.netpiStatus && window.netpiStatus.cancelAll('Requirements — cancelled by user', 'REQUIREMENTS');
+  window.netpiStatus && window.netpiStatus.cancelAll('Communication Profiles — cancelled by user', 'COMM PROFILES');
   _setReqButtons(false);
   requirementsLoadState = 'idle';
   updateRequirementsViewNote();
@@ -397,7 +397,7 @@ function _scheduleRequirementsRefresh(){
     _reqRefreshInterval,
     'Req refresh',
     function(){ startRequirementsGeneration(); },
-    'REQUIREMENTS'
+    'COMM PROFILES'
   );
 }
 
@@ -458,7 +458,7 @@ async function startRequirementsGeneration(){
   renderUnmappedDevices();
   renderRequirementRows();
 
-  window.netpiStatus && window.netpiStatus.startTimer('Requirements', 'REQUIREMENTS');
+  window.netpiStatus && window.netpiStatus.startTimer('Communication Profiles', 'COMM PROFILES');
 
   try {
     const res = await fetch('/tools/api/generate_requirements', {
@@ -508,9 +508,9 @@ async function startRequirementsGeneration(){
     renderRequirementRows();
     persistRequirementsStateForDevices(results, unmappedDevices);
 
-    const msg = 'Requirements — ' + (requirementsSummary.mapped || 0) + ' mapped, '
+    const msg = 'Communication Profiles — ' + (requirementsSummary.mapped || 0) + ' mapped, '
       + requirementRows.length + ' rows';
-    window.netpiStatus && window.netpiStatus.stopTimer(msg, 'success', 'REQUIREMENTS');
+    window.netpiStatus && window.netpiStatus.stopTimer(msg, 'success', 'COMM PROFILES');
 
     // Schedule auto-refresh if configured
     if(_reqRefreshInterval > 0) _scheduleRequirementsRefresh();
@@ -530,7 +530,7 @@ async function startRequirementsGeneration(){
     updateRequirementsViewNote();
     renderUnmappedDevices();
     renderRequirementRows();
-    window.netpiStatus && window.netpiStatus.stopTimer('Requirements failed: ' + requirementsErrorMessage, 'error', 'REQUIREMENTS');
+    window.netpiStatus && window.netpiStatus.stopTimer('Communication Profiles failed: ' + requirementsErrorMessage, 'error', 'COMM PROFILES');
   }
 }
 
@@ -962,18 +962,59 @@ function exportRequirementsCsv(){
   downloadText(lines.join('\r\n'), 'requirements.csv', 'text/csv;charset=utf-8');
 }
 
-/* Initial render — restore from cache if available, else idle */
-const _reqCacheLoaded = _loadReqCache();
-updateSummaryCards();
-updateRequirementsViewNote();
-renderRequirementRows();
-renderUnmappedDevices();
-_setReqButtons(false);
-window.netpiStatus && window.netpiStatus.post(
-  _reqCacheLoaded
-    ? 'Requirements — restored from ' + (_reqCacheTimestamp || 'cache') + ' — press Generate to refresh'
-    : 'Requirements — press Generate to begin',
-  'info', 'REQUIREMENTS'
-);
+/* Initial render — server-first persistence, localStorage fallback */
+(async function _init(){
+  let loaded = false;
+
+  // 1. Try server-side saved cache (persists across browsers/devices/restarts)
+  try {
+    const res = await fetch('/tools/api/requirements/saved');
+    if(res.ok){
+      const data = await res.json();
+      if(data.ok && Array.isArray(data.results) && data.results.length){
+        const sum = data.summary || {};
+        requirementsSummary = {
+          total:              Number(sum.total              || 0),
+          mapped:             Number(sum.mapped             || 0),
+          unmapped:           Number(sum.unmapped           || 0),
+          types_seen:         Number(sum.types_seen         || 0),
+          multicast_required: Number(sum.multicast_required || 0),
+          igmp_required:      Number(sum.igmp_required      || 0),
+        };
+        buildRequirementRowsFromResults(data.results);
+        unmappedDevices = (Array.isArray(data.unmapped) ? data.unmapped : []).map(entry => {
+          const hit = (data.results || []).find(r => String(r.device_id||'') === String(entry.device_id||''));
+          return {
+            device_id:      entry.device_id || '',
+            type:           entry.type || '',
+            name:           (hit && hit.name) || entry.name || '',
+            ip:             (hit && hit.ip)   || entry.ip   || '',
+            effective_type: (hit && hit.effective_type) || entry.effective_type || entry.type || ''
+          };
+        });
+        requirementsLoadState = data.results.length ? 'ready' : 'empty';
+        _reqCacheTimestamp = data.ts ? new Date(data.ts).toLocaleString('en-GB') : null;
+        // Mirror to localStorage as fast fallback
+        _saveReqCache(data.results, data.unmapped || [], requirementsSummary);
+        loaded = true;
+      }
+    }
+  } catch(e){ /* server unavailable — fall through to localStorage */ }
+
+  // 2. Fall back to localStorage if server had nothing
+  if(!loaded) loaded = _loadReqCache();
+
+  updateSummaryCards();
+  updateRequirementsViewNote();
+  renderRequirementRows();
+  renderUnmappedDevices();
+  _setReqButtons(false);
+  window.netpiStatus && window.netpiStatus.post(
+    loaded
+      ? 'Communication Profiles — restored from ' + (_reqCacheTimestamp || 'cache') + ' — press Generate to refresh'
+      : 'Communication Profiles — press Generate to begin',
+    'info', 'COMM PROFILES'
+  );
+})();
 </script>
 {% endblock %}

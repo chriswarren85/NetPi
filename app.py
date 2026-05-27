@@ -4686,7 +4686,7 @@ def _create_pre_restore_backup():
                 {
                     "schema_version": SNAPSHOT_SCHEMA_VERSION,
                     "created_at": utc_now_iso(),
-                    "app_name": "NetPi",
+                    "app_name": "AV NetWorker",
                     "type": "pre_restore_backup",
                     "included_files": included_files,
                     "notes": notes,
@@ -6570,6 +6570,20 @@ def api_generate_requirements():
             "igmp_required": igmp_count,
         }
 
+        # ── Server-side persistence (survives browser session / device changes) ──
+        try:
+            import json as _json
+            _cache_path = get_project_path("data/requirements_cache.json", ensure_parent=True)
+            with open(_cache_path, "w", encoding="utf-8") as _cf:
+                _json.dump({
+                    "ts": datetime.now().isoformat(),
+                    "summary": summary,
+                    "results": results,
+                    "unmapped": unmapped,
+                }, _cf)
+        except Exception:
+            pass  # non-fatal — localStorage is the fallback
+
         return jsonify({
             "ok": True,
             "count": len(results),
@@ -6583,6 +6597,20 @@ def api_generate_requirements():
             "ok": False,
             "error": str(e),
         }), 500
+
+
+@app.route("/tools/api/requirements/saved", methods=["GET"])
+def api_requirements_saved():
+    """Return the last saved Communication Profiles generation for this project."""
+    try:
+        path = get_project_path("data/requirements_cache.json")
+        if not os.path.exists(path):
+            return jsonify({"ok": False, "error": "No saved requirements cache for this project"})
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify({"ok": True, **data})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/tools/api/apply_suggestions", methods=["POST"])
@@ -6990,8 +7018,8 @@ def api_export_xlsx_foundation():
     settings = load_settings()
     wb = Workbook()
     ws = wb.active
-    ws.title = "NetPi Export"
-    start = project_header_block(ws, settings, "NetPi Excel Export Foundation")
+    ws.title = "AV NetWorker Export"
+    start = project_header_block(ws, settings, "AV NetWorker Excel Export")
     write_table(
         ws,
         ["check", "status", "notes"],
@@ -7470,7 +7498,7 @@ def api_project_snapshot():
         manifest = {
             "schema_version": SNAPSHOT_SCHEMA_VERSION,
             "exported_at": utc_now_iso(),
-            "app_name": "NetPi",
+            "app_name": "AV NetWorker",
             "included_files": included_files,
             "missing_optional_files": missing_optional,
             "source_instance": _safe_instance_metadata(),
@@ -11890,7 +11918,7 @@ def _build_report_sections(payload, context, requirements, ipschedule, recommend
 
     return {
         "project_summary": {
-            "project_name": str(settings.get("project_name") or "NetPi Project").strip() or "NetPi Project",
+            "project_name": str(settings.get("project_name") or "AV NetWorker Project").strip() or "AV NetWorker Project",
             "generated_at": datetime.now().isoformat(),
             "total_devices": total_devices,
             "systems_count": system_groups,
@@ -11976,7 +12004,7 @@ def _build_report_payload(payload):
 
     report = {
         "generated_at": project_summary.get("generated_at") or datetime.now().isoformat(),
-        "project_name": project_summary.get("project_name") or str(settings.get("project_name") or "NetPi Project"),
+        "project_name": project_summary.get("project_name") or str(settings.get("project_name") or "AV NetWorker Project"),
         "summary": project_summary,
         "sections": sections,
     }
