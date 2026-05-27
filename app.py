@@ -6518,13 +6518,16 @@ def api_generate_requirements():
         explicit_devices = isinstance(devices, list) and bool(devices)
 
         if not explicit_devices:
-            devices = load_devices()
+            # Prefer LAN sheet (richer model/type data) then fall back to devices.json
+            devices = _load_lan_sheet() or load_devices()
 
         if vlan:
             devices = [d for d in devices if str(d.get("vlan") or "").strip() == vlan]
 
         config = load_requirements_config()
         settings = load_settings()
+        # enrich_device_runtime adds effective_type from fingerprint/evidence;
+        # generate_device_requirements then falls back to model/name inference
         enriched_devices = [enrich_device_runtime(device) for device in devices]
 
         results = []
@@ -11741,6 +11744,7 @@ def _build_requirements_payload_for_report(payload, devices):
         selected_devices = [d for d in selected_devices if str(d.get("vlan") or "").strip() == vlan]
 
     config = load_requirements_config()
+    _settings = load_settings()
     enriched_devices = [enrich_device_runtime(device) for device in selected_devices]
 
     results = []
@@ -11748,7 +11752,7 @@ def _build_requirements_payload_for_report(payload, devices):
     mapped_count = 0
     types_seen = set()
     for device in enriched_devices:
-        requirement_row = generate_device_requirements(device, config)
+        requirement_row = generate_device_requirements(device, config, settings=_settings)
         results.append(requirement_row)
 
         effective_type = str(requirement_row.get("effective_type") or "").strip().lower()

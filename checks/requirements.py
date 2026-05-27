@@ -45,6 +45,91 @@ def normalize_requirement_type(device_type, config):
     return _normalize_token(aliases.get(normalized, normalized))
 
 
+# Ordered keyword → type_requirements key table.
+# Each entry is (keyword_list, type_key). Checked against model then name.
+# More specific keywords come first so they win over broad ones.
+_MODEL_NAME_TYPE_HINTS = [
+    # Q-SYS family
+    (["q-sys", "qsys", "q sys", "core flex", "core nano", "core 110f", "core 8 flex", "core 5200", "core 3200"],
+     "qsys-core"),
+    (["nv-32", "nv-21", "nv32", "nv21", "nv-h", "n-act"],
+     "qsys-nv-endpoint"),
+    # Biamp
+    (["tesira", "biamp", "beamtracking", "parlé", "impera"],
+     "biamp-tesira"),
+    # Dante / AES67 audio
+    (["dante", "audinate", "dn-200", "dn-100", "atnd1061", "atnd-1061"],
+     "dante-audio"),
+    # Crestron family
+    (["cp4", "cp3n", "cp3", "mpc3", "mpc-3", "dm-md", "dm-ps", "hdmd", "cen-io"],
+     "crestron-processor"),
+    (["tss-7", "tss-10", "tss770", "tss1070", "tss-770", "tss-1070", "tsc-50", "tsc50", "touch screen",
+      "touchscreen", "touch panel", "touchpanel"],
+     "crestron-touchpanel"),
+    (["uc-engine", "flex uc", "uc-b160", "uc-b35", "uc engine", "uc-m150"],
+     "crestron-uc-engine"),
+    # ClickShare / Barco
+    (["clickshare", "barco", "c-10", "c-5", "cx-20", "cx-30", "cx-50", "cs-100"],
+     "barco-clickshare"),
+    # VC codecs
+    (["logitech tap", "tap cat5", "meetup", "rally", "roommate",
+      "poly", "polycom", "trio", "eagleeye",
+      "cisco", "tandberg", "webex", "room kit", "codec plus",
+      "yealink", "avocor", "lifesize", "microsoft teams room", "mtr"],
+     "vc-codec"),
+    # Cameras
+    (["ptz", "cam", "camera", "afcam", "aver", "vaddio", "ptmz", "awhe", "av-hs",
+      "brc-", "bpro", "axis", "vivotek", "hikvision"],
+     "camera"),
+    # NDI
+    (["ndi", "newtek", "tricaster"],
+     "ndi"),
+    # Streaming encoder
+    (["encoder", "streaming", "rtmp", "teradek", "epiphan", "magewell"],
+     "streaming-encoder"),
+    # IPTV
+    (["iptv", "iptv decoder", "iptv encoder", "exterity", "amino"],
+     "iptv"),
+    # Displays / projectors
+    (["projector", "proj-", "novastar", "nova star", "video wall", "videowall",
+      "led wall", "display", "screen", "monitor", "scheduling panel",
+      "room scheduling", "samsung", "lg commercial", "philips display", "nec display"],
+     "display"),
+    # Video switcher / matrix
+    (["switcher", "matrix", "router", "extron", "kramer", "atlona", "av switcher",
+      "av-switcher", "videoiq", "vs-84"],
+     "video-switcher"),
+    # AV-over-IP
+    (["av-over-ip", "av over ip", "svsi", "jpeg2000", "netgear m4300",
+      "zeevia", "netplay", "visionary solutions"],
+     "av-over-ip"),
+    # Audio DSP (generic)
+    (["dsp", "audio processor", "i/o module", "io module", "crown", "qsc amplifier",
+      "powersoft", "lab gruppen"],
+     "audio-dsp"),
+    # Network infrastructure
+    (["switch", "catalyst", "sg300", "sg350", "nexus"],
+     "network-switch"),
+    (["access point", "ap ", "aruba", "meraki", "ubiquiti", "unifi"],
+     "wireless-ap"),
+    # Wireless presentation
+    (["mersive", "solstice", "webex board", "smartboard", "airtame", "displaynote"],
+     "wireless-presentation"),
+]
+
+
+def infer_type_from_model_name(model, name):
+    """Return a type_requirements key inferred from model/name keywords, or '' if no match."""
+    combined = (_normalize_token(model) + " " + _normalize_token(name)).strip()
+    if not combined:
+        return ""
+    for keywords, type_key in _MODEL_NAME_TYPE_HINTS:
+        for kw in keywords:
+            if kw in combined:
+                return type_key
+    return ""
+
+
 def resolve_runtime_typing(device):
     item = device if isinstance(device, dict) else {}
     candidates = [
@@ -145,6 +230,18 @@ def generate_device_requirements(device, config, settings=None):
     type_map = type_map if isinstance(type_map, dict) else {}
     mapping = type_map.get(normalized_type) if normalized_type else None
     mapping = mapping if isinstance(mapping, dict) else {}
+
+    # If the normalized type has no profile (or is a catch-all like "generic-web-device"
+    # / "unknown" / "av"), try to infer a richer type from the model and name fields.
+    _WEAK_TYPES = {"", "unknown", "generic-web-device", "generic", "av", "none"}
+    if not mapping or normalized_type in _WEAK_TYPES:
+        model_val = str(item.get("model") or "").strip()
+        name_val = str(item.get("name") or "").strip()
+        inferred = infer_type_from_model_name(model_val, name_val)
+        if inferred and inferred in type_map:
+            normalized_type = inferred
+            mapping = type_map[inferred]
+            derived_from = "model_inference"
 
     required_ports = _parse_required_ports(mapping.get("required_ports"))
     required_services = [
