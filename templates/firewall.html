@@ -78,6 +78,7 @@
           <th>Business Justification</th>
           <th>AV Justification</th>
           <th>Confidence</th>
+          <th>Source</th>
           <th>Notes</th>
         </tr>
       </thead>
@@ -105,6 +106,7 @@
           <th>Business Justification</th>
           <th>AV Justification</th>
           <th>Confidence</th>
+          <th>Source</th>
           <th>Notes</th>
         </tr>
       </thead>
@@ -113,10 +115,18 @@
   </div>
 </div>
 
+<div class="panel">
+  <div class="panel-header">Zone Summary</div>
+  <div class="panel-body">
+    <div id="fw-zone-summary" style="font-size:12px;color:#9ca3af">Generate the firewall plan to see zone membership.</div>
+  </div>
+</div>
+
 <script>
 let firewallAllRules = [];
 let firewallFilteredRules = [];
 let firewallOperatorNotes = {};
+let firewallZoneMembers = {};
 
 function escapeHtml(str){
   return String(str || '')
@@ -143,6 +153,10 @@ function normalizeRule(rule){
   const requirementLevel = String(rule.requirement_level || 'recommended').toLowerCase();
   const port = Number.isInteger(rule.port) ? rule.port : null;
 
+  const derivedFrom = Array.isArray(rule.derived_from)
+    ? rule.derived_from.filter(Boolean).map(v => String(v))
+    : (rule.derived_from ? [String(rule.derived_from)] : []);
+
   return {
     rule_id: String(rule.rule_id || ''),
     requirement_level: requirementLevel === 'min_required' ? 'min_required' : 'recommended',
@@ -160,7 +174,8 @@ function normalizeRule(rule){
     source_systems: sourceSystems,
     source_devices: sourceDevices,
     destination_devices: destinationDevices,
-    evidence: evidence
+    evidence: evidence,
+    derived_from: derivedFrom,
   };
 }
 
@@ -212,22 +227,32 @@ function loadFirewallPlan(){
       const plan = data.firewall_plan || {};
       const rules = Array.isArray(plan.rules) ? plan.rules : [];
       firewallAllRules = rules.map(normalizeRule);
+      firewallZoneMembers = (plan.zone_members && typeof plan.zone_members === 'object') ? plan.zone_members : {};
       setFilterOptions('fw-source-vlan', firewallAllRules.map(r => r.source_zone));
       setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
       setFilterOptions('fw-system', firewallAllRules.flatMap(r => r.source_systems));
       applyFirewallFilters();
+      renderZoneSummary();
+      const summary = plan.summary || {};
+      const flowCount = summary.flow_rules || 0;
+      const reqCount = summary.requirements_rules || 0;
       if(firewallAllRules.length){
-        setFirewallStatus('Loaded ' + firewallAllRules.length + ' firewall rule' + (firewallAllRules.length === 1 ? '' : 's') + '.', '#6b7280');
+        const sourceNote = (flowCount || reqCount)
+          ? ' (flows: ' + flowCount + ', port-profiles: ' + reqCount + ')'
+          : '';
+        setFirewallStatus('Loaded ' + firewallAllRules.length + ' firewall rule' + (firewallAllRules.length === 1 ? '' : 's') + sourceNote + '.', '#6b7280');
       } else {
-        setFirewallStatus('No firewall rules generated yet. Add devices and run system validation first.', '#6b7280');
+        setFirewallStatus('No firewall rules generated yet. Add devices and assign types first.', '#6b7280');
       }
     })
     .catch(err => {
       firewallAllRules = [];
       firewallFilteredRules = [];
+      firewallZoneMembers = {};
       renderFirewallRows('fw-min-rows', []);
       renderFirewallRows('fw-rec-rows', []);
       updateRuleCounts([], []);
+      renderZoneSummary();
       setFirewallStatus('Unable to load firewall plan: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
     });
 }
@@ -291,11 +316,21 @@ function buildFirewallWhyHtml(rule){
   );
 }
 
+function formatDerivedFrom(rule){
+  const sources = Array.isArray(rule.derived_from) ? rule.derived_from : [];
+  if(!sources.length) return '<span style="color:#6b7280;font-size:10px">flows</span>';
+  return sources.map(s => {
+    const label = String(s || '');
+    const color = label === 'requirements' ? '#a78bfa' : label === 'flows' ? '#6b7280' : '#9ca3af';
+    return '<span style="font-size:10px;color:' + color + '">' + escapeHtml(label) + '</span>';
+  }).join(', ');
+}
+
 function renderFirewallRows(id, rows){
   const tbody = document.getElementById(id);
   if(!tbody) return;
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:1rem">No rules for selected filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="color:#6b7280;text-align:center;padding:1rem">No rules for selected filters.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map(rule => {
@@ -315,10 +350,58 @@ function renderFirewallRows(id, rows){
       + '<td>' + escapeHtml(rule.purpose) + '</td>'
       + '<td>' + escapeHtml(rule.business_justification) + '</td>'
       + '<td>' + escapeHtml(rule.av_justification) + '</td>'
-      + '<td>' + escapeHtml(rule.confidence) + '</td>'
+      + '<td>' + escapeHtml(String(rule.confidence)) + '</td>'
+      + '<td>' + formatDerivedFrom(rule) + '</td>'
       + '<td>' + escapeHtml(formatNotes(rule)) + buildFirewallWhyHtml(rule) + noteCell + '</td>'
       + '</tr>';
   }).join('');
+}
+
+function renderZoneSummary(){
+  const el = document.getElementById('fw-zone-summary');
+  if(!el) return;
+
+  // Build zone members from firewallZoneMembers (server-provided) or derive from rules
+  let members = firewallZoneMembers;
+  if(!members || !Object.keys(members).length){
+    members = {};
+    firewallAllRules.forEach(r => {
+      if(r.source_zone && r.source_zone !== 'ANY'){
+        if(!members[r.source_zone]) members[r.source_zone] = new Set();
+        (r.source_devices || []).forEach(d => { if(d) members[r.source_zone].add(d); });
+      }
+      if(r.destination_zone && r.destination_zone !== 'ANY'){
+        if(!members[r.destination_zone]) members[r.destination_zone] = new Set();
+        (r.destination_devices || []).forEach(d => { if(d) members[r.destination_zone].add(d); });
+      }
+    });
+    // Convert Sets to arrays
+    const converted = {};
+    Object.keys(members).forEach(k => { converted[k] = Array.from(members[k]).sort(); });
+    members = converted;
+  }
+
+  const zones = Object.keys(members).sort();
+  if(!zones.length){
+    el.textContent = 'No zone data available. Generate the firewall plan first.';
+    return;
+  }
+
+  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">';
+  zones.forEach(zone => {
+    const devices = Array.isArray(members[zone]) ? members[zone] : [];
+    html += '<div style="border:1px solid #374151;border-radius:6px;padding:10px 12px;background:#111">'
+      + '<div style="font-size:12px;font-weight:700;color:#e5e7eb;margin-bottom:6px">' + escapeHtml(zone) + '</div>'
+      + '<div style="font-size:11px;color:#9ca3af">';
+    if(devices.length){
+      html += devices.map(d => '<div style="margin-top:2px;color:#d1d5db">· ' + escapeHtml(d) + '</div>').join('');
+    } else {
+      html += '<div style="color:#4b5563">No member devices identified</div>';
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function updateRuleCounts(minimum, recommended){
@@ -380,6 +463,7 @@ function exportFirewallCsv(){
     'Business Justification',
     'AV Justification',
     'Confidence',
+    'Derived From',
     'Source Systems',
     'Source Devices',
     'Destination Devices',
@@ -401,6 +485,7 @@ function exportFirewallCsv(){
       rule.business_justification,
       rule.av_justification,
       rule.confidence,
+      Array.isArray(rule.derived_from) ? rule.derived_from.join('|') : '',
       rule.source_systems.join('|'),
       rule.source_devices.join('|'),
       rule.destination_devices.join('|'),

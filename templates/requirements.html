@@ -25,10 +25,25 @@
     <div class="card-value" id="req-rows">0</div>
     <div class="card-sub">Expanded protocol/port rows</div>
   </div>
+  <div class="card">
+    <div class="card-label">Multicast Required</div>
+    <div class="card-value" id="req-multicast" style="color:#f59e0b">0</div>
+    <div class="card-sub">Devices needing multicast</div>
+  </div>
+  <div class="card">
+    <div class="card-label">IGMP Required</div>
+    <div class="card-value" id="req-igmp" style="color:#f59e0b">0</div>
+    <div class="card-sub">Devices needing IGMP snooping</div>
+  </div>
 </div>
 
 <div class="panel">
-  <div class="panel-header">Requirement Views</div>
+  <div class="panel-header">
+    <span>Requirement Views</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="exportRequirementsCsv()">Export CSV</button>
+    </div>
+  </div>
   <div class="panel-body" style="padding-bottom:10px">
     <div id="requirements-tabs" style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-primary" data-tab="By Device" onclick="setRequirementTab('By Device', this)">By Device</button>
@@ -46,7 +61,7 @@
 <div class="panel">
   <div class="panel-header">
     <span>Requirement Rows</span>
-    <span style="font-size:11px;color:#9ca3af">Click a row to expand derivation context</span>
+    <span style="font-size:11px;color:#9ca3af">Click a row to expand derivation context and port detail</span>
   </div>
   <div class="panel-body" style="padding:0">
     <table>
@@ -54,9 +69,12 @@
         <tr>
           <th>Device</th>
           <th>IP</th>
+          <th>Zone</th>
           <th>Protocol</th>
           <th>Port</th>
+          <th>Direction</th>
           <th>Service / Purpose</th>
+          <th>Level</th>
           <th>Derived From</th>
           <th>Confidence</th>
         </tr>
@@ -78,7 +96,8 @@ const REQUIREMENTS_STATE_KEY = 'netpi.requirements.state.v1';
 let requirementRows = [];
 let requirementDevices = [];
 let unmappedDevices = [];
-let requirementsSummary = { mapped: 0, unmapped: 0, types_seen: 0 };
+let portsByDeviceId = {};  // device_id -> array of port entry objects
+let requirementsSummary = { total: 0, mapped: 0, unmapped: 0, types_seen: 0, multicast_required: 0, igmp_required: 0 };
 let requirementsLoadState = 'loading'; // loading | ready | empty | error
 let requirementsErrorMessage = '';
 
@@ -114,7 +133,7 @@ function confidenceLabelFromScore(score){
 function deriveRowTabs(row){
   const tabs = ['By Device'];
   const protocol = String(row.protocol || '').trim();
-  const service = String(row.service || '').trim();
+  const service = String(row.service || row.purpose || '').trim();
   if(protocol && protocol !== '-') tabs.push('By Protocol');
   if(service) tabs.push('By Service');
   tabs.push('By System');
@@ -157,10 +176,14 @@ function updateSummaryCards(){
   const unresolvedEl = document.getElementById('req-unresolved');
   const typesSeenEl = document.getElementById('req-types-seen');
   const rowsEl = document.getElementById('req-rows');
+  const multicastEl = document.getElementById('req-multicast');
+  const igmpEl = document.getElementById('req-igmp');
   if(mappedEl) mappedEl.textContent = String(requirementsSummary.mapped || 0);
   if(unresolvedEl) unresolvedEl.textContent = String(requirementsSummary.unmapped || 0);
   if(typesSeenEl) typesSeenEl.textContent = String(requirementsSummary.types_seen || 0);
   if(rowsEl) rowsEl.textContent = String(requirementRows.length || 0);
+  if(multicastEl) multicastEl.textContent = String(requirementsSummary.multicast_required || 0);
+  if(igmpEl) igmpEl.textContent = String(requirementsSummary.igmp_required || 0);
 }
 
 function updateRequirementsViewNote(){
@@ -198,14 +221,16 @@ function renderUnmappedDevices(){
     return;
   }
 
-  let html = '<div style="margin-bottom:8px;color:#d1d5db">Some devices do not yet have a mapped requirement template.</div>';
+  let html = '<div style="margin-bottom:8px;color:#d1d5db">Some devices do not yet have a mapped requirement template. '
+    + '<a href="/tools/intake" style="color:#3b82f6;text-decoration:underline">Assign types in Intake</a> to generate requirements for these devices.</div>';
   html += '<table><thead><tr><th>Device</th><th>IP</th><th>Type</th><th>Status</th></tr></thead><tbody>';
   unmappedDevices.forEach(item => {
     html += '<tr>'
       + '<td>' + escapeHtml(item.name || '(unnamed)') + '</td>'
       + '<td style="font-family:monospace">' + escapeHtml(item.ip || '-') + '</td>'
       + '<td>' + escapeHtml(item.effective_type || item.type || 'unknown') + '</td>'
-      + '<td style="color:#d1d5db">No mapped requirement template yet</td>'
+      + '<td style="color:#d1d5db">No mapped requirement template yet — '
+      + '<a href="/tools/intake" style="color:#3b82f6">assign type in Intake</a></td>'
       + '</tr>';
   });
   html += '</tbody></table>';
@@ -215,6 +240,8 @@ function renderUnmappedDevices(){
 function buildRequirementRowsFromResults(results){
   const deviceRows = [];
   const expandedRows = [];
+  portsByDeviceId = {};
+
   (Array.isArray(results) ? results : []).forEach(item => {
     const ports = Array.isArray(item.required_ports) ? item.required_ports : [];
     const services = Array.isArray(item.required_services) ? item.required_services : [];
@@ -223,21 +250,32 @@ function buildRequirementRowsFromResults(results){
       device_id: item.device_id || '',
       name: item.name || '(unnamed device)',
       ip: item.ip || '',
+      zone: item.zone || '',
+      vlan: item.vlan || '',
       effective_type: item.effective_type || 'unknown',
       source_type: item.source_type || '',
       confidence_score: item.confidence_score,
       derived_from: item.derived_from || '',
       required_services: services,
-      notes: notes
+      notes: notes,
+      multicast_required: !!item.multicast_required,
+      igmp_required: !!item.igmp_required,
+      vlan_recommendation: item.vlan_recommendation || '',
+      av_justification: item.av_justification || '',
     };
     deviceRows.push(baseRow);
+
+    // Store all ports by device_id for expanded port detail table
+    portsByDeviceId[item.device_id || item.ip || ''] = ports;
 
     if(!ports.length){
       expandedRows.push(Object.assign({}, baseRow, {
         protocol: '-',
         port: '-',
-        service: 'No required port entries',
+        direction: '-',
         purpose: services.length ? services.join(', ') : 'No mapped requirement profile',
+        service: 'No required port entries',
+        requirement_level: '-',
         confidence_label: confidenceLabelFromScore(item.confidence_score),
         tabs: ['By Device', 'By System', 'By VLAN']
       }));
@@ -250,12 +288,18 @@ function buildRequirementRowsFromResults(results){
         ? String(portEntry.port)
         : '-';
       const service = String((portEntry && portEntry.service) || '').trim();
-      const purpose = services.length ? services.join(', ') : (service || 'network-service');
+      // New fields — fall back gracefully if not present
+      const purpose = String((portEntry && portEntry.purpose) || service || '').trim();
+      const direction = String((portEntry && portEntry.direction) || '').trim();
+      const req_level = String((portEntry && portEntry.requirement_level) || '').trim();
+      const displayPurpose = services.length ? services.join(', ') : (purpose || service || 'network-service');
       const row = Object.assign({}, baseRow, {
         protocol: protocol || 'TCP',
         port,
         service: service || 'unspecified-service',
-        purpose,
+        purpose: purpose || service || displayPurpose,
+        direction: direction || '-',
+        requirement_level: req_level || '-',
         required: !!(portEntry && portEntry.required),
         confidence_label: confidenceLabelFromScore(item.confidence_score)
       });
@@ -322,9 +366,12 @@ async function loadGeneratedRequirements(){
 
     const summary = (data.summary && typeof data.summary === 'object') ? data.summary : {};
     requirementsSummary = {
+      total: Number(summary.total || 0),
       mapped: Number(summary.mapped || 0),
       unmapped: Number(summary.unmapped || 0),
-      types_seen: Number(summary.types_seen || 0)
+      types_seen: Number(summary.types_seen || 0),
+      multicast_required: Number(summary.multicast_required || 0),
+      igmp_required: Number(summary.igmp_required || 0),
     };
 
     const results = Array.isArray(data.results) ? data.results : [];
@@ -336,9 +383,9 @@ async function loadGeneratedRequirements(){
       return {
         device_id: entry.device_id || '',
         type: entry.type || '',
-        name: (hit && hit.name) || '',
-        ip: (hit && hit.ip) || '',
-        effective_type: (hit && hit.effective_type) || (entry.type || '')
+        name: (hit && hit.name) || entry.name || '',
+        ip: (hit && hit.ip) || entry.ip || '',
+        effective_type: (hit && hit.effective_type) || entry.effective_type || (entry.type || '')
       };
     });
 
@@ -354,12 +401,40 @@ async function loadGeneratedRequirements(){
     requirementRows = [];
     requirementDevices = [];
     unmappedDevices = [];
-    requirementsSummary = { mapped: 0, unmapped: 0, types_seen: 0 };
+    requirementsSummary = { total: 0, mapped: 0, unmapped: 0, types_seen: 0, multicast_required: 0, igmp_required: 0 };
     updateSummaryCards();
     updateRequirementsViewNote();
     renderUnmappedDevices();
     renderRequirementRows();
   }
+}
+
+function buildPortDetailTable(deviceId){
+  const ports = portsByDeviceId[deviceId] || [];
+  if(!ports.length) return '<div style="color:#9ca3af;font-size:12px">No port entries for this device.</div>';
+  let html = '<table style="font-size:11px;width:100%;border-collapse:collapse;margin-top:4px">'
+    + '<thead><tr>'
+    + '<th style="padding:3px 8px;border-bottom:1px solid #374151;color:#9ca3af;font-weight:600;text-align:left">Port</th>'
+    + '<th style="padding:3px 8px;border-bottom:1px solid #374151;color:#9ca3af;font-weight:600;text-align:left">Protocol</th>'
+    + '<th style="padding:3px 8px;border-bottom:1px solid #374151;color:#9ca3af;font-weight:600;text-align:left">Direction</th>'
+    + '<th style="padding:3px 8px;border-bottom:1px solid #374151;color:#9ca3af;font-weight:600;text-align:left">Purpose</th>'
+    + '<th style="padding:3px 8px;border-bottom:1px solid #374151;color:#9ca3af;font-weight:600;text-align:left">Level</th>'
+    + '</tr></thead><tbody>';
+  ports.forEach(p => {
+    const level = String(p.requirement_level || '').toLowerCase();
+    const levelStyle = level === 'min_required'
+      ? 'color:#f87171;font-weight:600'
+      : 'color:#fbbf24';
+    html += '<tr>'
+      + '<td style="padding:3px 8px;font-family:monospace;color:#e5e7eb">' + escapeHtml(String(p.port ?? '-')) + '</td>'
+      + '<td style="padding:3px 8px;color:#d1d5db">' + escapeHtml(String(p.protocol || '-').toUpperCase()) + '</td>'
+      + '<td style="padding:3px 8px;color:#d1d5db">' + escapeHtml(String(p.direction || '-')) + '</td>'
+      + '<td style="padding:3px 8px;color:#d1d5db">' + escapeHtml(String(p.purpose || p.service || '-')) + '</td>'
+      + '<td style="padding:3px 8px;' + levelStyle + '">' + escapeHtml(level || '-') + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
 }
 
 function renderRequirementRows(){
@@ -368,12 +443,12 @@ function renderRequirementRows(){
   tbody.innerHTML = '';
 
   if(requirementsLoadState === 'loading'){
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#9ca3af;text-align:center;padding:1rem">Loading generated requirements...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#9ca3af;text-align:center;padding:1rem">Loading generated requirements...</td></tr>';
     return;
   }
 
   if(requirementsLoadState === 'error'){
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#e5e7eb;text-align:center;padding:1rem">Requirements endpoint failed: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#e5e7eb;text-align:center;padding:1rem">Requirements endpoint failed: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</td></tr>';
     return;
   }
 
@@ -382,7 +457,7 @@ function renderRequirementRows(){
     const msg = requirementsLoadState === 'empty'
       ? 'No requirements generated yet for current inventory.'
       : 'No generated requirement rows in this view.';
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">' + escapeHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="color:#6b7280;text-align:center;padding:1rem">' + escapeHtml(msg) + '</td></tr>';
     return;
   }
 
@@ -390,12 +465,36 @@ function renderRequirementRows(){
     const tr = document.createElement('tr');
     const icon = expandedRequirementIndex === index ? 'v ' : '> ';
     tr.style.cursor = 'pointer';
+
+    // Multicast / IGMP badges for the device cell
+    let deviceBadges = '';
+    if(row.multicast_required){
+      deviceBadges += ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#92400e;color:#fde68a;font-weight:700;vertical-align:middle">MCAST</span>';
+    }
+    if(row.igmp_required){
+      deviceBadges += ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#1e3a5f;color:#93c5fd;font-weight:700;vertical-align:middle">IGMP</span>';
+    }
+
+    // Level badge
+    const levelRaw = String(row.requirement_level || '').toLowerCase();
+    let levelBadge = '';
+    if(levelRaw === 'min_required'){
+      levelBadge = '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#7f1d1d;color:#fca5a5;font-weight:700">min_required</span>';
+    } else if(levelRaw === 'recommended'){
+      levelBadge = '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#451a03;color:#fbbf24;font-weight:700">recommended</span>';
+    } else {
+      levelBadge = '<span style="color:#6b7280;font-size:11px">' + escapeHtml(levelRaw || '-') + '</span>';
+    }
+
     tr.innerHTML =
-      '<td>' + escapeHtml(icon + (row.name || '(unnamed device)')) + '</td>' +
+      '<td>' + escapeHtml(icon + (row.name || '(unnamed device)')) + deviceBadges + '</td>' +
       '<td style="font-family:monospace">' + escapeHtml(row.ip || '-') + '</td>' +
+      '<td style="font-size:11px;color:#9ca3af">' + escapeHtml(row.zone || '-') + '</td>' +
       '<td>' + escapeHtml(row.protocol) + '</td>' +
       '<td style="font-family:monospace">' + escapeHtml(row.port) + '</td>' +
+      '<td style="font-size:11px">' + escapeHtml(row.direction || '-') + '</td>' +
       '<td>' + escapeHtml(row.service || row.purpose || '-') + '</td>' +
+      '<td>' + levelBadge + '</td>' +
       '<td>' + escapeHtml(row.derived_from || '-') + '</td>' +
       '<td>' + escapeHtml(row.confidence_label || 'Unknown') + '</td>';
     tr.addEventListener('click', (event) => {
@@ -408,17 +507,24 @@ function renderRequirementRows(){
     tbody.appendChild(tr);
 
     if(expandedRequirementIndex === index){
+      const deviceKey = row.device_id || row.ip || '';
       const detailTr = document.createElement('tr');
       detailTr.innerHTML =
-        '<td colspan="7" style="padding:0;border-top:none;">'
+        '<td colspan="10" style="padding:0;border-top:none;">'
         + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#111111;color:#d1d5db;">'
-        + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Requirement Explanation</div>'
+        + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Port Detail</div>'
+        + buildPortDetailTable(deviceKey)
+        + '<div style="margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Requirement Explanation</div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.effective_type || 'unknown') + '</div></div>'
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">source_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.source_type || '-') + '</div></div>'
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">derived_from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.derived_from || '-') + '</div></div>'
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence_score</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(String(row.confidence_score ?? '-')) + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">zone</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.zone || '-') + '</div></div>'
+        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">multicast / igmp</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + (row.multicast_required ? '<span style="color:#fde68a">Multicast required</span>' : 'No multicast') + ' / ' + (row.igmp_required ? '<span style="color:#93c5fd">IGMP required</span>' : 'No IGMP') + '</div></div>'
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">required services</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.required_services) && row.required_services.length ? row.required_services.join(', ') : '-') + '</div></div>'
+        + (row.vlan_recommendation ? '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">VLAN recommendation</div><div style="margin-top:2px;font-size:12px;color:#fbbf24">' + escapeHtml(row.vlan_recommendation) + '</div></div>' : '')
+        + (row.av_justification ? '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">AV justification</div><div style="margin-top:2px;font-size:12px;color:#d1d5db;font-style:italic">' + escapeHtml(row.av_justification) + '</div></div>' : '')
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.notes) && row.notes.length ? row.notes.join(' | ') : '-') + '</div></div>'
         + '<div style="grid-column:1 / -1;margin-top:2px;">'
         + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
@@ -441,6 +547,65 @@ function escapeHtml(str){
     .replace(/>/g, '&gt;')
     .replace(/\"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function csvCell(value){
+  const text = String(value == null ? '' : value).replace(/"/g, '""');
+  return '"' + text + '"';
+}
+
+function downloadText(content, filename, mimeType){
+  const blob = new Blob(['﻿' + content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function exportRequirementsCsv(){
+  // One row per port per device — deterministic sort (device name, then port)
+  const rows = requirementRows.slice().sort((a, b) => {
+    const na = String(a.name || '').toLowerCase();
+    const nb = String(b.name || '').toLowerCase();
+    if(na < nb) return -1;
+    if(na > nb) return 1;
+    const pa = Number.isFinite(Number(a.port)) ? Number(a.port) : 999999;
+    const pb = Number.isFinite(Number(b.port)) ? Number(b.port) : 999999;
+    return pa - pb;
+  });
+
+  const headers = [
+    'Device', 'IP', 'Zone', 'VLAN', 'Effective Type', 'Port', 'Protocol',
+    'Direction', 'Purpose', 'Requirement Level', 'Multicast Required',
+    'IGMP Required', 'VLAN Recommendation', 'AV Justification',
+    'Derived From', 'Confidence Score'
+  ];
+  const lines = [headers.map(csvCell).join(',')];
+  rows.forEach(row => {
+    lines.push([
+      row.name || '',
+      row.ip || '',
+      row.zone || '',
+      row.vlan || '',
+      row.effective_type || '',
+      row.port || '',
+      row.protocol || '',
+      row.direction || '',
+      row.purpose || row.service || '',
+      row.requirement_level || '',
+      row.multicast_required ? 'Yes' : 'No',
+      row.igmp_required ? 'Yes' : 'No',
+      row.vlan_recommendation || '',
+      row.av_justification || '',
+      row.derived_from || '',
+      row.confidence_score != null ? String(row.confidence_score) : ''
+    ].map(csvCell).join(','));
+  });
+  downloadText(lines.join('\r\n'), 'requirements.csv', 'text/csv;charset=utf-8');
 }
 
 updateSummaryCards();

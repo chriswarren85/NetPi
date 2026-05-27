@@ -396,3 +396,28 @@
   - Three test cases verified: `vendor="", model="Barco ClickShare C-10"` → `barco_ctrl`; `vendor="", model="Novastar H2 KLCOB12V2"` → `novastar`; `vendor="", model="Crestron DM-NVX-350"` → `nvx`
   - Backward compatibility preserved: all callers that pass only `vendor_raw` continue to work unchanged; the model fallback only activates when vendor produces no match
   - Known limitation: `effective_type` stays `generic` in the full pipeline for model-only devices because suggestion scoring (max ~38 pts from text + vendor_guess combined) does not reliably reach the 60-pt auto-promotion threshold — operators must still set `type` explicitly on the LAN sheet for firewall rules to generate from that device
+
+### Last Update
+- Feature: W22 Requirements page + Firewall Plan port-profile derivation
+- Files modified:
+  - configs/type_requirements.json
+  - checks/requirements.py
+  - app.py
+  - templates/requirements.html
+  - templates/firewall.html
+  - PROJECT_STATE.md
+- Summary of changes:
+  - Expanded type_requirements.json with full AV port profiles for all 22 recognized device types (additive — no existing entries removed or renamed). Each port entry now includes direction, purpose, requirement_level. Each type now includes multicast_required, igmp_required, vlan_recommendation, av_justification.
+  - Added new aliases: crestron-control, crestron, crestron-uc, and 8 more convenience aliases. Existing aliases preserved.
+  - Strengthened generate_device_requirements (checks/requirements.py) to return: zone (resolved from VLAN via settings.json vlans[].vlan_id/name), vlan, multicast_required, igmp_required, vlan_recommendation, av_justification, port_count, has_requirements. Per-port entries now include direction, purpose, requirement_level alongside existing service/required fields. Settings passed as optional param from endpoint.
+  - Added resolve_vlan_zone() helper in checks/requirements.py — maps VLAN ID string to zone name using settings.json vlans list, falls back to "VLAN {id}".
+  - api_generate_requirements: passes settings to generate_device_requirements, computes multicast_required/igmp_required counts in summary, unmapped entries now include name/ip/effective_type.
+  - Added _derive_firewall_rules_from_requirements() to app.py — derives allow-rules from device type port profiles (inbound→ANY→zone, outbound→zone→ANY, bidirectional→intra-zone).
+  - Added 6 deterministic inter-system rules generated when both device types present (crestron→qsys, crestron→biamp, qsys→dante, qsys→nv, crestron-uc→vc-codec, crestron→dante controller).
+  - Added management-zone rules (SNMP/SSH/HTTPS) to all AV endpoints when a Management-named VLAN exists in settings.
+  - Added _merge_and_dedup_firewall_rules() — dedup key (source_zone, destination_zone, protocol, port), min_required always wins, device lists and evidence unioned, derived_from tracked as list.
+  - api_generate_firewall_plan now calls both flow path (_compose_firewall_plan, unchanged) and requirements path, merges and returns merged plan with zone_members, flow_rules/requirements_rules counts in summary. Existing flow-path behavior completely preserved.
+  - Requirements page: added 2 summary cards (Multicast Required, IGMP Required), CSV export button (one row per port, Excel-safe BOM), Zone column, Direction column, Level badge column, MCAST/IGMP badges per device row, expandable port detail table (port|protocol|direction|purpose|level), VLAN recommendation and AV justification in expanded view, unmapped devices panel now links to /tools/intake.
+  - Firewall page: added Source column (derived_from indicator — purple=requirements, grey=flows), Zone Summary panel at bottom, status bar shows flow/port-profile rule counts. CSV export adds Derived From column.
+  - All existing endpoints, API shapes, filter wiring, export buttons, and loading/error states preserved.
+  - Deduplication never silently drops min_required rules.

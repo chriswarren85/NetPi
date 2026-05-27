@@ -60,7 +60,30 @@ def resolve_runtime_typing(device):
     return "unknown", "none"
 
 
+def resolve_vlan_zone(vlan_id, settings):
+    """Map a VLAN ID string to a zone label using settings.json vlans list.
+
+    Looks up the vlan entry where vlan_id matches and returns its name.
+    Falls back to 'VLAN {vlan_id}' if not found.
+    Returns empty string if vlan_id is blank.
+    """
+    vlan_id_str = str(vlan_id or "").strip()
+    if not vlan_id_str:
+        return ""
+    vlans = (settings or {}).get("vlans") or []
+    for vlan in vlans:
+        if not isinstance(vlan, dict):
+            continue
+        entry_vlan_id = str(vlan.get("vlan_id") or "").strip()
+        if entry_vlan_id and entry_vlan_id == vlan_id_str:
+            name = str(vlan.get("name") or "").strip()
+            if name:
+                return name
+    return f"VLAN {vlan_id_str}"
+
+
 def _parse_required_ports(raw_ports):
+    """Parse required_ports from type config, preserving both old and new field schemas."""
     parsed = []
     for entry in _as_list(raw_ports):
         if not isinstance(entry, dict):
@@ -71,16 +94,48 @@ def _parse_required_ports(raw_ports):
             raw_port = int(raw_port)
         if not isinstance(raw_port, int):
             continue
+
+        # Old fields (backward compat)
+        service = str(entry.get("service") or "").strip()
+        required = bool(entry.get("required", True))
+
+        # New fields
+        direction = str(entry.get("direction") or "bidirectional").strip().lower()
+        if direction not in ("inbound", "outbound", "bidirectional"):
+            direction = "bidirectional"
+
+        # Purpose: prefer explicit "purpose", fall back to "service"
+        purpose = str(entry.get("purpose") or service or "").strip()
+
+        req_level = str(entry.get("requirement_level") or "").strip().lower()
+        if req_level not in ("min_required", "recommended"):
+            # Derive from legacy "required" bool if new field absent
+            req_level = "min_required" if required else "recommended"
+
         parsed.append({
             "protocol": protocol,
             "port": raw_port,
-            "service": str(entry.get("service") or "").strip(),
-            "required": bool(entry.get("required", True)),
+            "service": service,
+            "required": required,
+            "direction": direction,
+            "purpose": purpose,
+            "requirement_level": req_level,
         })
     return parsed
 
 
-def generate_device_requirements(device, config):
+def generate_device_requirements(device, config, settings=None):
+    """Generate structured network requirements for a single device.
+
+    Parameters
+    ----------
+    device : dict   The device record (enriched or raw).
+    config : dict   Loaded type_requirements.json content.
+    settings : dict Optional settings.json content for zone resolution.
+
+    Returns a dict with all original fields plus new structured fields.
+    Does NOT remove any previously returned field.
+    """
     item = copy.deepcopy(device if isinstance(device, dict) else {})
     source_type = _normalize_token(item.get("type"))
     resolved_type, derived_from = resolve_runtime_typing(item)
@@ -97,11 +152,11 @@ def generate_device_requirements(device, config):
         for service in _as_list(mapping.get("required_services"))
         if str(service).strip()
     ]
-    notes = [
-        str(note).strip()
-        for note in _as_list(mapping.get("notes"))
-        if str(note).strip()
-    ]
+    # Notes: support both list and string in config
+    raw_notes = mapping.get("notes") or []
+    if isinstance(raw_notes, str):
+        raw_notes = [raw_notes]
+    notes = [str(note).strip() for note in _as_list(raw_notes) if str(note).strip()]
 
     device_id = (
         str(item.get("mac") or "").strip()
@@ -119,7 +174,24 @@ def generate_device_requirements(device, config):
         else:
             confidence_score = 0
 
+    # New fields from expanded config
+    multicast_required = bool(mapping.get("multicast_required", False))
+    igmp_required = bool(mapping.get("igmp_required", False))
+    vlan_recommendation = str(mapping.get("vlan_recommendation") or "").strip()
+    av_justification = str(mapping.get("av_justification") or "").strip()
+    display_name = str(mapping.get("display_name") or "").strip()
+
+    # Zone resolution from VLAN field using settings
+    vlan_id = str(item.get("vlan") or "").strip()
+    zone = resolve_vlan_zone(vlan_id, settings) if settings else (
+        f"VLAN {vlan_id}" if vlan_id else ""
+    )
+
+    port_count = len(required_ports)
+    has_requirements = port_count > 0 or bool(required_services)
+
     return {
+        # --- Original fields (preserved) ---
         "device_id": device_id,
         "name": str(item.get("name") or "").strip(),
         "ip": str(item.get("ip") or "").strip(),
@@ -130,4 +202,14 @@ def generate_device_requirements(device, config):
         "required_ports": required_ports,
         "required_services": required_services,
         "notes": notes,
+        # --- New fields (additive) ---
+        "display_name": display_name,
+        "vlan": vlan_id,
+        "zone": zone,
+        "multicast_required": multicast_required,
+        "igmp_required": igmp_required,
+        "vlan_recommendation": vlan_recommendation,
+        "av_justification": av_justification,
+        "port_count": port_count,
+        "has_requirements": has_requirements,
     }

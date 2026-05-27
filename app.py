@@ -6524,15 +6524,18 @@ def api_generate_requirements():
             devices = [d for d in devices if str(d.get("vlan") or "").strip() == vlan]
 
         config = load_requirements_config()
+        settings = load_settings()
         enriched_devices = [enrich_device_runtime(device) for device in devices]
 
         results = []
         unmapped = []
         mapped_count = 0
         types_seen = set()
+        multicast_count = 0
+        igmp_count = 0
 
         for device in enriched_devices:
-            requirement_row = generate_device_requirements(device, config)
+            requirement_row = generate_device_requirements(device, config, settings=settings)
             results.append(requirement_row)
 
             effective_type = str(requirement_row.get("effective_type") or "").strip().lower()
@@ -6544,13 +6547,24 @@ def api_generate_requirements():
             else:
                 unmapped.append({
                     "device_id": requirement_row.get("device_id") or "",
+                    "name": requirement_row.get("name") or "",
+                    "ip": requirement_row.get("ip") or "",
                     "type": effective_type or "unknown",
+                    "effective_type": effective_type or "unknown",
                 })
 
+            if requirement_row.get("multicast_required"):
+                multicast_count += 1
+            if requirement_row.get("igmp_required"):
+                igmp_count += 1
+
         summary = {
+            "total": len(results),
             "mapped": mapped_count,
             "unmapped": len(unmapped),
             "types_seen": len(types_seen),
+            "multicast_required": multicast_count,
+            "igmp_required": igmp_count,
         }
 
         return jsonify({
@@ -10649,6 +10663,318 @@ def _build_av_justification(purpose, relationship_types, derived_sources):
     return f"{purpose_text}.{relation_text}{source_text}".strip()
 
 
+# ── W22: Requirements-based firewall derivation ────────────────────────────────
+
+# Device types that are AV endpoints and should receive management-zone rules
+_AV_ENDPOINT_TYPES = frozenset({
+    "dante-audio", "biamp-tesira", "qsys-core", "crestron-processor",
+    "crestron-touchpanel", "crestron-uc-engine", "qsys-nv-endpoint",
+    "barco-clickshare", "av-over-ip", "display", "camera", "video-switcher",
+    "ndi", "streaming-encoder", "iptv", "wireless-presentation",
+    "audio-dsp", "vc-codec",
+})
+
+# Deterministic inter-system rules generated when both device types are in inventory
+# (src_type, dst_type, port, protocol, direction, purpose, req_level)
+_INTER_SYSTEM_RULES = [
+    ("crestron-processor", "qsys-core",       1710, "TCP", "source_to_destination", "Q-SYS control protocol (QRC)",       "min_required"),
+    ("crestron-processor", "biamp-tesira",       23, "TCP", "source_to_destination", "Telnet DSP control",                  "min_required"),
+    ("crestron-processor", "dante-audio",       8800, "TCP", "source_to_destination", "Dante Controller UI",                "recommended"),
+    ("crestron-uc-engine", "vc-codec",          5060, "TCP", "source_to_destination", "SIP signalling",                    "min_required"),
+    ("qsys-core",          "dante-audio",       4440, "UDP", "source_to_destination", "Dante audio via Q-SYS",             "min_required"),
+    ("qsys-core",          "qsys-nv-endpoint",  1710, "TCP", "source_to_destination", "Q-SYS NV control",                 "min_required"),
+]
+
+
+def _req_resolve_device_zone(device, settings, zone_lookup):
+    """Resolve zone label for a device using VLAN ID then IP inference."""
+    vlan_id = str(device.get("vlan") or "").strip()
+    ip = str(device.get("ip") or "").strip()
+    if vlan_id:
+        zone = zone_lookup.get(_normalize_zone_key(vlan_id))
+        if zone:
+            return zone
+        return f"VLAN {vlan_id}"
+    if ip:
+        inferred = _resolve_firewall_zone(None, ip, settings, zone_lookup)
+        if inferred:
+            return inferred
+    return "Unassigned"
+
+
+def _req_resolve_type(raw_type, req_config):
+    """Normalize and alias-resolve a device type string using type_requirements aliases."""
+    aliases = (req_config or {}).get("aliases") or {}
+    normalized = str(raw_type or "").strip().lower()
+    return str(aliases.get(normalized, normalized)).strip().lower()
+
+
+def _req_get_effective_type(device, req_config):
+    """Return the best available effective type for a device, alias-resolved."""
+    raw = (
+        str(device.get("effective_type") or "").strip().lower()
+        or str(device.get("_resolved_type") or "").strip().lower()
+        or str(device.get("suggested_type") or "").strip().lower()
+        or str(device.get("type") or "").strip().lower()
+    )
+    return _req_resolve_type(raw, req_config) if raw else ""
+
+
+def _derive_firewall_rules_from_requirements(devices, settings, req_config):
+    """Derive firewall allow-rules from device type port profiles in type_requirements.json.
+
+    Generates:
+    - Per-port rules from each device's profile (inbound/outbound/bidirectional)
+    - Deterministic inter-system rules when both device types are present in inventory
+    - Management-zone → AV-device rules when a Management VLAN is configured
+    """
+    if not isinstance(devices, list):
+        return []
+
+    zone_lookup = _build_vlan_zone_lookup(settings or {})
+    type_map = (req_config or {}).get("types") or {}
+    candidate_rules = []
+
+    # Identify all types present and build zone index
+    types_present = set()
+    devices_by_type = {}  # resolved_type -> list of {name, zone}
+
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        resolved = _req_get_effective_type(device, req_config)
+        if not resolved:
+            continue
+        device_zone = _req_resolve_device_zone(device, settings, zone_lookup)
+        device_name = str(device.get("name") or device.get("ip") or "").strip()
+        types_present.add(resolved)
+        if resolved not in devices_by_type:
+            devices_by_type[resolved] = []
+        devices_by_type[resolved].append({"name": device_name, "zone": device_zone})
+
+    # ── Per-device port-profile rules ─────────────────────────────────────────
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+
+        resolved = _req_get_effective_type(device, req_config)
+        if not resolved:
+            continue
+
+        profile = type_map.get(resolved)
+        if not isinstance(profile, dict):
+            continue
+
+        device_zone = _req_resolve_device_zone(device, settings, zone_lookup)
+        device_name = str(device.get("name") or device.get("ip") or "").strip()
+        av_justification = str(profile.get("av_justification") or "").strip()
+
+        for port_entry in (profile.get("required_ports") or []):
+            if not isinstance(port_entry, dict):
+                continue
+            port_num = port_entry.get("port")
+            if not isinstance(port_num, int):
+                continue
+
+            protocol = str(port_entry.get("protocol") or "TCP").upper()
+            direction_raw = str(port_entry.get("direction") or "bidirectional").lower()
+            purpose = str(port_entry.get("purpose") or port_entry.get("service") or "").strip()
+            req_level = str(port_entry.get("requirement_level") or "recommended").lower()
+            if req_level not in ("min_required", "recommended"):
+                req_level = "recommended"
+
+            confidence = 85 if req_level == "min_required" else 65
+
+            if direction_raw == "inbound":
+                src_zone, dst_zone = "ANY", device_zone
+            elif direction_raw == "outbound":
+                src_zone, dst_zone = device_zone, "ANY"
+            else:  # bidirectional → intra-zone
+                src_zone, dst_zone = device_zone, device_zone
+
+            candidate_rules.append({
+                "requirement_level": req_level,
+                "category": "control" if req_level == "min_required" else "management",
+                "source_zone": src_zone,
+                "destination_zone": dst_zone,
+                "direction": "source_to_destination",
+                "protocol": protocol,
+                "port": port_num,
+                "ports": [port_num],
+                "purpose": purpose,
+                "business_justification": av_justification or purpose,
+                "av_justification": av_justification,
+                "confidence": confidence,
+                "source_systems": [],
+                "source_devices": [device_name] if device_name else [],
+                "destination_devices": [],
+                "evidence": [f"Port profile: {resolved}"],
+                "derived_from": ["requirements"],
+            })
+
+    # ── Deterministic inter-system rules ──────────────────────────────────────
+    for (src_type, dst_type, port, protocol, direction, purpose, req_level) in _INTER_SYSTEM_RULES:
+        if src_type not in types_present or dst_type not in types_present:
+            continue
+        confidence = 90 if req_level == "min_required" else 70
+        for src_info in (devices_by_type.get(src_type) or []):
+            for dst_info in (devices_by_type.get(dst_type) or []):
+                candidate_rules.append({
+                    "requirement_level": req_level,
+                    "category": "control",
+                    "source_zone": src_info["zone"],
+                    "destination_zone": dst_info["zone"],
+                    "direction": direction,
+                    "protocol": protocol,
+                    "port": port,
+                    "ports": [port],
+                    "purpose": purpose,
+                    "business_justification": f"Required inter-system: {src_type} → {dst_type}",
+                    "av_justification": f"Inter-system rule: {src_type} must reach {dst_type} on {port}/{protocol}",
+                    "confidence": confidence,
+                    "source_systems": [],
+                    "source_devices": [src_info["name"]] if src_info["name"] else [],
+                    "destination_devices": [dst_info["name"]] if dst_info["name"] else [],
+                    "evidence": [f"Inter-system: {src_type} → {dst_type}"],
+                    "derived_from": ["requirements"],
+                })
+
+    # ── Management zone → all AV device rules ─────────────────────────────────
+    mgmt_zone = None
+    for vlan in (settings or {}).get("vlans") or []:
+        if not isinstance(vlan, dict):
+            continue
+        name = str(vlan.get("name") or "").strip()
+        if "management" in name.lower() or "mgmt" in name.lower():
+            mgmt_zone = name
+            break
+
+    if mgmt_zone:
+        mgmt_port_rules = [
+            (161, "UDP", "SNMP polling",      "recommended"),
+            (443, "TCP", "Web management",    "recommended"),
+            (22,  "TCP", "SSH management",    "recommended"),
+        ]
+        for device in devices:
+            if not isinstance(device, dict):
+                continue
+            resolved = _req_get_effective_type(device, req_config)
+            if resolved not in _AV_ENDPOINT_TYPES:
+                continue
+            device_zone = _req_resolve_device_zone(device, settings, zone_lookup)
+            device_name = str(device.get("name") or device.get("ip") or "").strip()
+            for port_num, protocol, purpose, req_level in mgmt_port_rules:
+                candidate_rules.append({
+                    "requirement_level": req_level,
+                    "category": "management",
+                    "source_zone": mgmt_zone,
+                    "destination_zone": device_zone,
+                    "direction": "source_to_destination",
+                    "protocol": protocol,
+                    "port": port_num,
+                    "ports": [port_num],
+                    "purpose": f"Management: {purpose}",
+                    "business_justification": "Management zone monitoring and administration",
+                    "av_justification": f"Management zone requires {purpose} access to AV devices",
+                    "confidence": 65,
+                    "source_systems": [],
+                    "source_devices": [mgmt_zone],
+                    "destination_devices": [device_name] if device_name else [],
+                    "evidence": ["Management zone policy"],
+                    "derived_from": ["requirements"],
+                })
+
+    return candidate_rules
+
+
+def _merge_and_dedup_firewall_rules(flow_rules, req_rules):
+    """Merge flow-based and requirements-based firewall rules.
+
+    Dedup key: (source_zone, destination_zone, protocol, port).
+    When merging duplicates: min_required wins, device lists are unioned,
+    derived_from lists are unioned, evidence is unioned.
+    min_required rules are NEVER silently dropped.
+    """
+    merged = {}
+
+    for rule in list(flow_rules or []) + list(req_rules or []):
+        if not isinstance(rule, dict):
+            continue
+
+        src_zone = str(rule.get("source_zone") or "Unknown")
+        dst_zone = str(rule.get("destination_zone") or "Unknown")
+        protocol = str(rule.get("protocol") or "TCP").upper()
+        port = rule.get("port")  # may be None or int
+
+        key = (src_zone, dst_zone, protocol, port)
+        existing = merged.get(key)
+
+        if existing is None:
+            merged[key] = {
+                "requirement_level": str(rule.get("requirement_level") or "recommended"),
+                "category": str(rule.get("category") or "unknown"),
+                "source_zone": src_zone,
+                "destination_zone": dst_zone,
+                "direction": str(rule.get("direction") or "source_to_destination"),
+                "protocol": protocol,
+                "port": port,
+                "ports": list(rule.get("ports") or ([port] if isinstance(port, int) else [])),
+                "purpose": str(rule.get("purpose") or ""),
+                "business_justification": str(rule.get("business_justification") or ""),
+                "av_justification": str(rule.get("av_justification") or ""),
+                "confidence": rule.get("confidence") or 0,
+                "source_systems": list(rule.get("source_systems") or []),
+                "source_devices": list(rule.get("source_devices") or []),
+                "destination_devices": list(rule.get("destination_devices") or []),
+                "evidence": list(rule.get("evidence") or []),
+                "derived_from": list(rule.get("derived_from") or []),
+            }
+            continue
+
+        # min_required wins — never downgrade
+        if rule.get("requirement_level") == "min_required":
+            existing["requirement_level"] = "min_required"
+
+        # Union derived_from sources
+        new_df = rule.get("derived_from") or []
+        if isinstance(new_df, list):
+            existing["derived_from"] = sorted(set(existing["derived_from"]) | set(new_df))
+
+        # Union device lists
+        for field in ("source_devices", "destination_devices"):
+            new_vals = rule.get(field) or []
+            if isinstance(new_vals, list):
+                existing[field] = sorted(set(existing[field]) | set(v for v in new_vals if v))
+
+        # Union evidence
+        new_ev = rule.get("evidence") or []
+        if isinstance(new_ev, list):
+            existing["evidence"] = sorted(set(existing["evidence"]) | set(v for v in new_ev if v))
+
+        # Keep higher confidence
+        new_conf = rule.get("confidence") or 0
+        if isinstance(new_conf, (int, float)) and new_conf > (existing.get("confidence") or 0):
+            existing["confidence"] = new_conf
+
+    # Sort and renumber
+    sorted_rules = sorted(
+        merged.values(),
+        key=lambda r: (
+            0 if r.get("requirement_level") == "min_required" else 1,
+            str(r.get("source_zone") or ""),
+            str(r.get("destination_zone") or ""),
+            str(r.get("protocol") or ""),
+            r["port"] if isinstance(r.get("port"), int) else -1,
+        ),
+    )
+    for index, rule in enumerate(sorted_rules, start=1):
+        rule["rule_id"] = f"FW-{index:03d}"
+
+    return sorted_rules
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 def _compose_firewall_plan(system_requirement_rows, settings):
     zone_lookup = _build_vlan_zone_lookup(settings or {})
     merged = {}
@@ -11873,6 +12199,9 @@ def api_generate_firewall_plan():
             payload = {"results": payload}
         payload = payload if isinstance(payload, dict) else {}
 
+        settings = load_settings()
+
+        # ── Existing path: flow-based derivation (UNCHANGED) ─────────────────
         wrapper = payload.get("system_requirements")
         system_rows = []
         if isinstance(wrapper, dict) and _looks_like_system_requirement_rows(wrapper.get("results")):
@@ -11883,7 +12212,69 @@ def api_generate_firewall_plan():
             built = _build_system_requirements_payload(payload)
             system_rows = built.get("results") or []
 
-        firewall_plan = _compose_firewall_plan(system_rows, settings=load_settings())
+        flow_plan = _compose_firewall_plan(system_rows, settings=settings)
+        flow_rules = list(flow_plan.get("rules") or [])
+        # Tag flow rules with derived_from so frontend can show rule source
+        for r in flow_rules:
+            if "derived_from" not in r or not r["derived_from"]:
+                r["derived_from"] = ["flows"]
+
+        # ── New path: requirements-based derivation ───────────────────────────
+        req_rules = []
+        try:
+            req_config = load_requirements_config()
+            devices = _load_lan_sheet() or load_devices()
+            enriched = [enrich_device_runtime(d) for d in devices]
+            req_rules = _derive_firewall_rules_from_requirements(enriched, settings, req_config)
+        except Exception:
+            req_rules = []
+
+        # ── Merge and deduplicate both paths ──────────────────────────────────
+        merged_rules = _merge_and_dedup_firewall_rules(flow_rules, req_rules)
+
+        # Rebuild plan summary from merged rules
+        min_required = sum(1 for r in merged_rules if r.get("requirement_level") == "min_required")
+        zones = sorted({
+            z for r in merged_rules
+            for z in (r.get("source_zone"), r.get("destination_zone"))
+            if str(z or "").strip() and str(z or "").strip() != "ANY"
+        })
+        protocols = sorted({str(r.get("protocol") or "").strip() for r in merged_rules if r.get("protocol")})
+        categories = sorted({str(r.get("category") or "").strip() for r in merged_rules if r.get("category")})
+
+        # Zone member index: zone -> [device names]
+        zone_members = {}
+        for r in merged_rules:
+            for zone_key, dev_key in (
+                (r.get("source_zone"), "source_devices"),
+                (r.get("destination_zone"), "destination_devices"),
+            ):
+                zname = str(zone_key or "").strip()
+                if not zname or zname == "ANY":
+                    continue
+                if zname not in zone_members:
+                    zone_members[zname] = set()
+                for d in (r.get(dev_key) or []):
+                    if d:
+                        zone_members[zname].add(d)
+        zone_members_serializable = {k: sorted(v) for k, v in zone_members.items()}
+
+        firewall_plan = {
+            "rules": merged_rules,
+            "summary": {
+                "total_rules": len(merged_rules),
+                "min_required_rules": min_required,
+                "recommended_rules": len(merged_rules) - min_required,
+                "zones": zones,
+                "protocols": protocols,
+                "categories": categories,
+                "duplicates_removed": max(0, (len(flow_rules) + len(req_rules)) - len(merged_rules)),
+                "flow_rules": len(flow_rules),
+                "requirements_rules": len(req_rules),
+            },
+            "zone_members": zone_members_serializable,
+        }
+
         return jsonify({
             "ok": True,
             "firewall_plan": firewall_plan,
