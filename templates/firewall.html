@@ -136,6 +136,8 @@ let firewallOperatorNotes = {};
 let firewallZoneMembers = {};
 let _fwController = null;   // AbortController for in-flight fetch
 let _fwRefreshInterval = 0; // seconds; 0 = off
+let _fwCacheTimestamp = null;
+const FIREWALL_CACHE_KEY = 'netpi.firewall.cache.v2';
 
 function escapeHtml(str){
   return String(str || '')
@@ -260,6 +262,34 @@ function _scheduleFwRefresh(){
   );
 }
 
+function _saveFwCache(rules, zoneMembers){
+  try {
+    localStorage.setItem(FIREWALL_CACHE_KEY, JSON.stringify({
+      ts: new Date().toISOString(),
+      rules: rules,
+      zoneMembers: zoneMembers
+    }));
+  } catch(e){ /* quota or private browsing — silently ignore */ }
+}
+
+function _loadFwCache(){
+  try {
+    const raw = localStorage.getItem(FIREWALL_CACHE_KEY);
+    if(!raw) return false;
+    const cache = JSON.parse(raw);
+    if(!cache || !Array.isArray(cache.rules)) return false;
+    firewallAllRules   = cache.rules; // already normalised when saved
+    firewallZoneMembers = (cache.zoneMembers && typeof cache.zoneMembers === 'object') ? cache.zoneMembers : {};
+    _fwCacheTimestamp  = cache.ts ? new Date(cache.ts).toLocaleString('en-GB') : null;
+    setFilterOptions('fw-source-vlan',      firewallAllRules.map(r => r.source_zone));
+    setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
+    setFilterOptions('fw-system',           firewallAllRules.flatMap(r => r.source_systems));
+    applyFirewallFilters();
+    renderZoneSummary();
+    return true;
+  } catch(e){ return false; }
+}
+
 async function startFirewallGeneration(){
   if(_fwController){ _fwController.abort(); }
   _fwController = new AbortController();
@@ -297,6 +327,8 @@ async function startFirewallGeneration(){
     const summary = plan.summary || {};
     const flowCount = summary.flow_rules || 0;
     const reqCount = summary.requirements_rules || 0;
+    _fwCacheTimestamp = new Date().toLocaleString('en-GB');
+    _saveFwCache(firewallAllRules, firewallZoneMembers);
     _fwController = null;
     _setFwButtons(false);
 
@@ -305,7 +337,7 @@ async function startFirewallGeneration(){
       const sourceNote = (flowCount || reqCount)
         ? ' (flows: ' + flowCount + ', port-profiles: ' + reqCount + ')'
         : '';
-      statusMsg = 'Loaded ' + firewallAllRules.length + ' firewall rule' + (firewallAllRules.length === 1 ? '' : 's') + sourceNote + '.';
+      statusMsg = firewallAllRules.length + ' rules' + sourceNote + ' · Generated ' + _fwCacheTimestamp;
     } else {
       statusMsg = 'No firewall rules generated yet. Add devices and assign types first.';
     }
@@ -582,11 +614,20 @@ function exportFirewallJson(){
   downloadText(JSON.stringify(payload, null, 2), 'firewall_plan.json', 'application/json;charset=utf-8');
 }
 
-/* Initial render — idle state, no auto-load */
-renderFirewallRows('fw-min-rows', []);
-renderFirewallRows('fw-rec-rows', []);
-updateRuleCounts([], []);
+/* Initial render — restore from cache if available, else idle */
+const _fwCacheLoaded = _loadFwCache();
+if(!_fwCacheLoaded){
+  renderFirewallRows('fw-min-rows', []);
+  renderFirewallRows('fw-rec-rows', []);
+  updateRuleCounts([], []);
+}
 _setFwButtons(false);
-window.netpiStatus && window.netpiStatus.post('Firewall plan page ready — press Generate to begin', 'info', 'FIREWALL');
+if(_fwCacheLoaded){
+  setFirewallStatus(firewallAllRules.length + ' rules · Generated ' + (_fwCacheTimestamp||'previously') + ' — press Generate to refresh', '#6b7280');
+  window.netpiStatus && window.netpiStatus.post('Firewall — restored ' + firewallAllRules.length + ' rules from ' + (_fwCacheTimestamp||'cache'), 'info', 'FIREWALL');
+} else {
+  setFirewallStatus('Press Generate Firewall Plan to begin.', '#6b7280');
+  window.netpiStatus && window.netpiStatus.post('Firewall plan — press Generate to begin', 'info', 'FIREWALL');
+}
 </script>
 {% endblock %}

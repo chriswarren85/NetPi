@@ -106,6 +106,8 @@ let requirementsLoadState = 'idle'; // idle | loading | ready | empty | error
 let requirementsErrorMessage = '';
 let _reqController = null;   // AbortController for in-flight fetch
 let _reqRefreshInterval = 0; // seconds; 0 = off
+let _reqCacheTimestamp = null;
+const REQUIREMENTS_CACHE_KEY = 'netpi.requirements.cache.v2';
 
 let activeRequirementTab = 'By Device';
 let expandedKey = null; // string key of currently expanded row (null = none)
@@ -207,7 +209,8 @@ function updateRequirementsViewNote(){
     note.textContent = 'No requirements generated for current inventory scope.';
     return;
   }
-  note.textContent = 'Live generated requirements view: ' + activeRequirementTab + '. Derived using effective type resolution and requirement template mapping.';
+  const _tsLabel = _reqCacheTimestamp ? ' · Generated ' + _reqCacheTimestamp : '';
+  note.textContent = activeRequirementTab + ' view' + _tsLabel + ' — press Generate to refresh.';
 }
 
 function renderUnmappedDevices(){
@@ -398,6 +401,49 @@ function _scheduleRequirementsRefresh(){
   );
 }
 
+function _saveReqCache(results, unmapped, summary){
+  try {
+    localStorage.setItem(REQUIREMENTS_CACHE_KEY, JSON.stringify({
+      ts: new Date().toISOString(),
+      summary: summary,
+      results: results,
+      unmapped: unmapped
+    }));
+  } catch(e){ /* quota or private browsing — silently ignore */ }
+}
+
+function _loadReqCache(){
+  try {
+    const raw = localStorage.getItem(REQUIREMENTS_CACHE_KEY);
+    if(!raw) return false;
+    const cache = JSON.parse(raw);
+    if(!cache || !Array.isArray(cache.results)) return false;
+    const summary = cache.summary || {};
+    requirementsSummary = {
+      total:              Number(summary.total              || 0),
+      mapped:             Number(summary.mapped             || 0),
+      unmapped:           Number(summary.unmapped           || 0),
+      types_seen:         Number(summary.types_seen         || 0),
+      multicast_required: Number(summary.multicast_required || 0),
+      igmp_required:      Number(summary.igmp_required      || 0),
+    };
+    buildRequirementRowsFromResults(cache.results);
+    unmappedDevices = (Array.isArray(cache.unmapped) ? cache.unmapped : []).map(entry => {
+      const hit = cache.results.find(r => String(r.device_id||'') === String(entry.device_id||''));
+      return {
+        device_id:      entry.device_id || '',
+        type:           entry.type || '',
+        name:           (hit && hit.name) || entry.name || '',
+        ip:             (hit && hit.ip)   || entry.ip   || '',
+        effective_type: (hit && hit.effective_type) || entry.effective_type || entry.type || ''
+      };
+    });
+    requirementsLoadState = cache.results.length ? 'ready' : 'empty';
+    _reqCacheTimestamp = cache.ts ? new Date(cache.ts).toLocaleString('en-GB') : null;
+    return true;
+  } catch(e){ return false; }
+}
+
 async function startRequirementsGeneration(){
   // Cancel any previous in-flight request
   if(_reqController){
@@ -452,6 +498,8 @@ async function startRequirementsGeneration(){
     });
 
     requirementsLoadState = results.length ? 'ready' : 'empty';
+    _reqCacheTimestamp = new Date().toLocaleString('en-GB');
+    _saveReqCache(results, unmapped, requirementsSummary);
     _reqController = null;
     _setReqButtons(false);
     updateSummaryCards();
@@ -914,12 +962,18 @@ function exportRequirementsCsv(){
   downloadText(lines.join('\r\n'), 'requirements.csv', 'text/csv;charset=utf-8');
 }
 
-/* Initial render — idle state, no auto-load */
+/* Initial render — restore from cache if available, else idle */
+const _reqCacheLoaded = _loadReqCache();
 updateSummaryCards();
 updateRequirementsViewNote();
 renderRequirementRows();
 renderUnmappedDevices();
 _setReqButtons(false);
-window.netpiStatus && window.netpiStatus.post('Requirements page ready — press Generate to begin', 'info', 'REQUIREMENTS');
+window.netpiStatus && window.netpiStatus.post(
+  _reqCacheLoaded
+    ? 'Requirements — restored from ' + (_reqCacheTimestamp || 'cache') + ' — press Generate to refresh'
+    : 'Requirements — press Generate to begin',
+  'info', 'REQUIREMENTS'
+);
 </script>
 {% endblock %}
