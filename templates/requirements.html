@@ -69,21 +69,17 @@
 <div class="panel">
   <div class="panel-header">
     <span>Requirement Rows</span>
-    <span style="font-size:11px;color:#9ca3af">Click a row to expand derivation context and port detail</span>
+    <span style="font-size:11px;color:#6b7280">Click any row to expand</span>
   </div>
   <div class="panel-body" style="padding:0">
     <table>
-      <thead>
+      <thead id="requirements-thead">
         <tr>
           <th>Device</th>
           <th>IP</th>
           <th>Zone</th>
-          <th>Protocol</th>
-          <th>Port</th>
-          <th>Direction</th>
-          <th>Service / Purpose</th>
-          <th>Level</th>
-          <th>Derived From</th>
+          <th>Type</th>
+          <th>Ports</th>
           <th>Confidence</th>
         </tr>
       </thead>
@@ -112,19 +108,15 @@ let _reqController = null;   // AbortController for in-flight fetch
 let _reqRefreshInterval = 0; // seconds; 0 = off
 
 let activeRequirementTab = 'By Device';
-let expandedRequirementIndex = -1;
+let expandedKey = null; // string key of currently expanded row (null = none)
 
 function setRequirementTab(tabName, btn){
   activeRequirementTab = tabName;
-  expandedRequirementIndex = -1;
+  expandedKey = null;
   const tabRoot = document.getElementById('requirements-tabs');
   if(tabRoot){
     tabRoot.querySelectorAll('button').forEach(node => {
-      if(node === btn){
-        node.classList.add('btn-primary');
-      } else {
-        node.classList.remove('btn-primary');
-      }
+      node.classList.toggle('btn-primary', node === btn);
     });
   }
   updateRequirementsViewNote();
@@ -525,112 +517,333 @@ function buildPortDetailTable(deviceId){
   return html;
 }
 
+/* ─── Shared rendering helpers ─────────────────────────────────────────────── */
+function _setThead(cols){
+  const thead = document.getElementById('requirements-thead');
+  if(!thead) return;
+  thead.innerHTML = '<tr>' + cols.map(c => '<th>' + c + '</th>').join('') + '</tr>';
+}
+
+function _toggle(key){ expandedKey = expandedKey === key ? null : key; renderRequirementRows(); }
+
+function _flagBadges(dev){
+  let b = '';
+  if(dev.multicast_required) b += '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#92400e;color:#fde68a;font-weight:700;margin-left:3px;vertical-align:middle">MC</span>';
+  if(dev.igmp_required)      b += '<span style="font-size:9px;padding:1px 4px;border-radius:3px;background:#1e3a5f;color:#93c5fd;font-weight:700;margin-left:3px;vertical-align:middle">IGMP</span>';
+  return b;
+}
+
+function _pill(level){
+  const l = String(level||'').toLowerCase();
+  if(l==='min_required') return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#7f1d1d;color:#fca5a5;font-weight:700">REQ</span>';
+  if(l==='recommended')  return '<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#451a03;color:#fbbf24;font-weight:700">REC</span>';
+  return '<span style="color:#6b7280;font-size:10px">—</span>';
+}
+
+function _metaRow(label, val, color){
+  return '<div><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">'
+    + escapeHtml(label) + '</div><div style="font-size:11px;margin-top:1px;color:' + (color||'#e5e7eb') + '">'
+    + escapeHtml(String(val==null?'—':val)||'—') + '</div></div>';
+}
+
+function _expandBox(colSpan, content){
+  return '<td colspan="' + colSpan + '" style="padding:0;border-top:none">'
+    + '<div style="margin:0 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#111;color:#d1d5db">'
+    + content + '</div></td>';
+}
+
+function _appendDetail(tbody, colSpan, content){
+  const tr = document.createElement('tr');
+  tr.innerHTML = _expandBox(colSpan, content);
+  tbody.appendChild(tr);
+}
+
+/* ─── By Device (default) ───────────────────────────────────────────────────── */
+function renderByDevice(tbody){
+  _setThead(['Device', 'IP', 'Zone', 'Type', 'Ports', 'Confidence']);
+  if(!requirementDevices.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No device requirements generated.</td></tr>';
+    return;
+  }
+  requirementDevices.forEach(dev => {
+    const pKey  = dev.device_id || dev.ip || '';
+    const eKey  = 'dev:' + pKey;
+    const ports = portsByDeviceId[pKey] || [];
+    const isOpen = expandedKey === eKey;
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td><span style="color:#6b7280;font-size:11px;margin-right:4px">' + (isOpen?'▾':'▸') + '</span>'
+        + escapeHtml(dev.name||'(unnamed)') + _flagBadges(dev) + '</td>'
+      + '<td style="font-family:monospace;font-size:11px">' + escapeHtml(dev.ip||'—') + '</td>'
+      + '<td style="font-size:11px;color:#9ca3af">' + escapeHtml(dev.zone||(dev.vlan?'VLAN '+dev.vlan:'')||'—') + '</td>'
+      + '<td style="font-size:11px">' + escapeHtml(dev.effective_type||'—') + '</td>'
+      + '<td style="font-family:monospace;font-size:11px">' + (ports.length||'<span style="color:#4b5563">—</span>') + '</td>'
+      + '<td style="font-size:10px;color:#6b7280">' + escapeHtml(confidenceLabelFromScore(dev.confidence_score)) + '</td>';
+    tr.addEventListener('click', () => _toggle(eKey));
+    tbody.appendChild(tr);
+
+    if(isOpen){
+      // Port table
+      let portHtml = buildPortDetailTable(pKey);
+      // Meta grid
+      let meta = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px 14px;margin-top:10px">';
+      meta += _metaRow('Zone',      dev.zone||(dev.vlan?'VLAN '+dev.vlan:'—'));
+      meta += _metaRow('VLAN',      dev.vlan||'—');
+      meta += _metaRow('Type',      dev.effective_type||'—');
+      meta += _metaRow('Derived',   dev.derived_from||'—');
+      meta += _metaRow('Multicast', dev.multicast_required?'Required':'No', dev.multicast_required?'#fde68a':'#4b5563');
+      meta += _metaRow('IGMP',      dev.igmp_required?'Required':'No',      dev.igmp_required?'#93c5fd':'#4b5563');
+      if(dev.vlan_recommendation){
+        meta += '<div style="grid-column:1/-1">' + _metaRow('VLAN Recommendation', dev.vlan_recommendation, '#fbbf24') + '</div>';
+      }
+      if(dev.av_justification){
+        meta += '<div style="grid-column:1/-1"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">AV Justification</div>'
+          + '<div style="font-size:11px;color:#d1d5db;font-style:italic;margin-top:1px">' + escapeHtml(dev.av_justification) + '</div></div>';
+      }
+      if(Array.isArray(dev.notes)&&dev.notes.length){
+        meta += '<div style="grid-column:1/-1"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Notes</div>'
+          + '<div style="font-size:11px;color:#d1d5db;margin-top:1px">' + escapeHtml(dev.notes.join(' · ')) + '</div></div>';
+      }
+      meta += '</div>';
+      _appendDetail(tbody, 6, portHtml + meta);
+    }
+  });
+}
+
+/* ─── By System ─────────────────────────────────────────────────────────────── */
+function renderBySystem(tbody){
+  _setThead(['Type', 'Devices', 'Ports', 'Multicast', 'IGMP']);
+  const groups = {};
+  requirementDevices.forEach(d => {
+    const k = d.effective_type || 'unknown';
+    if(!groups[k]) groups[k] = [];
+    groups[k].push(d);
+  });
+  const keys = Object.keys(groups).sort();
+  if(!keys.length){
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#6b7280;text-align:center;padding:1rem">No type groups to show.</td></tr>';
+    return;
+  }
+  keys.forEach(k => {
+    const devs     = groups[k];
+    const totalPts = devs.reduce((s,d)=>s+(portsByDeviceId[d.device_id||d.ip||'']||[]).length,0);
+    const mc       = devs.filter(d=>d.multicast_required).length;
+    const igmp     = devs.filter(d=>d.igmp_required).length;
+    const eKey     = 'sys:'+k;
+    const isOpen   = expandedKey === eKey;
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td><span style="color:#6b7280;font-size:11px;margin-right:4px">'+(isOpen?'▾':'▸')+'</span><strong>'+escapeHtml(k)+'</strong></td>'
+      + '<td style="font-family:monospace">'+devs.length+'</td>'
+      + '<td style="font-family:monospace">'+totalPts+'</td>'
+      + '<td>'+(mc?'<span style="color:#fde68a">'+mc+'</span>':'<span style="color:#374151">—</span>')+'</td>'
+      + '<td>'+(igmp?'<span style="color:#93c5fd">'+igmp+'</span>':'<span style="color:#374151">—</span>')+'</td>';
+    tr.addEventListener('click', ()=>_toggle(eKey));
+    tbody.appendChild(tr);
+
+    if(isOpen){
+      let list = '';
+      devs.forEach(d => {
+        const pc = (portsByDeviceId[d.device_id||d.ip||'']||[]).length;
+        list += '<div style="display:flex;gap:10px;align-items:center;font-size:11px;padding:3px 0;border-bottom:1px solid #1a1a1a">'
+          + '<span style="min-width:170px;color:#e5e7eb">'+escapeHtml(d.name||'(unnamed)')+'</span>'
+          + '<span style="font-family:monospace;color:#9ca3af;min-width:110px">'+escapeHtml(d.ip||'—')+'</span>'
+          + '<span style="color:#6b7280;min-width:60px">'+(pc?pc+' ports':'—')+'</span>'
+          + _flagBadges(d) + '</div>';
+      });
+      _appendDetail(tbody, 5, list);
+    }
+  });
+}
+
+/* ─── By VLAN ───────────────────────────────────────────────────────────────── */
+function renderByVlan(tbody){
+  _setThead(['Zone / VLAN', 'Devices', 'Types Present']);
+  const groups = {};
+  requirementDevices.forEach(d => {
+    const k = d.zone||(d.vlan?'VLAN '+d.vlan:'Unassigned');
+    if(!groups[k]) groups[k]=[];
+    groups[k].push(d);
+  });
+  const keys = Object.keys(groups).sort();
+  if(!keys.length){
+    tbody.innerHTML = '<tr><td colspan="3" style="color:#6b7280;text-align:center;padding:1rem">No VLAN data available.</td></tr>';
+    return;
+  }
+  keys.forEach(k => {
+    const devs   = groups[k];
+    const types  = Array.from(new Set(devs.map(d=>d.effective_type).filter(Boolean))).sort();
+    const eKey   = 'vlan:'+k;
+    const isOpen = expandedKey === eKey;
+    const typeStr = types.slice(0,4).join(', ')+(types.length>4?', +'+(types.length-4)+' more':'');
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td><span style="color:#6b7280;font-size:11px;margin-right:4px">'+(isOpen?'▾':'▸')+'</span><strong>'+escapeHtml(k)+'</strong></td>'
+      + '<td style="font-family:monospace">'+devs.length+'</td>'
+      + '<td style="font-size:11px;color:#9ca3af">'+escapeHtml(typeStr)+'</td>';
+    tr.addEventListener('click', ()=>_toggle(eKey));
+    tbody.appendChild(tr);
+
+    if(isOpen){
+      let list = '';
+      devs.forEach(d => {
+        list += '<div style="display:flex;gap:10px;align-items:center;font-size:11px;padding:3px 0;border-bottom:1px solid #1a1a1a">'
+          + '<span style="min-width:170px;color:#e5e7eb">'+escapeHtml(d.name||'(unnamed)')+'</span>'
+          + '<span style="font-family:monospace;color:#9ca3af;min-width:110px">'+escapeHtml(d.ip||'—')+'</span>'
+          + '<span style="color:#6b7280">'+escapeHtml(d.effective_type||'—')+'</span>'
+          + _flagBadges(d) + '</div>';
+      });
+      _appendDetail(tbody, 3, list);
+    }
+  });
+}
+
+/* ─── By Protocol ───────────────────────────────────────────────────────────── */
+function renderByProtocol(tbody){
+  _setThead(['Protocol', 'Ports Used', 'Rules', 'Devices']);
+  const groups = {};
+  requirementRows.filter(r => r.protocol && r.protocol!=='-').forEach(r => {
+    const k = r.protocol;
+    if(!groups[k]) groups[k]={ports:new Set(), rows:[], devices:new Set()};
+    groups[k].rows.push(r);
+    if(r.port&&r.port!=='-') groups[k].ports.add(r.port);
+    groups[k].devices.add(r.name||r.device_id);
+  });
+  const keys = Object.keys(groups).sort();
+  if(!keys.length){
+    tbody.innerHTML = '<tr><td colspan="4" style="color:#6b7280;text-align:center;padding:1rem">No protocol data.</td></tr>';
+    return;
+  }
+  keys.forEach(k => {
+    const g      = groups[k];
+    const eKey   = 'proto:'+k;
+    const isOpen = expandedKey === eKey;
+    const pArr   = Array.from(g.ports).sort((a,b)=>Number(a)-Number(b));
+    const pStr   = pArr.length>8 ? pArr.slice(0,8).join(', ')+' +…' : (pArr.join(', ')||'—');
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td><span style="color:#6b7280;font-size:11px;margin-right:4px">'+(isOpen?'▾':'▸')+'</span><strong>'+escapeHtml(k)+'</strong></td>'
+      + '<td style="font-size:11px;font-family:monospace;color:#9ca3af">'+escapeHtml(pStr)+'</td>'
+      + '<td style="font-family:monospace">'+g.rows.length+'</td>'
+      + '<td style="font-family:monospace">'+g.devices.size+'</td>';
+    tr.addEventListener('click', ()=>_toggle(eKey));
+    tbody.appendChild(tr);
+
+    if(isOpen){
+      // Build distinct port → purpose rows
+      const portGroups = {};
+      g.rows.forEach(r => {
+        const pk = r.port+'|'+(r.purpose||r.service||'');
+        if(!portGroups[pk]) portGroups[pk]={port:r.port, purpose:r.purpose||r.service||'', level:r.requirement_level, direction:r.direction, devs:new Set()};
+        portGroups[pk].devs.add(r.name||r.device_id);
+      });
+      let inner = '<table style="font-size:11px;width:100%;border-collapse:collapse"><thead><tr>'
+        +'<th style="padding:2px 8px;color:#6b7280;font-weight:500;text-align:left;border-bottom:1px solid #1e1e1e">Port</th>'
+        +'<th style="padding:2px 8px;color:#6b7280;font-weight:500;text-align:left;border-bottom:1px solid #1e1e1e">Purpose</th>'
+        +'<th style="padding:2px 8px;color:#6b7280;font-weight:500;text-align:left;border-bottom:1px solid #1e1e1e">Direction</th>'
+        +'<th style="padding:2px 8px;color:#6b7280;font-weight:500;text-align:left;border-bottom:1px solid #1e1e1e">Level</th>'
+        +'<th style="padding:2px 8px;color:#6b7280;font-weight:500;text-align:left;border-bottom:1px solid #1e1e1e">Devices</th>'
+        +'</tr></thead><tbody>';
+      Object.values(portGroups).sort((a,b)=>Number(a.port)-Number(b.port)).forEach(pg=>{
+        inner += '<tr>'
+          +'<td style="padding:2px 8px;font-family:monospace;color:#e5e7eb">'+escapeHtml(pg.port)+'</td>'
+          +'<td style="padding:2px 8px;color:#d1d5db">'+escapeHtml(pg.purpose||'—')+'</td>'
+          +'<td style="padding:2px 8px;color:#9ca3af">'+escapeHtml(pg.direction||'—')+'</td>'
+          +'<td style="padding:2px 8px">'+_pill(pg.level)+'</td>'
+          +'<td style="padding:2px 8px;color:#9ca3af;font-size:10px">'+escapeHtml(Array.from(pg.devs).join(', '))+'</td>'
+          +'</tr>';
+      });
+      inner += '</tbody></table>';
+      _appendDetail(tbody, 4, inner);
+    }
+  });
+}
+
+/* ─── By Service ─────────────────────────────────────────────────────────────── */
+function renderByService(tbody){
+  _setThead(['Service / Purpose', 'Protocol', 'Port', 'Level', 'Devices']);
+  const groups = {};
+  requirementRows.filter(r => (r.purpose||r.service)&&r.port&&r.port!=='-').forEach(r => {
+    const label = r.purpose||r.service||'';
+    const k     = label.toLowerCase()+':'+r.port+':'+r.protocol;
+    if(!groups[k]) groups[k]={label, protocol:r.protocol, port:r.port, level:r.requirement_level, devs:new Set()};
+    // keep the highest level seen (min_required beats recommended)
+    if(r.requirement_level==='min_required') groups[k].level='min_required';
+    groups[k].devs.add(r.name||r.device_id);
+  });
+  const keys = Object.keys(groups).sort();
+  if(!keys.length){
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#6b7280;text-align:center;padding:1rem">No service data.</td></tr>';
+    return;
+  }
+  keys.forEach(k => {
+    const g      = groups[k];
+    const eKey   = 'svc:'+k;
+    const isOpen = expandedKey === eKey;
+
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.innerHTML =
+      '<td><span style="color:#6b7280;font-size:11px;margin-right:4px">'+(isOpen?'▾':'▸')+'</span>'+escapeHtml(g.label)+'</td>'
+      + '<td>'+escapeHtml(g.protocol||'—')+'</td>'
+      + '<td style="font-family:monospace">'+escapeHtml(g.port||'—')+'</td>'
+      + '<td>'+_pill(g.level)+'</td>'
+      + '<td style="font-family:monospace">'+g.devs.size+'</td>';
+    tr.addEventListener('click', ()=>_toggle(eKey));
+    tbody.appendChild(tr);
+
+    if(isOpen){
+      const devList = Array.from(g.devs).sort().map(d=>'<div style="font-size:11px;color:#d1d5db;padding:2px 0">· '+escapeHtml(d)+'</div>').join('');
+      _appendDetail(tbody, 5,
+        '<div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Devices using this service</div>'
+        + devList);
+    }
+  });
+}
+
+/* ─── Main dispatcher ────────────────────────────────────────────────────────── */
 function renderRequirementRows(){
   const tbody = document.getElementById('requirements-table');
   if(!tbody) return;
   tbody.innerHTML = '';
 
   if(requirementsLoadState === 'idle'){
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#6b7280;text-align:center;padding:1rem">Press Generate to produce requirement rows.</td></tr>';
+    _setThead(['Device','IP','Zone','Type','Ports','Confidence']);
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1.5rem">Press <strong>Generate</strong> to build requirement rows.</td></tr>';
     return;
   }
-
   if(requirementsLoadState === 'loading'){
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#9ca3af;text-align:center;padding:1rem">Generating requirements…</td></tr>';
+    _setThead(['Device','IP','Zone','Type','Ports','Confidence']);
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:1.5rem">Generating requirements…</td></tr>';
     return;
   }
-
   if(requirementsLoadState === 'error'){
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#e5e7eb;text-align:center;padding:1rem">Requirements endpoint failed: ' + escapeHtml(requirementsErrorMessage || 'unknown error') + '</td></tr>';
+    _setThead(['Error']);
+    tbody.innerHTML = '<tr><td style="color:#e5e7eb;text-align:center;padding:1rem">Failed: '+escapeHtml(requirementsErrorMessage||'unknown error')+'</td></tr>';
+    return;
+  }
+  if(requirementsLoadState === 'empty'){
+    _setThead(['Device','IP','Zone','Type','Ports','Confidence']);
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1.5rem">No requirements generated — check that devices have types assigned.</td></tr>';
     return;
   }
 
-  const visibleRows = requirementRows.filter(row => Array.isArray(row.tabs) && row.tabs.includes(activeRequirementTab));
-  if(!visibleRows.length){
-    const msg = requirementsLoadState === 'empty'
-      ? 'No requirements generated yet for current inventory.'
-      : 'No generated requirement rows in this view.';
-    tbody.innerHTML = '<tr><td colspan="10" style="color:#6b7280;text-align:center;padding:1rem">' + escapeHtml(msg) + '</td></tr>';
-    return;
+  // ready — dispatch to view
+  switch(activeRequirementTab){
+    case 'By System':   return renderBySystem(tbody);
+    case 'By VLAN':     return renderByVlan(tbody);
+    case 'By Protocol': return renderByProtocol(tbody);
+    case 'By Service':  return renderByService(tbody);
+    default:            return renderByDevice(tbody);
   }
-
-  visibleRows.forEach((row, index) => {
-    const tr = document.createElement('tr');
-    const icon = expandedRequirementIndex === index ? 'v ' : '> ';
-    tr.style.cursor = 'pointer';
-
-    // Multicast / IGMP badges for the device cell
-    let deviceBadges = '';
-    if(row.multicast_required){
-      deviceBadges += ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#92400e;color:#fde68a;font-weight:700;vertical-align:middle">MCAST</span>';
-    }
-    if(row.igmp_required){
-      deviceBadges += ' <span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#1e3a5f;color:#93c5fd;font-weight:700;vertical-align:middle">IGMP</span>';
-    }
-
-    // Level badge
-    const levelRaw = String(row.requirement_level || '').toLowerCase();
-    let levelBadge = '';
-    if(levelRaw === 'min_required'){
-      levelBadge = '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#7f1d1d;color:#fca5a5;font-weight:700">min_required</span>';
-    } else if(levelRaw === 'recommended'){
-      levelBadge = '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#451a03;color:#fbbf24;font-weight:700">recommended</span>';
-    } else {
-      levelBadge = '<span style="color:#6b7280;font-size:11px">' + escapeHtml(levelRaw || '-') + '</span>';
-    }
-
-    tr.innerHTML =
-      '<td>' + escapeHtml(icon + (row.name || '(unnamed device)')) + deviceBadges + '</td>' +
-      '<td style="font-family:monospace">' + escapeHtml(row.ip || '-') + '</td>' +
-      '<td style="font-size:11px;color:#9ca3af">' + escapeHtml(row.zone || '-') + '</td>' +
-      '<td>' + escapeHtml(row.protocol) + '</td>' +
-      '<td style="font-family:monospace">' + escapeHtml(row.port) + '</td>' +
-      '<td style="font-size:11px">' + escapeHtml(row.direction || '-') + '</td>' +
-      '<td>' + escapeHtml(row.service || row.purpose || '-') + '</td>' +
-      '<td>' + levelBadge + '</td>' +
-      '<td>' + escapeHtml(row.derived_from || '-') + '</td>' +
-      '<td>' + escapeHtml(row.confidence_label || 'Unknown') + '</td>';
-    tr.addEventListener('click', (event) => {
-      if(event.target && event.target.closest && event.target.closest('button, a, input, select, textarea, label')){
-        return;
-      }
-      expandedRequirementIndex = (expandedRequirementIndex === index) ? -1 : index;
-      renderRequirementRows();
-    });
-    tbody.appendChild(tr);
-
-    if(expandedRequirementIndex === index){
-      const deviceKey = row.device_id || row.ip || '';
-      const detailTr = document.createElement('tr');
-      detailTr.innerHTML =
-        '<td colspan="10" style="padding:0;border-top:none;">'
-        + '<div style="margin:0 10px 10px 10px;padding:10px 12px;border:1px solid #374151;border-radius:8px;background:#111111;color:#d1d5db;">'
-        + '<div style="font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Port Detail</div>'
-        + buildPortDetailTable(deviceKey)
-        + '<div style="margin-top:12px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#9ca3af;margin-bottom:8px">Requirement Explanation</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 16px;">'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">effective_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.effective_type || 'unknown') + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">source_type</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.source_type || '-') + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">derived_from</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.derived_from || '-') + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">confidence_score</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(String(row.confidence_score ?? '-')) + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">zone</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.zone || '-') + '</div></div>'
-        + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">multicast / igmp</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + (row.multicast_required ? '<span style="color:#fde68a">Multicast required</span>' : 'No multicast') + ' / ' + (row.igmp_required ? '<span style="color:#93c5fd">IGMP required</span>' : 'No IGMP') + '</div></div>'
-        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">required services</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.required_services) && row.required_services.length ? row.required_services.join(', ') : '-') + '</div></div>'
-        + (row.vlan_recommendation ? '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">VLAN recommendation</div><div style="margin-top:2px;font-size:12px;color:#fbbf24">' + escapeHtml(row.vlan_recommendation) + '</div></div>' : '')
-        + (row.av_justification ? '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">AV justification</div><div style="margin-top:2px;font-size:12px;color:#d1d5db;font-style:italic">' + escapeHtml(row.av_justification) + '</div></div>' : '')
-        + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(Array.isArray(row.notes) && row.notes.length ? row.notes.join(' | ') : '-') + '</div></div>'
-        + '<div style="grid-column:1 / -1;margin-top:2px;">'
-        + '<details style="border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
-        + '<summary style="cursor:pointer;color:#d1d5db;font-size:12px;">Why this requirement?</summary>'
-        + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4">' + escapeHtml(buildRequirementWhyText(row)) + '</div>'
-        + '</details>'
-        + '</div>'
-        + '</div>'
-        + '</div>'
-        + '</td>';
-      tbody.appendChild(detailTr);
-    }
-  });
 }
 
 function escapeHtml(str){
