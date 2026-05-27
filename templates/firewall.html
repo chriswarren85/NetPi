@@ -2,815 +2,732 @@
 {% block title %}- Security Architecture{% endblock %}
 {% block content %}
 <div class="page-title">Security Architecture</div>
-<div class="page-sub">{{ s.project_name or 'No project loaded' }} - Organise, review and select the firewall rules required for this system — driven by Communication Profiles</div>
+<div class="page-sub">{{ s.project_name or 'No project loaded' }} — Review and refine Communication Profiles, then generate your Deliverable Document for the IT team</div>
+<!-- server-rendered config read by JS via getAttribute, avoids Jinja inside <script> -->
+<span id="sa-cfg" data-project="{{ s.project_name|e }}" style="display:none"></span>
 
+<!-- Stats -->
+<div class="cards">
+  <div class="card">
+    <div class="card-label">Devices</div>
+    <div class="card-value" id="sa-stat-devices">—</div>
+    <div class="card-sub">In loaded profiles</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Total Rules</div>
+    <div class="card-value" id="sa-stat-total">—</div>
+    <div class="card-sub">Port / protocol entries</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Included</div>
+    <div class="card-value" id="sa-stat-included" style="color:#6b9e7a">—</div>
+    <div class="card-sub">Will appear in deliverable</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Min Required</div>
+    <div class="card-value" id="sa-stat-min" style="color:#f87171">—</div>
+    <div class="card-sub">Mandatory rules</div>
+  </div>
+  <div class="card">
+    <div class="card-label">Recommended</div>
+    <div class="card-value" id="sa-stat-rec" style="color:#f59e0b">—</div>
+    <div class="card-sub">Advisory rules</div>
+  </div>
+</div>
+
+<!-- Actions -->
+<div class="panel">
+  <div class="panel-header">
+    <span>Actions</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="sa-load-btn" onclick="loadFromCommProfiles()">⟳ Load from Communication Profiles</button>
+      <button class="btn btn-success" id="sa-save-btn" onclick="saveSA()" disabled>Save</button>
+      <span id="sa-dirty-dot" style="display:none;width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0;vertical-align:middle" title="Unsaved changes"></span>
+      <button class="btn btn-primary" id="sa-deliverable-btn" onclick="generateDeliverable()">📄 Generate Deliverable</button>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div id="sa-status" style="font-size:12px;color:#6b7280">Load Communication Profiles to begin.</div>
+    <div id="sa-source-info" style="font-size:11px;color:#4b5563;margin-top:4px"></div>
+  </div>
+</div>
+
+<!-- Filters -->
 <div class="panel">
   <div class="panel-header">
     <span>Filters</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-primary" id="fw-generate-btn" onclick="startFirewallGeneration()">Generate Security Architecture</button>
-      <button class="btn btn-danger" id="fw-stop-btn" onclick="stopFirewallGeneration()" style="display:none">Stop</button>
-      <select id="fw-refresh-select" onchange="handleFirewallAutoRefreshChange(this.value)" style="width:auto;padding:5px 8px;font-size:12px" title="Auto-refresh interval">
-        <option value="0">No auto-refresh</option>
-        <option value="30">Refresh every 30s</option>
-        <option value="60">Refresh every 1m</option>
-        <option value="300">Refresh every 5m</option>
-      </select>
-      <button class="btn" onclick="applyFirewallFilters()">Apply</button>
-      <button class="btn" onclick="resetFirewallFilters()">Reset</button>
-    </div>
+    <button class="btn" onclick="resetSaFilters()">Reset Filters</button>
   </div>
   <div class="panel-body">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end">
       <div>
-        <label for="fw-source-vlan">Source Zone</label>
-        <select id="fw-source-vlan" onchange="applyFirewallFilters()">
+        <label for="sa-f-zone">Zone / VLAN</label>
+        <select id="sa-f-zone" onchange="renderSaTable()"><option value="">All</option></select>
+      </div>
+      <div>
+        <label for="sa-f-device">Device</label>
+        <select id="sa-f-device" onchange="renderSaTable()"><option value="">All</option></select>
+      </div>
+      <div>
+        <label for="sa-f-type">Type</label>
+        <select id="sa-f-type" onchange="renderSaTable()"><option value="">All</option></select>
+      </div>
+      <div>
+        <label for="sa-f-level">Level</label>
+        <select id="sa-f-level" onchange="renderSaTable()">
           <option value="">All</option>
+          <option value="min_required">Min Required</option>
+          <option value="recommended">Recommended</option>
+          <option value="excluded">Excluded</option>
         </select>
       </div>
       <div>
-        <label for="fw-destination-vlan">Destination Zone</label>
-        <select id="fw-destination-vlan" onchange="applyFirewallFilters()">
-          <option value="">All</option>
+        <label for="sa-f-included">Visibility</label>
+        <select id="sa-f-included" onchange="renderSaTable()">
+          <option value="">All rules</option>
+          <option value="yes">Included only</option>
+          <option value="no">Excluded only</option>
         </select>
       </div>
-      <div>
-        <label for="fw-system">System</label>
-        <select id="fw-system" onchange="applyFirewallFilters()">
-          <option value="">All</option>
-        </select>
-      </div>
-      <div>
-        <label for="fw-criticality">Criticality</label>
-        <select id="fw-criticality" onchange="applyFirewallFilters()">
-          <option value="">All</option>
-          <option value="min_required">min_required</option>
-          <option value="recommended">recommended</option>
-        </select>
-      </div>
-    </div>
-    <div id="fw-status" style="margin-top:8px;font-size:11px;color:#6b7280">Press Generate Firewall Plan to begin.</div>
-  </div>
-</div>
-
-<div class="panel">
-  <div class="panel-header">
-    <span>Deliverable Exports</span>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="exportFirewallCsv()">Export CSV</button>
-      <button class="btn" onclick="exportFirewallJson()">Export JSON</button>
-    </div>
-  </div>
-  <div class="panel-body">
-    <div style="font-size:12px;color:#9ca3af">Exports use the currently visible filtered firewall rules.</div>
-  </div>
-</div>
-
-<!-- ── Rule selection: what aspects are actually required ─────────────────── -->
-<div class="panel">
-  <div class="panel-header">
-    <span>System Requirements Selection</span>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span id="fw-selection-count" style="font-size:11px;color:#9ca3af">Generate to see rules</span>
-      <button class="btn" onclick="_fwToggleAll(true)">Enable All</button>
-      <button class="btn" onclick="_fwToggleAll(false)">Disable All</button>
-    </div>
-  </div>
-  <div class="panel-body">
-    <div style="font-size:11px;color:#6b7280;margin-bottom:10px">Select which system categories are actually required for this project. Disabled rules are excluded from exports.</div>
-    <div id="fw-category-chips" style="display:flex;flex-wrap:wrap;gap:8px">
-      <span style="color:#4b5563;font-size:12px">Generate to see categories</span>
     </div>
   </div>
 </div>
 
+<!-- Editable table -->
 <div class="panel">
   <div class="panel-header">
-    <span>Minimum Required</span>
-    <span class="badge badge-red" id="fw-min-count">0 rules</span>
+    <span>Communication Rules</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span id="sa-row-count" style="font-size:11px;color:#6b7280">—</span>
+      <button class="btn" onclick="saToggleAll(true)">Include All</button>
+      <button class="btn" onclick="saToggleAll(false)">Exclude All</button>
+    </div>
   </div>
   <div class="panel-body" style="padding:0;overflow-x:auto">
-    <table>
+    <table id="sa-table">
       <thead>
         <tr>
-          <th style="width:32px;padding:4px 8px"><input type="checkbox" id="fw-min-selall" onchange="_fwSelectAll('fw-min-rows',this.checked)" title="Select all min-required rules" checked></th>
-          <th>Rule</th>
-          <th>Source Zone</th>
-          <th>Destination Zone</th>
-          <th>Port</th>
-          <th>Protocol</th>
-          <th>Direction</th>
-          <th>Purpose</th>
-          <th>Business Justification</th>
-          <th>AV Justification</th>
-          <th>Confidence</th>
-          <th>Source</th>
-          <th>Notes</th>
+          <th style="width:36px;text-align:center;padding:6px 8px">
+            <input type="checkbox" id="sa-selall" onchange="saToggleAll(this.checked)" title="Toggle all" checked>
+          </th>
+          <th style="min-width:120px">Device</th>
+          <th style="min-width:100px">IP</th>
+          <th style="min-width:80px">Zone</th>
+          <th style="min-width:80px">Type</th>
+          <th style="min-width:55px">Port</th>
+          <th style="min-width:65px">Protocol</th>
+          <th style="min-width:90px">Direction</th>
+          <th style="min-width:160px">Purpose</th>
+          <th style="min-width:130px">Level</th>
+          <th style="min-width:180px">Notes / Override</th>
         </tr>
       </thead>
-      <tbody id="fw-min-rows"></tbody>
+      <tbody id="sa-tbody">
+        <tr><td colspan="11" style="color:#6b7280;text-align:center;padding:2.5rem">
+          Load Communication Profiles to begin editing.
+        </td></tr>
+      </tbody>
     </table>
   </div>
 </div>
 
+<!-- Zone membership -->
 <div class="panel">
-  <div class="panel-header">
-    <span>Recommended</span>
-    <span class="badge badge-amber" id="fw-rec-count">0 rules</span>
+  <div class="panel-header" style="cursor:pointer" onclick="
+    var b=document.getElementById('sa-zones-body');
+    var s=document.getElementById('sa-zones-chevron');
+    if(b.style.display==='none'){b.style.display='';s.textContent='▾';}else{b.style.display='none';s.textContent='▸';}">
+    Zone Membership
+    <span id="sa-zones-chevron" style="font-size:11px;color:#6b7280">▸</span>
   </div>
-  <div class="panel-body" style="padding:0;overflow-x:auto">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:32px;padding:4px 8px"><input type="checkbox" id="fw-rec-selall" onchange="_fwSelectAll('fw-rec-rows',this.checked)" title="Select all recommended rules" checked></th>
-          <th>Rule</th>
-          <th>Source Zone</th>
-          <th>Destination Zone</th>
-          <th>Port</th>
-          <th>Protocol</th>
-          <th>Direction</th>
-          <th>Purpose</th>
-          <th>Business Justification</th>
-          <th>AV Justification</th>
-          <th>Confidence</th>
-          <th>Source</th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody id="fw-rec-rows"></tbody>
-    </table>
+  <div class="panel-body" id="sa-zones-body" style="display:none">
+    <div id="sa-zones" style="font-size:12px;color:#9ca3af">Load profiles to see zone membership.</div>
   </div>
 </div>
 
-<div class="panel">
-  <div class="panel-header">Zone Summary</div>
-  <div class="panel-body">
-    <div id="fw-zone-summary" style="font-size:12px;color:#9ca3af">Generate the firewall plan to see zone membership.</div>
-  </div>
-</div>
+<style>
+/* ── Security Architecture editable grid ─────────────────────────────────── */
+#sa-table td { vertical-align: middle; }
+#sa-table thead th { position: sticky; top: 0; background: #222; z-index: 1; }
+#sa-table tr.sa-excl { opacity: 0.35; }
+#sa-table tr.sa-no-profile { opacity: 0.5; }
+/* Notes cell */
+.sa-note-cell { cursor: text; min-width: 160px; }
+.sa-note-cell .sa-note-view {
+  min-height: 20px; padding: 2px 4px; color: #6b7280; font-size: 11px;
+  font-style: italic; white-space: pre-wrap; word-break: break-word;
+}
+.sa-note-cell .sa-note-view.has-note { color: #d1d5db; font-style: normal; }
+.sa-note-cell input {
+  width: 100%; padding: 3px 6px; background: #0f172a;
+  border: 1px solid #3b82f6; border-radius: 3px;
+  color: #e2e8f0; font-size: 11px; outline: none; box-sizing: border-box;
+}
+/* Level select */
+.sa-lvl {
+  padding: 3px 6px; font-size: 11px; background: #1a1a1a;
+  border: 1px solid #374151; border-radius: 4px; color: #e2e8f0;
+  width: 100%; cursor: pointer; outline: none;
+}
+.sa-lvl:focus { border-color: #3b82f6; }
+.sa-lvl.lv-min { border-color: #7f1d1d; color: #f87171; background: #1a0a0a; }
+.sa-lvl.lv-rec { border-color: #78350f; color: #f59e0b; background: #1a1200; }
+.sa-lvl.lv-exc { border-color: #1e1e1e; color: #4b5563; background: #111; }
+/* Stripe & device separator */
+#sa-table tr.device-first > td { border-top: 1px solid #2e2e2e; }
+#sa-table tr > td:first-child { border-top: none !important; }
+</style>
 
 <script>
-let firewallAllRules = [];
-let firewallFilteredRules = [];
-let firewallOperatorNotes = {};
-let firewallZoneMembers = {};
-let _fwController = null;   // AbortController for in-flight fetch
-let _fwRefreshInterval = 0; // seconds; 0 = off
-let _fwCacheTimestamp = null;
-const FIREWALL_CACHE_KEY = 'netpi.firewall.cache.v2';
-const FIREWALL_SELECTION_KEY = 'netpi.firewall.selection.v1';
+// ── State ────────────────────────────────────────────────────────────────────
+const SA_CACHE_KEY = 'netpi.security-arch.v1';
+let saRows     = [];   // flat editable rows
+let saFiltered = [];   // currently visible (post-filter)
+let saDirty    = false;
+let saSourceTs = null; // ISO string: when comm profiles were generated
+let saSavedTs  = null; // human-readable: when SA was last saved
 
-// ── Rule selection state ──────────────────────────────────────────────────────
-// fwEnabled: Set of rule_ids that are enabled (included in exports)
-// null means "all enabled" (initial state before any rule is loaded)
-let fwEnabled = null; // null = use all; Set = use only those in set
+function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function _fwAllRuleIds(){
-  return firewallAllRules.map(r => r.rule_id).filter(Boolean);
+// ── Dirty state ───────────────────────────────────────────────────────────────
+function _markDirty(){
+  saDirty = true;
+  const btn = document.getElementById('sa-save-btn');
+  if(btn) btn.disabled = false;
+  const dot = document.getElementById('sa-dirty-dot');
+  if(dot) dot.style.display = 'inline-block';
+}
+function _markClean(){
+  saDirty = false;
+  const btn = document.getElementById('sa-save-btn');
+  if(btn) btn.disabled = true;
+  const dot = document.getElementById('sa-dirty-dot');
+  if(dot) dot.style.display = 'none';
 }
 
-function _fwIsEnabled(ruleId){
-  if(!fwEnabled) return true; // all enabled by default
-  return fwEnabled.has(ruleId);
-}
+// ── Flatten comm profiles → editable rows ─────────────────────────────────────
+function flattenToRows(results, keepEdits){
+  // keepEdits: existing saRows — preserves user edits (level, notes, included)
+  const prev = {};
+  (keepEdits || []).forEach(r => { prev[r._rowId] = r; });
 
-function _fwInitSelection(){
-  // Called after new rules are loaded — default all enabled
-  fwEnabled = new Set(_fwAllRuleIds());
-  _saveFwSelection();
-  _renderCategoryChips();
-  _updateSelectionCount();
-}
+  const rows = [];
 
-function _saveFwSelection(){
-  try {
-    localStorage.setItem(FIREWALL_SELECTION_KEY, JSON.stringify(
-      fwEnabled ? Array.from(fwEnabled) : null
-    ));
-  } catch(e){}
-}
+  (Array.isArray(results) ? results : []).forEach(item => {
+    const devId   = String(item.device_id || item.ip || '');
+    const devName = String(item.name || item.ip || devId);
+    const ip      = String(item.ip || '');
+    const zone    = String(item.zone || item.vlan || '');
+    const dtype   = String(item.effective_type || item.type || '');
+    const conf    = String(item.confidence || '');
+    const ports   = Array.isArray(item.required_ports) ? item.required_ports : [];
 
-function _loadFwSelection(){
-  try {
-    const raw = localStorage.getItem(FIREWALL_SELECTION_KEY);
-    if(!raw) return;
-    const parsed = JSON.parse(raw);
-    if(Array.isArray(parsed)) fwEnabled = new Set(parsed);
-  } catch(e){}
-}
-
-function _fwToggle(cb){
-  const id = cb.getAttribute('data-rule-id');
-  if(!fwEnabled) fwEnabled = new Set(_fwAllRuleIds());
-  if(cb.checked) fwEnabled.add(id);
-  else fwEnabled.delete(id);
-  _updateSelectionCount();
-  _renderCategoryChips();
-  _saveFwSelection();
-  // dim the row
-  const row = cb.closest('tr');
-  if(row) row.style.opacity = cb.checked ? '' : '0.4';
-}
-
-function _fwSelectAll(tbodyId, checked){
-  const tbody = document.getElementById(tbodyId);
-  if(!tbody) return;
-  if(!fwEnabled) fwEnabled = new Set(_fwAllRuleIds());
-  tbody.querySelectorAll('input[type=checkbox][data-rule-id]').forEach(cb => {
-    cb.checked = checked;
-    const id = cb.getAttribute('data-rule-id');
-    if(checked) fwEnabled.add(id);
-    else fwEnabled.delete(id);
-    const row = cb.closest('tr');
-    if(row) row.style.opacity = checked ? '' : '0.4';
-  });
-  _updateSelectionCount();
-  _renderCategoryChips();
-  _saveFwSelection();
-}
-
-function _fwToggleAll(enabled){
-  if(!fwEnabled) fwEnabled = new Set();
-  if(enabled){
-    _fwAllRuleIds().forEach(id => fwEnabled.add(id));
-  } else {
-    fwEnabled.clear();
-  }
-  _saveFwSelection();
-  applyFirewallFilters(); // re-render rows to reflect new state
-}
-
-function _fwToggleCategory(cat, enabled){
-  if(!fwEnabled) fwEnabled = new Set(_fwAllRuleIds());
-  firewallAllRules.filter(r => r.category === cat).forEach(r => {
-    if(r.rule_id){ if(enabled) fwEnabled.add(r.rule_id); else fwEnabled.delete(r.rule_id); }
-  });
-  _saveFwSelection();
-  _renderCategoryChips();
-  _updateSelectionCount();
-  applyFirewallFilters();
-}
-
-function _updateSelectionCount(){
-  const el = document.getElementById('fw-selection-count');
-  if(!el) return;
-  const total = firewallAllRules.length;
-  if(!total){ el.textContent = 'Generate to see rules'; return; }
-  const sel = fwEnabled ? fwEnabled.size : total;
-  el.textContent = sel + ' of ' + total + ' rules enabled';
-}
-
-function _getCategoryLabel(cat){
-  const map = {
-    av_control: 'AV Control', management: 'Management', streaming: 'Streaming',
-    ntp: 'NTP', dns: 'DNS', multicast: 'Multicast', discovery: 'Discovery',
-    cloud: 'Cloud', voip: 'VoIP', security: 'Security', monitoring: 'Monitoring',
-    configuration: 'Configuration', unknown: 'Other'
-  };
-  return map[cat] || cat.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
-function _renderCategoryChips(){
-  const el = document.getElementById('fw-category-chips');
-  if(!el) return;
-  if(!firewallAllRules.length){
-    el.innerHTML = '<span style="color:#4b5563;font-size:12px">Generate to see categories</span>';
-    return;
-  }
-  // Group rules by category
-  const cats = {};
-  firewallAllRules.forEach(r => {
-    const c = r.category || 'unknown';
-    if(!cats[c]) cats[c] = {total:0, enabled:0};
-    cats[c].total++;
-    if(_fwIsEnabled(r.rule_id)) cats[c].enabled++;
-  });
-  el.innerHTML = Object.keys(cats).sort().map(cat => {
-    const g = cats[cat];
-    const allOn = g.enabled === g.total;
-    const anyOn = g.enabled > 0;
-    const bg = allOn ? '#1a2e1a' : anyOn ? '#2e2414' : '#1a1a1a';
-    const border = allOn ? '#2d4a2d' : anyOn ? '#4a3a1e' : '#374151';
-    const color = allOn ? '#9ca3af' : anyOn ? '#d1d5db' : '#6b7280';
-    const label = _getCategoryLabel(cat);
-    return '<button onclick="_fwToggleCategory(' + JSON.stringify(cat) + ',' + (!allOn) + ')" '
-      + 'style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid '
-      + border + ';background:' + bg + ';color:' + color + ';transition:all 0.15s" '
-      + 'title="' + (allOn ? 'Click to disable' : 'Click to enable') + ' all ' + label + ' rules">'
-      + (allOn ? '✓ ' : anyOn ? '◐ ' : '✗ ') + escapeHtml(label) + ' (' + g.enabled + '/' + g.total + ')'
-      + '</button>';
-  }).join('');
-}
-
-function escapeHtml(str){
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function normalizeList(value){
-  if(Array.isArray(value)) return value.filter(Boolean).map(v => String(v));
-  if(!value) return [];
-  return [String(value)];
-}
-
-function normalizeRule(rule){
-  const sourceSystems = normalizeList(rule.source_systems);
-  const sourceDevices = normalizeList(rule.source_devices);
-  const destinationDevices = normalizeList(rule.destination_devices);
-  const evidence = normalizeList(rule.evidence);
-  const ports = Array.isArray(rule.ports) ? rule.ports.filter(p => Number.isInteger(p)) : [];
-  const protocol = String(rule.protocol || 'TCP').toUpperCase();
-  const requirementLevel = String(rule.requirement_level || 'recommended').toLowerCase();
-  const port = Number.isInteger(rule.port) ? rule.port : null;
-
-  const derivedFrom = Array.isArray(rule.derived_from)
-    ? rule.derived_from.filter(Boolean).map(v => String(v))
-    : (rule.derived_from ? [String(rule.derived_from)] : []);
-
-  return {
-    rule_id: String(rule.rule_id || ''),
-    requirement_level: requirementLevel === 'min_required' ? 'min_required' : 'recommended',
-    category: String(rule.category || 'unknown'),
-    source_zone: String(rule.source_zone || 'Unknown'),
-    destination_zone: String(rule.destination_zone || 'Unknown'),
-    direction: String(rule.direction || 'source_to_destination'),
-    protocol: protocol,
-    port: port,
-    ports: ports,
-    purpose: String(rule.purpose || ''),
-    business_justification: String(rule.business_justification || ''),
-    av_justification: String(rule.av_justification || ''),
-    confidence: Number.isInteger(rule.confidence) ? rule.confidence : '',
-    source_systems: sourceSystems,
-    source_devices: sourceDevices,
-    destination_devices: destinationDevices,
-    evidence: evidence,
-    derived_from: derivedFrom,
-  };
-}
-
-function setFirewallStatus(message, color){
-  const status = document.getElementById('fw-status');
-  if(!status) return;
-  status.textContent = message || '';
-  status.style.color = color || '#6b7280';
-}
-
-function setFilterOptions(id, values){
-  const select = document.getElementById(id);
-  if(!select) return;
-  const currentValue = select.value || '';
-  const uniqueValues = Array.from(new Set((values || []).filter(Boolean).map(v => String(v)))).sort();
-  select.innerHTML = '<option value="">All</option>' + uniqueValues.map(v => (
-    '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>'
-  )).join('');
-  if(uniqueValues.includes(currentValue)) select.value = currentValue;
-}
-
-function saveFirewallNote(ruleId, btn) {
-  const ta = document.getElementById('fw-note-' + ruleId);
-  if (!ta) return;
-  const notes = ta.value;
-  if (btn) btn.textContent = 'Saving...';
-  fetch('/tools/api/operator-notes', {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({scope: 'firewall', key: ruleId, notes}),
-  }).then(r => r.json()).then(data => {
-    if (btn) btn.textContent = data.ok ? 'Saved' : 'Error';
-    if (data.ok) firewallOperatorNotes[ruleId] = notes;
-    setTimeout(() => { if (btn) btn.textContent = 'Save'; }, 2000);
-  }).catch(() => { if (btn) btn.textContent = 'Error'; });
-}
-
-function _setFwButtons(running){
-  const genBtn  = document.getElementById('fw-generate-btn');
-  const stopBtn = document.getElementById('fw-stop-btn');
-  if(genBtn)  genBtn.style.display  = running ? 'none' : '';
-  if(stopBtn) stopBtn.style.display = running ? '' : 'none';
-}
-
-function stopFirewallGeneration(){
-  if(_fwController){
-    _fwController.abort();
-    _fwController = null;
-  }
-  window.netpiStatus && window.netpiStatus.cancelAll('Security Architecture — cancelled by user', 'SEC ARCH');
-  _setFwButtons(false);
-  setFirewallStatus('Generation cancelled.', '#6b7280');
-}
-
-function handleFirewallAutoRefreshChange(val){
-  _fwRefreshInterval = Number(val) || 0;
-  window.netpiStatus && window.netpiStatus.stopCountdown();
-  if(_fwRefreshInterval > 0 && firewallAllRules.length){
-    _scheduleFwRefresh();
-  }
-}
-
-function _scheduleFwRefresh(){
-  if(!_fwRefreshInterval) return;
-  const lbl = _fwRefreshInterval >= 60
-    ? Math.round(_fwRefreshInterval/60) + 'm'
-    : _fwRefreshInterval + 's';
-  window.netpiStatus && window.netpiStatus.startCountdown(
-    _fwRefreshInterval,
-    'FW refresh',
-    function(){ startFirewallGeneration(); },
-    'SEC ARCH'
-  );
-}
-
-function _saveFwCache(rules, zoneMembers){
-  try {
-    localStorage.setItem(FIREWALL_CACHE_KEY, JSON.stringify({
-      ts: new Date().toISOString(),
-      rules: rules,
-      zoneMembers: zoneMembers
-    }));
-  } catch(e){ /* quota or private browsing — silently ignore */ }
-}
-
-function _loadFwCache(){
-  try {
-    const raw = localStorage.getItem(FIREWALL_CACHE_KEY);
-    if(!raw) return false;
-    const cache = JSON.parse(raw);
-    if(!cache || !Array.isArray(cache.rules)) return false;
-    firewallAllRules   = cache.rules; // already normalised when saved
-    firewallZoneMembers = (cache.zoneMembers && typeof cache.zoneMembers === 'object') ? cache.zoneMembers : {};
-    _fwCacheTimestamp  = cache.ts ? new Date(cache.ts).toLocaleString('en-GB') : null;
-    // Restore saved rule selections (before rendering so checkboxes draw correctly)
-    fwEnabled = new Set(_fwAllRuleIds()); // start all-on
-    _loadFwSelection();                   // override with saved picks
-    setFilterOptions('fw-source-vlan',      firewallAllRules.map(r => r.source_zone));
-    setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
-    setFilterOptions('fw-system',           firewallAllRules.flatMap(r => r.source_systems));
-    applyFirewallFilters();
-    renderZoneSummary();
-    return true;
-  } catch(e){ return false; }
-}
-
-async function startFirewallGeneration(){
-  if(_fwController){ _fwController.abort(); }
-  _fwController = new AbortController();
-  const signal = _fwController.signal;
-
-  _setFwButtons(true);
-  setFirewallStatus('Generating firewall plan…', '#6b7280');
-  window.netpiStatus && window.netpiStatus.startTimer('Security Architecture', 'SEC ARCH');
-
-  try {
-    const [data, notesData] = await Promise.all([
-      fetch('/tools/api/generate_firewall_plan', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:'{}',
-        signal
-      }).then(r => r.json()),
-      fetch('/tools/api/operator-notes', {signal}).then(r => r.json()).catch(() => ({})),
-    ]);
-
-    firewallOperatorNotes = (notesData && notesData.firewall) || {};
-    if(!data || data.ok !== true){
-      throw new Error((data && data.error) || 'Firewall plan request failed');
-    }
-    const plan = data.firewall_plan || {};
-    const rules = Array.isArray(plan.rules) ? plan.rules : [];
-    firewallAllRules = rules.map(normalizeRule);
-    firewallZoneMembers = (plan.zone_members && typeof plan.zone_members === 'object') ? plan.zone_members : {};
-    // Fresh generation — reset selection to all-enabled, then render
-    _fwInitSelection();
-    setFilterOptions('fw-source-vlan', firewallAllRules.map(r => r.source_zone));
-    setFilterOptions('fw-destination-vlan', firewallAllRules.map(r => r.destination_zone));
-    setFilterOptions('fw-system', firewallAllRules.flatMap(r => r.source_systems));
-    applyFirewallFilters();
-    renderZoneSummary();
-
-    const summary = plan.summary || {};
-    const flowCount = summary.flow_rules || 0;
-    const reqCount = summary.requirements_rules || 0;
-    _fwCacheTimestamp = new Date().toLocaleString('en-GB');
-    _saveFwCache(firewallAllRules, firewallZoneMembers);
-    _fwController = null;
-    _setFwButtons(false);
-
-    let statusMsg;
-    if(firewallAllRules.length){
-      const sourceNote = (flowCount || reqCount)
-        ? ' (flows: ' + flowCount + ', port-profiles: ' + reqCount + ')'
-        : '';
-      statusMsg = firewallAllRules.length + ' rules' + sourceNote + ' · Generated ' + _fwCacheTimestamp;
+    if(ports.length){
+      ports.forEach(p => {
+        const port     = p.port != null ? String(p.port) : '—';
+        const protocol = String(p.protocol || 'TCP').toUpperCase();
+        const rowId    = devId + '::' + port + '::' + protocol;
+        const pk       = prev[rowId] || {};
+        rows.push({
+          _rowId:            rowId,
+          included:          pk._rowId !== undefined ? !!pk.included : true,
+          device_name:       devName,
+          ip, zone, device_type: dtype, confidence: conf,
+          port, protocol,
+          direction:         String(p.direction || '—'),
+          purpose:           String(p.purpose || ''),
+          requirement_level: pk._rowId !== undefined ? (pk.requirement_level || String(p.requirement_level || 'recommended')) : String(p.requirement_level || 'recommended'),
+          notes:             pk.notes || '',
+          _no_profile:       false,
+        });
+      });
     } else {
-      statusMsg = 'No firewall rules generated yet. Add devices and assign types first.';
+      // Device has no port profile — show as a dimmed awareness row
+      const rowId = devId + '::no-ports';
+      const pk    = prev[rowId] || {};
+      rows.push({
+        _rowId: rowId,
+        included: pk._rowId !== undefined ? !!pk.included : false,
+        device_name: devName, ip, zone, device_type: dtype, confidence: conf,
+        port: '—', protocol: '—', direction: '—',
+        purpose: 'No port profile matched',
+        requirement_level: pk.requirement_level || 'excluded',
+        notes: pk.notes || '',
+        _no_profile: true,
+      });
     }
-    setFirewallStatus(statusMsg, '#6b7280');
-    window.netpiStatus && window.netpiStatus.stopTimer('Security Architecture — ' + firewallAllRules.length + ' rules', 'success', 'SEC ARCH');
 
-    if(_fwRefreshInterval > 0) _scheduleFwRefresh();
+    // Multicast / IGMP row
+    if(item.multicast_required || item.igmp_required){
+      const rowId = devId + '::multicast';
+      const pk    = prev[rowId] || {};
+      rows.push({
+        _rowId: rowId,
+        included: pk._rowId !== undefined ? !!pk.included : true,
+        device_name: devName, ip, zone, device_type: dtype, confidence: conf,
+        port: 'IGMP', protocol: 'Multicast', direction: 'any',
+        purpose: 'Multicast / IGMP Snooping required',
+        requirement_level: pk.requirement_level || 'min_required',
+        notes: pk.notes || '',
+        _no_profile: false,
+      });
+    }
+  });
 
-  } catch(err){
-    const aborted = err && err.name === 'AbortError';
-    _fwController = null;
-    _setFwButtons(false);
-    if(aborted) return;
-    firewallAllRules = [];
-    firewallFilteredRules = [];
-    firewallZoneMembers = {};
-    renderFirewallRows('fw-min-rows', []);
-    renderFirewallRows('fw-rec-rows', []);
-    updateRuleCounts([], []);
-    renderZoneSummary();
-    const errMsg = 'Unable to load firewall plan: ' + (err && err.message ? err.message : 'unknown error');
-    setFirewallStatus(errMsg, '#374151');
-    window.netpiStatus && window.netpiStatus.stopTimer(errMsg, 'error', 'SEC ARCH');
+  return rows;
+}
+
+// ── Load from Communication Profiles ─────────────────────────────────────────
+async function loadFromCommProfiles(){
+  const btn = document.getElementById('sa-load-btn');
+  if(btn) btn.disabled = true;
+  setSaStatus('Loading Communication Profiles…', '#9ca3af');
+  window.netpiStatus && window.netpiStatus.post('Security Architecture — loading Comm Profiles…', 'running', 'SEC ARCH');
+
+  try {
+    const res  = await fetch('/tools/api/requirements/saved');
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || 'Failed to load');
+    if(!Array.isArray(data.results) || !data.results.length){
+      setSaStatus('Communication Profiles are empty — go to Communication Profiles and press Generate first.', '#9ca3af');
+      if(btn) btn.disabled = false;
+      return;
+    }
+    saSourceTs = data.ts || null;
+    saRows = flattenToRows(data.results, saRows);  // preserve existing edits
+    _rebuildFilters();
+    renderSaTable();
+    updateSaStats();
+    renderZoneMembership();
+    _markDirty();
+    const tsLabel = saSourceTs ? new Date(saSourceTs).toLocaleString('en-GB') : 'unknown time';
+    setSaStatus(saRows.length + ' rules loaded · Profile generated ' + tsLabel + ' · Review, edit, then Save.', '#6b9e7a');
+    const srcEl = document.getElementById('sa-source-info');
+    if(srcEl) srcEl.textContent = 'Source: Communication Profiles · ' + tsLabel;
+    window.netpiStatus && window.netpiStatus.post('Security Architecture — ' + saRows.length + ' rules loaded', 'success', 'SEC ARCH');
+  } catch(e){
+    setSaStatus('Error loading profiles: ' + (e.message || 'unknown'), '#ef4444');
+    window.netpiStatus && window.netpiStatus.post('Load failed: ' + e.message, 'error', 'SEC ARCH');
   }
+  if(btn) btn.disabled = false;
 }
 
-/* Keep old name for any legacy callers */
-function loadFirewallPlan(){ startFirewallGeneration(); }
-
-function getFilters(){
-  return {
-    source_zone: document.getElementById('fw-source-vlan')?.value || '',
-    destination_zone: document.getElementById('fw-destination-vlan')?.value || '',
-    system: document.getElementById('fw-system')?.value || '',
-    criticality: document.getElementById('fw-criticality')?.value || ''
-  };
-}
-
-function matchesFilters(rule, filters){
-  if(filters.source_zone && rule.source_zone !== filters.source_zone) return false;
-  if(filters.destination_zone && rule.destination_zone !== filters.destination_zone) return false;
-  if(filters.system && !rule.source_systems.includes(filters.system)) return false;
-  if(filters.criticality && rule.requirement_level !== filters.criticality) return false;
-  return true;
-}
-
-function formatRuleLabel(rule){
-  const levelClass = rule.requirement_level === 'min_required' ? 'badge-red' : 'badge-amber';
-  return (
-    '<div style="display:flex;flex-direction:column;gap:4px">'
-    + '<div>' + escapeHtml(rule.rule_id || 'Unnumbered') + '</div>'
-    + '<div><span class="badge ' + levelClass + '">' + escapeHtml(rule.requirement_level) + '</span></div>'
-    + '</div>'
-  );
-}
-
-function formatPorts(rule){
-  if(Number.isInteger(rule.port)) return String(rule.port);
-  if(rule.ports.length) return rule.ports.join(', ');
-  return '-';
-}
-
-function formatNotes(rule){
-  const pieces = [];
-  if(rule.source_systems.length) pieces.push('Systems: ' + rule.source_systems.join(', '));
-  if(rule.source_devices.length) pieces.push('Src devices: ' + rule.source_devices.join(', '));
-  if(rule.destination_devices.length) pieces.push('Dst devices: ' + rule.destination_devices.join(', '));
-  if(rule.evidence.length) pieces.push('Evidence: ' + rule.evidence.join(' | '));
-  return pieces.join(' | ');
-}
-
-function buildFirewallWhyHtml(rule){
-  const parts = [];
-  if(rule.purpose) parts.push('<strong>Purpose:</strong> ' + escapeHtml(rule.purpose));
-  if(rule.business_justification) parts.push('<strong>Business:</strong> ' + escapeHtml(rule.business_justification));
-  if(rule.av_justification) parts.push('<strong>AV:</strong> ' + escapeHtml(rule.av_justification));
-  if(rule.evidence.length) parts.push('<strong>Evidence:</strong> ' + escapeHtml(rule.evidence.join(' | ')));
-  if(!parts.length){
-    parts.push('Limited evidence available. Rule retained from generated requirements and rule classification.');
+// ── Save to server ────────────────────────────────────────────────────────────
+async function saveSA(){
+  const btn = document.getElementById('sa-save-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const res = await fetch('/tools/api/security-architecture/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ source_ts: saSourceTs, rows: saRows })
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || 'Save failed');
+    saSavedTs = new Date().toLocaleString('en-GB');
+    _markClean();
+    setSaStatus(saRows.length + ' rules saved · ' + saSavedTs, '#6b9e7a');
+    // Mirror to localStorage
+    try { localStorage.setItem(SA_CACHE_KEY, JSON.stringify({ts: new Date().toISOString(), source_ts: saSourceTs, rows: saRows})); } catch(e){}
+    window.netpiStatus && window.netpiStatus.post('Security Architecture saved — ' + saRows.length + ' rules', 'success', 'SEC ARCH');
+  } catch(e){
+    setSaStatus('Save failed: ' + (e.message || 'unknown'), '#ef4444');
+    window.netpiStatus && window.netpiStatus.post('Save failed: ' + e.message, 'error', 'SEC ARCH');
+    if(btn) btn.disabled = false;
   }
-  return (
-    '<details style="margin-top:6px;border:1px solid #334155;border-radius:6px;padding:6px 8px;background:#111111;">'
-    + '<summary style="cursor:pointer;color:#d1d5db;font-size:12px;">Why this rule?</summary>'
-    + '<div style="margin-top:6px;font-size:12px;color:#d1d5db;line-height:1.4;">' + parts.join('<br>') + '</div>'
-    + '</details>'
-  );
+  if(btn) btn.textContent = 'Save';
 }
 
-function formatDerivedFrom(rule){
-  const sources = Array.isArray(rule.derived_from) ? rule.derived_from : [];
-  if(!sources.length) return '<span style="color:#6b7280;font-size:10px">flows</span>';
-  return sources.map(s => {
-    const label = String(s || '');
-    const color = label === 'requirements' ? '#a78bfa' : label === 'flows' ? '#6b7280' : '#9ca3af';
-    return '<span style="font-size:10px;color:' + color + '">' + escapeHtml(label) + '</span>';
-  }).join(', ');
+// ── Filter dropdowns ──────────────────────────────────────────────────────────
+function _setOpts(id, values){
+  const el = document.getElementById(id); if(!el) return;
+  const cur  = el.value;
+  const uniq = Array.from(new Set(values.filter(Boolean).map(String))).sort();
+  el.innerHTML = '<option value="">All</option>'
+    + uniq.map(v => '<option value="' + _esc(v) + '"' + (v===cur?' selected':'') + '>' + _esc(v) + '</option>').join('');
+}
+function _rebuildFilters(){
+  _setOpts('sa-f-zone',   saRows.map(r => r.zone));
+  _setOpts('sa-f-device', saRows.map(r => r.device_name));
+  _setOpts('sa-f-type',   saRows.map(r => r.device_type));
+}
+function resetSaFilters(){
+  ['sa-f-zone','sa-f-device','sa-f-type','sa-f-level','sa-f-included'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  renderSaTable();
 }
 
-function renderFirewallRows(id, rows){
-  const tbody = document.getElementById(id);
-  if(!tbody) return;
-  if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="13" style="color:#6b7280;text-align:center;padding:1rem">No rules for selected filters.</td></tr>';
+// ── Render editable table ─────────────────────────────────────────────────────
+function renderSaTable(){
+  const tbody = document.getElementById('sa-tbody'); if(!tbody) return;
+
+  if(!saRows.length){
+    tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:2.5rem">No rules loaded. Press "Load from Communication Profiles".</td></tr>';
+    document.getElementById('sa-row-count').textContent = '—';
     return;
   }
-  tbody.innerHTML = rows.map(rule => {
-    const rid = escapeHtml(rule.rule_id || '');
-    const enabled = _fwIsEnabled(rule.rule_id);
-    const savedNote = escapeHtml(firewallOperatorNotes[rule.rule_id || ''] || '');
-    const noteCell = '<div style="margin-top:6px">'
-      + '<textarea id="fw-note-' + rid + '" rows="2" style="width:100%;background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:4px 6px;color:#e2e8f0;font-size:11px;resize:vertical" placeholder="Operator notes...">' + savedNote + '</textarea>'
-      + '<button onclick="saveFirewallNote(' + JSON.stringify(rule.rule_id||'') + ',this)" style="margin-top:3px;font-size:10px;padding:2px 8px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:3px;cursor:pointer;">Save</button>'
-      + '</div>';
-    const cbCell = '<td style="width:32px;padding:4px 8px;text-align:center;vertical-align:top">'
-      + '<input type="checkbox" data-rule-id="' + rid + '" onchange="_fwToggle(this)"' + (enabled ? ' checked' : '') + '>'
-      + '</td>';
-    return '<tr style="opacity:' + (enabled ? '1' : '0.4') + '">'
-      + cbCell
-      + '<td>' + formatRuleLabel(rule) + '</td>'
-      + '<td>' + escapeHtml(rule.source_zone) + '</td>'
-      + '<td>' + escapeHtml(rule.destination_zone) + '</td>'
-      + '<td>' + escapeHtml(formatPorts(rule)) + '</td>'
-      + '<td>' + escapeHtml(rule.protocol) + '</td>'
-      + '<td>' + escapeHtml(rule.direction) + '</td>'
-      + '<td>' + escapeHtml(rule.purpose) + '</td>'
-      + '<td>' + escapeHtml(rule.business_justification) + '</td>'
-      + '<td>' + escapeHtml(rule.av_justification) + '</td>'
-      + '<td>' + escapeHtml(String(rule.confidence)) + '</td>'
-      + '<td>' + formatDerivedFrom(rule) + '</td>'
-      + '<td>' + escapeHtml(formatNotes(rule)) + buildFirewallWhyHtml(rule) + noteCell + '</td>'
+
+  const fZone     = document.getElementById('sa-f-zone')?.value     || '';
+  const fDevice   = document.getElementById('sa-f-device')?.value   || '';
+  const fType     = document.getElementById('sa-f-type')?.value     || '';
+  const fLevel    = document.getElementById('sa-f-level')?.value    || '';
+  const fIncluded = document.getElementById('sa-f-included')?.value || '';
+
+  saFiltered = saRows.filter(r => {
+    if(fZone   && r.zone        !== fZone)   return false;
+    if(fDevice && r.device_name !== fDevice) return false;
+    if(fType   && r.device_type !== fType)   return false;
+    if(fIncluded === 'yes' && !r.included)   return false;
+    if(fIncluded === 'no'  &&  r.included)   return false;
+    if(fLevel){
+      const eff = !r.included ? 'excluded' : r.requirement_level;
+      if(eff !== fLevel) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('sa-row-count').textContent = saFiltered.length + ' of ' + saRows.length + ' rules';
+
+  if(!saFiltered.length){
+    tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:1.5rem">No rules match the current filters.</td></tr>';
+    return;
+  }
+
+  let prevDev = null;
+  const html = saFiltered.map(row => {
+    const isNew   = row.device_name !== prevDev;
+    prevDev = row.device_name;
+
+    const excl    = !row.included || row.requirement_level === 'excluded';
+    const rid     = _esc(row._rowId);
+    const lvl     = row.requirement_level || 'recommended';
+    const lvlClass = lvl === 'min_required' ? 'lv-min' : lvl === 'recommended' ? 'lv-rec' : 'lv-exc';
+    const lvlLabel = lvl === 'min_required' ? 'Min Required' : lvl === 'recommended' ? 'Recommended' : 'Excluded';
+
+    // Level select
+    const levelSel = '<select class="sa-lvl ' + lvlClass + '" data-row-id="' + rid + '" onchange="saChangeLevel(this)">'
+      + '<option value="min_required"' + (lvl==='min_required'?' selected':'') + '>Min Required</option>'
+      + '<option value="recommended"'  + (lvl==='recommended' ?' selected':'') + '>Recommended</option>'
+      + '<option value="excluded"'     + (lvl==='excluded'    ?' selected':'') + '>Excluded</option>'
+      + '</select>';
+
+    // Notes cell
+    const noteHtml = row.notes
+      ? '<div class="sa-note-view has-note">' + _esc(row.notes) + '</div>'
+      : '<div class="sa-note-view">Add note…</div>';
+    const noteCell = '<td class="sa-note-cell" data-row-id="' + rid + '" onclick="saEditNote(this)">' + noteHtml + '</td>';
+
+    // Device cell: full on first occurrence, indent arrow on subsequent
+    const deviceCell = isNew
+      ? '<td class="' + (isNew ? 'device-first' : '') + '" style="font-size:12px;font-weight:600;color:#e2e8f0">'
+          + _esc(row.device_name)
+          + '<div style="font-size:9px;color:#6b7280;font-weight:400;font-family:monospace;margin-top:1px">' + _esc(row.confidence) + '</div>'
+          + '</td>'
+      : '<td style="font-size:11px;color:#374151;padding-left:16px">↳</td>';
+
+    const rowClass = excl ? 'sa-excl' : (row._no_profile ? 'sa-no-profile' : '');
+
+    return '<tr class="' + rowClass + (isNew ? ' device-first' : '') + '" data-row-id="' + rid + '">'
+      + '<td style="text-align:center;padding:5px 8px">'
+      +   '<input type="checkbox" data-row-id="' + rid + '" onchange="saToggleRow(this)"' + (row.included ? ' checked' : '') + '>'
+      + '</td>'
+      + deviceCell
+      + '<td style="font-family:monospace;font-size:11px;color:#9ca3af">'
+      +   '<a href="http://' + _esc(row.ip) + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted" onclick="event.stopPropagation()">' + _esc(row.ip) + '</a>'
+      + '</td>'
+      + '<td style="font-size:11px">' + _esc(row.zone || '—') + '</td>'
+      + '<td style="font-size:11px;color:#9ca3af">' + _esc(row.device_type || '—') + '</td>'
+      + '<td style="font-family:monospace;font-size:13px;font-weight:700;color:#7a9cb8">' + _esc(String(row.port)) + '</td>'
+      + '<td style="font-size:11px">' + _esc(row.protocol) + '</td>'
+      + '<td style="font-size:11px;color:#9ca3af">' + _esc(row.direction) + '</td>'
+      + '<td style="font-size:11px">' + _esc(row.purpose) + '</td>'
+      + '<td style="padding:4px 8px;min-width:130px">' + levelSel + '</td>'
+      + noteCell
       + '</tr>';
   }).join('');
-  _updateSelectionCount();
-  _renderCategoryChips();
+
+  tbody.innerHTML = html;
+  updateSaStats();
 }
 
-function renderZoneSummary(){
-  const el = document.getElementById('fw-zone-summary');
-  if(!el) return;
+// ── Row interactions ──────────────────────────────────────────────────────────
+function _rowByRid(rid){
+  return saRows.find(r => r._rowId === rid) || null;
+}
 
-  // Build zone members from firewallZoneMembers (server-provided) or derive from rules
-  let members = firewallZoneMembers;
-  if(!members || !Object.keys(members).length){
-    members = {};
-    firewallAllRules.forEach(r => {
-      if(r.source_zone && r.source_zone !== 'ANY'){
-        if(!members[r.source_zone]) members[r.source_zone] = new Set();
-        (r.source_devices || []).forEach(d => { if(d) members[r.source_zone].add(d); });
-      }
-      if(r.destination_zone && r.destination_zone !== 'ANY'){
-        if(!members[r.destination_zone]) members[r.destination_zone] = new Set();
-        (r.destination_devices || []).forEach(d => { if(d) members[r.destination_zone].add(d); });
-      }
-    });
-    // Convert Sets to arrays
-    const converted = {};
-    Object.keys(members).forEach(k => { converted[k] = Array.from(members[k]).sort(); });
-    members = converted;
+function saToggleRow(cb){
+  const rid = cb.getAttribute('data-row-id');
+  const row = _rowByRid(rid); if(!row) return;
+  row.included = cb.checked;
+  const tr = cb.closest('tr');
+  if(tr){
+    const excl = !row.included || row.requirement_level === 'excluded';
+    tr.className = (tr.className || '').replace(/\bsa-excl\b/g,'').trim();
+    if(excl) tr.className = (tr.className + ' sa-excl').trim();
   }
+  updateSaStats();
+  _markDirty();
+}
 
-  const zones = Object.keys(members).sort();
-  if(!zones.length){
-    el.textContent = 'No zone data available. Generate the firewall plan first.';
+function saChangeLevel(sel){
+  const rid = sel.getAttribute('data-row-id');
+  const row = _rowByRid(rid); if(!row) return;
+  row.requirement_level = sel.value;
+  sel.className = 'sa-lvl ' + (sel.value==='min_required'?'lv-min':sel.value==='recommended'?'lv-rec':'lv-exc');
+  const tr = sel.closest('tr');
+  if(tr){
+    const excl = !row.included || row.requirement_level === 'excluded';
+    tr.className = (tr.className || '').replace(/\bsa-excl\b/g,'').trim();
+    if(excl) tr.className = (tr.className + ' sa-excl').trim();
+  }
+  updateSaStats();
+  _markDirty();
+}
+
+function saEditNote(td){
+  if(td.querySelector('input')) return; // already editing
+  const rid = td.getAttribute('data-row-id');
+  const row = _rowByRid(rid); if(!row) return;
+  const inp = document.createElement('input');
+  inp.type = 'text';
+  inp.value = row.notes || '';
+  inp.placeholder = 'Add note or override reason…';
+  td.innerHTML = '';
+  td.appendChild(inp);
+  inp.focus();
+  inp.select();
+  function _commit(){
+    row.notes = inp.value;
+    _markDirty();
+    td.innerHTML = row.notes
+      ? '<div class="sa-note-view has-note">' + _esc(row.notes) + '</div>'
+      : '<div class="sa-note-view">Add note…</div>';
+  }
+  inp.addEventListener('blur', _commit);
+  inp.addEventListener('keydown', e => { if(e.key==='Enter'||e.key==='Escape') inp.blur(); });
+}
+
+function saToggleAll(enabled){
+  // If any filter active, only toggle visible rows
+  const fZone     = document.getElementById('sa-f-zone')?.value     || '';
+  const fDevice   = document.getElementById('sa-f-device')?.value   || '';
+  const fType     = document.getElementById('sa-f-type')?.value     || '';
+  const fLevel    = document.getElementById('sa-f-level')?.value    || '';
+  const fIncluded = document.getElementById('sa-f-included')?.value || '';
+  const anyFilter = fZone||fDevice||fType||fLevel||fIncluded;
+  const target = anyFilter ? saFiltered : saRows;
+  target.forEach(r => { r.included = !!enabled; });
+  _markDirty();
+  renderSaTable();
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateSaStats(){
+  const active   = saRows.filter(r => r.included && r.requirement_level !== 'excluded');
+  const devices  = new Set(saRows.map(r => r.ip).filter(Boolean)).size;
+  const mins     = active.filter(r => r.requirement_level === 'min_required').length;
+  const recs     = active.filter(r => r.requirement_level === 'recommended').length;
+  const g = id => document.getElementById(id);
+  if(g('sa-stat-devices'))  g('sa-stat-devices').textContent  = devices  || '—';
+  if(g('sa-stat-total'))    g('sa-stat-total').textContent    = saRows.length || '—';
+  if(g('sa-stat-included')) g('sa-stat-included').textContent = active.length || '—';
+  if(g('sa-stat-min'))      g('sa-stat-min').textContent      = mins || '—';
+  if(g('sa-stat-rec'))      g('sa-stat-rec').textContent      = recs || '—';
+}
+
+// ── Zone membership ───────────────────────────────────────────────────────────
+function renderZoneMembership(){
+  const el = document.getElementById('sa-zones'); if(!el) return;
+  const zones = {};
+  saRows.forEach(r => {
+    if(!r.zone) return;
+    if(!zones[r.zone]) zones[r.zone] = new Set();
+    zones[r.zone].add(r.device_name + (r.ip ? ' · ' + r.ip : ''));
+  });
+  const keys = Object.keys(zones).sort();
+  if(!keys.length){ el.textContent = 'No zone data.'; return; }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'
+    + keys.map(z => {
+      const devs = Array.from(zones[z]).sort();
+      return '<div style="border:1px solid #374151;border-radius:6px;padding:10px 12px;background:#111">'
+        + '<div style="font-size:12px;font-weight:700;color:#e5e7eb;margin-bottom:6px">' + _esc(z) + '</div>'
+        + devs.map(d => '<div style="font-size:11px;color:#d1d5db;margin-top:2px">· ' + _esc(d) + '</div>').join('')
+        + '</div>';
+    }).join('')
+    + '</div>';
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function setSaStatus(msg, color){
+  const el = document.getElementById('sa-status'); if(!el) return;
+  el.textContent = msg; el.style.color = color || '#6b7280';
+}
+
+// ── Generate Deliverable (opens print-ready HTML in new tab) ──────────────────
+function generateDeliverable(){
+  const projectName = document.getElementById('sa-cfg').getAttribute('data-project') || 'No Project';
+  const included = saRows.filter(r => r.included && r.requirement_level !== 'excluded');
+  if(!included.length){
+    alert('No included rules to generate a deliverable from.\nMark rules as Included and set a level (Min Required or Recommended), then try again.');
     return;
   }
+  const minRules = included.filter(r => r.requirement_level === 'min_required');
+  const recRules = included.filter(r => r.requirement_level === 'recommended');
+  const genTs    = new Date().toLocaleString('en-GB');
+  const savedTs  = saSavedTs  ? ('Last saved: ' + saSavedTs + '  ') : '';
+  const srcTs    = saSourceTs ? ('Profiles generated: ' + new Date(saSourceTs).toLocaleString('en-GB')) : '';
+  const devices  = new Set(included.map(r => r.ip)).size;
+  const zones    = new Set(included.map(r => r.zone).filter(Boolean)).size;
 
-  let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">';
-  zones.forEach(zone => {
-    const devices = Array.isArray(members[zone]) ? members[zone] : [];
-    html += '<div style="border:1px solid #374151;border-radius:6px;padding:10px 12px;background:#111">'
-      + '<div style="font-size:12px;font-weight:700;color:#e5e7eb;margin-bottom:6px">' + escapeHtml(zone) + '</div>'
-      + '<div style="font-size:11px;color:#9ca3af">';
-    if(devices.length){
-      html += devices.map(d => '<div style="margin-top:2px;color:#d1d5db">· ' + escapeHtml(d) + '</div>').join('');
-    } else {
-      html += '<div style="color:#4b5563">No member devices identified</div>';
+  function _eH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function tableRows(rows){
+    if(!rows.length) return '<tr><td colspan="9" style="color:#999;font-style:italic;text-align:center;padding:12px">None</td></tr>';
+    return rows.map(r =>
+      '<tr>'
+      + '<td>' + _eH(r.device_name) + '</td>'
+      + '<td style="font-family:monospace">' + _eH(r.ip) + '</td>'
+      + '<td>' + _eH(r.zone||'—') + '</td>'
+      + '<td>' + _eH(r.device_type||'—') + '</td>'
+      + '<td style="font-family:monospace;font-weight:700">' + _eH(String(r.port)) + '</td>'
+      + '<td>' + _eH(r.protocol) + '</td>'
+      + '<td>' + _eH(r.direction) + '</td>'
+      + '<td>' + _eH(r.purpose) + '</td>'
+      + '<td>' + _eH(r.notes||'') + '</td>'
+      + '</tr>'
+    ).join('');
+  }
+
+  const thead = '<thead><tr><th>Device</th><th>IP Address</th><th>Zone / VLAN</th><th>Device Type</th>'
+    + '<th>Port</th><th>Protocol</th><th>Direction</th><th>Purpose</th><th>Notes</th></tr></thead>';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Security Architecture — ${_eH(projectName)}</title>
+<style>
+  @page { size: A3 landscape; margin: 15mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; font-size: 10px; color: #111; background: #fff; padding: 24px 32px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #111; padding-bottom: 12px; }
+  .header-left h1 { font-size: 20px; font-weight: 700; }
+  .header-left .proj { font-size: 13px; color: #444; margin-top: 2px; }
+  .header-right { text-align: right; font-size: 10px; color: #666; line-height: 1.6; }
+  .brand { font-size: 12px; font-weight: 700; color: #111; }
+  .summary { display: flex; gap: 16px; margin: 16px 0 24px; flex-wrap: wrap; }
+  .sc { border: 1px solid #ddd; border-radius: 6px; padding: 10px 18px; text-align: center; min-width: 80px; }
+  .sc .v { font-size: 20px; font-weight: 700; color: #111; }
+  .sc .l { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sc.min .v { color: #991b1b; }
+  .sc.rec .v { color: #b45309; }
+  h2 { font-size: 13px; font-weight: 700; margin: 20px 0 8px; padding: 6px 10px; border-radius: 4px; }
+  h2.min-req { background: #fef2f2; color: #991b1b; border-left: 4px solid #991b1b; }
+  h2.rec-hd  { background: #fffbeb; color: #b45309; border-left: 4px solid #f59e0b; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 10px; }
+  th { text-align: left; padding: 5px 8px; background: #f5f5f5; border-bottom: 2px solid #ccc; font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
+  td { padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .footer { margin-top: 32px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 9px; color: #999; display: flex; justify-content: space-between; }
+  @media print {
+    body { padding: 0; }
+    h2 { page-break-before: auto; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <h1>Security Architecture</h1>
+    <div class="proj">${_eH(projectName)}</div>
+  </div>
+  <div class="header-right">
+    <div class="brand">AV NetWorker</div>
+    <div>Generated: ${_eH(genTs)}</div>
+    <div>${_eH(savedTs)}</div>
+    <div>${_eH(srcTs)}</div>
+  </div>
+</div>
+
+<div class="summary">
+  <div class="sc"><div class="v">${included.length}</div><div class="l">Total Rules</div></div>
+  <div class="sc min"><div class="v">${minRules.length}</div><div class="l">Min Required</div></div>
+  <div class="sc rec"><div class="v">${recRules.length}</div><div class="l">Recommended</div></div>
+  <div class="sc"><div class="v">${devices}</div><div class="l">Devices</div></div>
+  <div class="sc"><div class="v">${zones}</div><div class="l">Zones</div></div>
+</div>
+
+<h2 class="min-req">Minimum Required Rules &nbsp;(${minRules.length})</h2>
+<table>${thead}<tbody>${tableRows(minRules)}</tbody></table>
+
+<h2 class="rec-hd">Recommended Rules &nbsp;(${recRules.length})</h2>
+<table>${thead}<tbody>${tableRows(recRules)}</tbody></table>
+
+<div class="footer">
+  <span>AV NetWorker · Security Architecture · For IT infrastructure team implementation</span>
+  <span>${_eH(genTs)}</span>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if(!win){ alert('Popup was blocked. Please allow popups for this page, then try again.'); return; }
+  win.document.write(html);
+  win.document.close();
+  window.netpiStatus && window.netpiStatus.post('Deliverable generated — ' + included.length + ' rules', 'success', 'SEC ARCH');
+}
+
+// ── Init: server → localStorage ───────────────────────────────────────────────
+(async function _init(){
+  let loaded = false;
+
+  // 1. Server-saved Security Architecture (persists across devices)
+  try {
+    const res = await fetch('/tools/api/security-architecture/saved');
+    if(res.ok){
+      const data = await res.json();
+      if(data.ok && Array.isArray(data.rows) && data.rows.length){
+        saRows     = data.rows;
+        saSourceTs = data.source_ts || null;
+        saSavedTs  = data.ts ? new Date(data.ts).toLocaleString('en-GB') : null;
+        loaded = true;
+      }
     }
-    html += '</div></div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
+  } catch(e){}
 
-function updateRuleCounts(minimum, recommended){
-  const minCount = document.getElementById('fw-min-count');
-  const recCount = document.getElementById('fw-rec-count');
-  if(minCount) minCount.textContent = minimum.length + (minimum.length === 1 ? ' rule' : ' rules');
-  if(recCount) recCount.textContent = recommended.length + (recommended.length === 1 ? ' rule' : ' rules');
-}
+  // 2. localStorage fallback
+  if(!loaded){
+    try {
+      const raw = localStorage.getItem(SA_CACHE_KEY);
+      if(raw){
+        const d = JSON.parse(raw);
+        if(d && Array.isArray(d.rows) && d.rows.length){
+          saRows     = d.rows;
+          saSourceTs = d.source_ts || null;
+          saSavedTs  = d.ts ? new Date(d.ts).toLocaleString('en-GB') : null;
+          loaded = true;
+        }
+      }
+    } catch(e){}
+  }
 
-function applyFirewallFilters(){
-  const filters = getFilters();
-  firewallFilteredRules = firewallAllRules.filter(rule => matchesFilters(rule, filters));
-  const minimum = firewallFilteredRules.filter(rule => rule.requirement_level === 'min_required');
-  const recommended = firewallFilteredRules.filter(rule => rule.requirement_level === 'recommended');
-  renderFirewallRows('fw-min-rows', minimum);
-  renderFirewallRows('fw-rec-rows', recommended);
-  updateRuleCounts(minimum, recommended);
-}
-
-function resetFirewallFilters(){
-  const ids = ['fw-source-vlan', 'fw-destination-vlan', 'fw-system', 'fw-criticality'];
-  ids.forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.value = '';
-  });
-  applyFirewallFilters();
-}
-
-function csvCell(value){
-  const text = String(value == null ? '' : value).replace(/"/g, '""');
-  return '"' + text + '"';
-}
-
-function downloadText(content, filename, mimeType){
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
-
-function _fwExportRows(){
-  // Export only the enabled subset of filtered rules
-  return firewallFilteredRules.filter(r => _fwIsEnabled(r.rule_id));
-}
-
-function exportFirewallCsv(){
-  const rows = _fwExportRows();
-  const headers = [
-    'Rule ID',
-    'Requirement Level',
-    'Category',
-    'Source Zone',
-    'Destination Zone',
-    'Direction',
-    'Protocol',
-    'Port',
-    'Ports',
-    'Purpose',
-    'Business Justification',
-    'AV Justification',
-    'Confidence',
-    'Derived From',
-    'Source Systems',
-    'Source Devices',
-    'Destination Devices',
-    'Evidence'
-  ];
-  const lines = [headers.map(csvCell).join(',')];
-  rows.forEach(rule => {
-    lines.push([
-      rule.rule_id,
-      rule.requirement_level,
-      rule.category,
-      rule.source_zone,
-      rule.destination_zone,
-      rule.direction,
-      rule.protocol,
-      Number.isInteger(rule.port) ? rule.port : '',
-      rule.ports.join('|'),
-      rule.purpose,
-      rule.business_justification,
-      rule.av_justification,
-      rule.confidence,
-      Array.isArray(rule.derived_from) ? rule.derived_from.join('|') : '',
-      rule.source_systems.join('|'),
-      rule.source_devices.join('|'),
-      rule.destination_devices.join('|'),
-      rule.evidence.join('|')
-    ].map(csvCell).join(','));
-  });
-  downloadText(lines.join('\n'), 'security_architecture.csv', 'text/csv;charset=utf-8');
-}
-
-function exportFirewallJson(){
-  const rows = _fwExportRows();
-  const payload = {
-    exported_at: new Date().toISOString(),
-    rows_exported: rows.length,
-    rules: rows
-  };
-  downloadText(JSON.stringify(payload, null, 2), 'security_architecture.json', 'application/json;charset=utf-8');
-}
-
-/* Initial render — restore from cache if available, else idle */
-const _fwCacheLoaded = _loadFwCache();
-if(!_fwCacheLoaded){
-  renderFirewallRows('fw-min-rows', []);
-  renderFirewallRows('fw-rec-rows', []);
-  updateRuleCounts([], []);
-  _renderCategoryChips();
-  _updateSelectionCount();
-}
-_setFwButtons(false);
-if(_fwCacheLoaded){
-  setFirewallStatus(firewallAllRules.length + ' rules · Generated ' + (_fwCacheTimestamp||'previously') + ' — press Generate to refresh', '#6b7280');
-  window.netpiStatus && window.netpiStatus.post('Security Architecture — restored ' + firewallAllRules.length + ' rules from ' + (_fwCacheTimestamp||'cache'), 'info', 'SEC ARCH');
-} else {
-  setFirewallStatus('Press Generate Security Architecture to begin.', '#6b7280');
-  window.netpiStatus && window.netpiStatus.post('Security Architecture — press Generate to begin', 'info', 'SEC ARCH');
-}
+  if(loaded){
+    _rebuildFilters();
+    renderSaTable();
+    updateSaStats();
+    renderZoneMembership();
+    _markClean();
+    const tsLabel = saSavedTs ? ' · Last saved: ' + saSavedTs : '';
+    setSaStatus(saRows.length + ' rules restored' + tsLabel + ' — press Load to refresh from Communication Profiles.', '#6b7280');
+    const srcEl = document.getElementById('sa-source-info');
+    if(srcEl && saSourceTs) srcEl.textContent = 'Source: Communication Profiles · ' + new Date(saSourceTs).toLocaleString('en-GB');
+    window.netpiStatus && window.netpiStatus.post('Security Architecture — restored ' + saRows.length + ' rules', 'info', 'SEC ARCH');
+  } else {
+    setSaStatus('No saved Security Architecture. Press "Load from Communication Profiles" to begin.', '#6b7280');
+    window.netpiStatus && window.netpiStatus.post('Security Architecture — press Load to begin', 'info', 'SEC ARCH');
+  }
+})();
 </script>
 {% endblock %}

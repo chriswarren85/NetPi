@@ -6613,6 +6613,41 @@ def api_requirements_saved():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/tools/api/security-architecture/saved", methods=["GET"])
+def api_sa_saved():
+    """Return the last saved Security Architecture for this project."""
+    try:
+        path = get_project_path("data/security_architecture.json")
+        if not os.path.exists(path):
+            return jsonify({"ok": False, "error": "No saved security architecture for this project"})
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify({"ok": True, **data})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/tools/api/security-architecture/save", methods=["POST"])
+def api_sa_save():
+    """Persist the user-edited Security Architecture rows for this project."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        rows = payload.get("rows", [])
+        if not isinstance(rows, list):
+            return jsonify({"ok": False, "error": "rows must be a list"}), 400
+        path = get_project_path("data/security_architecture.json", ensure_parent=True)
+        data = {
+            "ts": datetime.now().isoformat(),
+            "source_ts": payload.get("source_ts"),
+            "rows": rows,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return jsonify({"ok": True, "saved": len(rows)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/tools/api/apply_suggestions", methods=["POST"])
 def api_apply_suggestions():
     try:
