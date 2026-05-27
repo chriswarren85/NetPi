@@ -68,23 +68,10 @@
     </div>
   </div>
   <div class="panel-body" style="padding:0;overflow-x:auto">
-    <table id="lan-table" style="min-width:1600px;font-size:11px">
+    <table id="lan-table" style="font-size:11px;table-layout:fixed">
       <thead>
-        <tr>
-          <th class="sortable" onclick="setSort('room')" style="cursor:pointer;white-space:nowrap">Area / Room <span id="si-room" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('name')" style="cursor:pointer;white-space:nowrap">Device <span id="si-name" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('location')" style="cursor:pointer;white-space:nowrap">Location <span id="si-location" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('vendor')" style="cursor:pointer;white-space:nowrap">Make / Model <span id="si-vendor" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('vlan')" style="cursor:pointer;white-space:nowrap">VLAN <span id="si-vlan" style="color:#6b7280"></span></th>
-          <th class="sortable" onclick="setSort('ip')" style="cursor:pointer;white-space:nowrap">IP / Subnet / GW <span id="si-ip" style="color:#6b7280"></span></th>
-          <th>Multicast</th>
-          <th class="sortable" onclick="setSort('hostname')" style="cursor:pointer;white-space:nowrap">Hostname <span id="si-hostname" style="color:#6b7280"></span></th>
-          <th>MAC Address</th>
-          <th>Serial No.</th>
-          <th class="sortable" onclick="setSort('switch_port')" style="cursor:pointer;white-space:nowrap">Switch / Port <span id="si-switch_port" style="color:#6b7280"></span></th>
-          <th>PoE Type</th>
-          <th class="sortable" onclick="setSort('status')" style="cursor:pointer;white-space:nowrap">Status <span id="si-status" style="color:#6b7280"></span></th>
-          <th></th>
+        <tr id="lan-thead-row">
+          <!-- built by JS so widths/fields stay in sync with LC_COLS -->
         </tr>
       </thead>
       <tbody id="lan-tbody">
@@ -94,10 +81,50 @@
   </div>
 </div>
 
+<style>
+/* ── LAN Sheet grid ──────────────────────────────────────── */
+#lan-table td.lce { cursor: cell; padding: 0; }
+#lan-table td.lce .lcv {
+  display: block; padding: 5px 8px; min-height: 24px; min-width: 60px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#lan-table td.lce.lc-active { outline: 2px solid #3b82f6; outline-offset: -1px; background: #111827; }
+#lan-table td.lce.lc-dirty  { background: #1a1a0a; }
+#lan-table td.lce input, #lan-table td.lce select {
+  width: 100%; padding: 4px 6px; background: #111827; color: #e2e8f0;
+  border: none; outline: none; font-size: 11px; font-family: inherit;
+  min-width: 60px; box-sizing: border-box;
+}
+#lan-table tr.lc-new-row td { background: #0a1a0a; }
+</style>
 <script>
 let lanEntries = [];
 let filtered = [];
 let sortState = { col: 'room', dir: 'asc' };
+
+/* Column definitions for the editable grid */
+const LC_COLS = [
+  { field: 'room',        label: 'Area / Room',      w: '120px' },
+  { field: 'name',        label: 'Device',            w: '130px' },
+  { field: 'location',    label: 'Location',          w: '100px' },
+  { field: 'vendor',      label: 'Make',              w: '90px'  },
+  { field: 'model',       label: 'Model',             w: '110px' },
+  { field: 'vlan',        label: 'VLAN',              w: '90px', type: 'vlan' },
+  { field: 'ip',          label: 'IP',                w: '110px', mono: true },
+  { field: 'multicast',   label: 'Multicast',         w: '80px'  },
+  { field: 'hostname',    label: 'Hostname',          w: '120px', mono: true },
+  { field: 'mac',         label: 'MAC',               w: '130px', mono: true },
+  { field: 'serial',      label: 'Serial',            w: '100px' },
+  { field: 'switch_port', label: 'Switch / Port',     w: '110px', mono: true },
+  { field: 'poe_type',    label: 'PoE',               w: '70px'  },
+];
+
+/* Collect VLAN names from the page settings options (pre-rendered by Jinja) */
+const LC_VLANS = [...document.querySelectorAll('#f-vlan option')].map(o=>o.value).filter(Boolean);
+
+let lcActiveRow = -1; // index into `filtered`
+let lcActiveCol = -1; // index into LC_COLS
+let lcDirty     = {}; // {ip: {field: true}} — tracks unsaved changes
 
 function escHtml(s){
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -159,13 +186,21 @@ function sortEntries(entries){
   });
 }
 
-function updateSortIndicators(){
-  ['room','name','location','vendor','vlan','ip','hostname','switch_port','status'].forEach(col => {
-    const el = document.getElementById('si-' + col);
-    if(!el) return;
-    el.textContent = sortState.col === col ? (sortState.dir === 'asc' ? '▲' : '▼') : '';
+function buildThead(){
+  const tr = document.getElementById('lan-thead-row');
+  if(!tr) return;
+  const sortable = new Set(['room','name','location','vendor','vlan','ip','hostname','switch_port','status']);
+  let html = '';
+  LC_COLS.forEach(col => {
+    const s = sortable.has(col.field);
+    const arrow = sortState.col === col.field ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    html += `<th style="width:${col.w};${s?'cursor:pointer;':''}white-space:nowrap"${s?` onclick="setSort('${col.field}')"`:''}>${escHtml(col.label)}${arrow}</th>`;
   });
+  html += `<th style="width:70px">Status</th><th style="width:68px"></th>`;
+  tr.innerHTML = html;
 }
+
+function updateSortIndicators(){ buildThead(); }
 
 function applyFilters(){
   const search = String(document.getElementById('f-search').value || '').toLowerCase().trim();
@@ -239,70 +274,50 @@ function updateStats(){
   el.innerHTML = html;
 }
 
-function editCell(ip, field){
-  return `<span class="editable-cell" data-ip="${ip}" data-field="${field}" title="Click to edit" style="cursor:pointer;min-width:30px;display:inline-block;color:#9ca3af">`
-    + '</span>';
-}
-
-function buildEntryRow(e){
-  const ip = escHtml(e.ip || '');
-  const rawIp = e.ip || '';
-  const statusBg = e.present ? '#0d2015' : '#1a0d0d';
+/* ─── Excel-like grid cell builder ──────────────────────────── */
+function buildEntryRow(e, rowIdx){
+  const rawIp  = e.ip || '';
+  const safeIp = escHtml(rawIp);
+  const statusBg    = e.present ? '#0d2015' : '#1a0d0d';
   const statusColor = e.present ? '#86efac' : '#fca5a5';
 
-  const vlanHtml = e.vlan
-    ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;background:#1a1a2e;color:#a5b4fc">${escHtml(e.vlan)}</span>`
-    : '<span style="color:#374151">—</span>';
+  let html = '<tr>';
+  LC_COLS.forEach((col, colIdx) => {
+    const val  = String(e[col.field] || '');
+    const isDirty = lcDirty[rawIp] && lcDirty[rawIp][col.field];
+    const mono = col.mono ? 'font-family:monospace;' : '';
+    html += `<td class="lce${isDirty?' lc-dirty':''}" data-row="${rowIdx}" data-col="${colIdx}" data-ip="${safeIp}" data-field="${escHtml(col.field)}">`
+      + `<span class="lcv" style="${mono}color:${val?'#e5e7eb':'#374151'}">${val ? escHtml(val) : '—'}</span></td>`;
+  });
 
-  const vm = [e.vendor, e.model].filter(Boolean).join(' / ');
-
-  // IP / Subnet / GW stacked cell
-  const ipCell = `<a href="http://${ip}" target="_blank" rel="noopener" style="font-family:monospace;color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">${ip}</a>`
-    + (e.subnet ? `<div style="font-size:10px;color:#4b5563;font-family:monospace">${escHtml(e.subnet)}</div>` : '')
-    + (e.gateway ? `<div style="font-size:10px;color:#4b5563;font-family:monospace">GW: ${escHtml(e.gateway)}</div>` : '');
-
-  const cell = (val, field, opts) => {
-    const extra = opts || '';
-    const safe = escHtml(val || '');
-    if(!field) return `<td style="${extra}">${safe || '<span style="color:#374151">—</span>'}</td>`;
-    return `<td style="${extra}"><span class="editable-cell" data-ip="${ip}" data-field="${field}" title="Click to edit" style="cursor:pointer;min-width:30px;display:inline-block">${safe || '<span style="color:#374151">—</span>'}</span></td>`;
-  };
-
-  return '<tr>'
-    + cell(e.room, 'room', 'white-space:nowrap')
-    + `<td style="white-space:nowrap;color:#e5e7eb;font-weight:500">${escHtml(e.name || '') || '<span style="color:#374151">—</span>'}</td>`
-    + cell(e.location, 'location')
-    + `<td style="max-width:160px;color:#9ca3af">${escHtml(vm) || '<span style="color:#374151">—</span>'}</td>`
-    + `<td>${vlanHtml}</td>`
-    + `<td style="white-space:nowrap">${ipCell}</td>`
-    + cell(e.multicast, 'multicast', 'font-family:monospace;font-size:11px;color:#6b7280')
-    + cell(e.hostname, 'hostname', 'font-family:monospace;font-size:11px;color:#6b7280')
-    + `<td style="font-family:monospace;font-size:11px;color:#4b5563">${escHtml(e.mac || '') || '<span style="color:#374151">—</span>'}</td>`
-    + cell(e.serial, 'serial', 'font-family:monospace;font-size:11px;color:#6b7280')
-    + cell(e.switch_port, 'switch_port', 'font-family:monospace;font-size:11px;color:#6b7280')
-    + cell(e.poe_type, 'poe_type', 'font-size:11px;color:#6b7280')
-    + `<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present ? 'Present' : 'Missing'}</span></td>`
-    + `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${rawIp.replace(/'/g,"\\'")}')">Remove</button></td>`
-    + '</tr>';
+  // Status (read-only) + Remove button
+  html += `<td style="white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present?'Present':'Missing'}</span></td>`;
+  html += `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${rawIp.replace(/'/g,"\\'")}')">Remove</button></td>`;
+  html += '</tr>';
+  return html;
 }
 
 function renderSheet(){
-  updateSortIndicators();
+  buildThead();
   const tbody = document.getElementById('lan-tbody');
   const groupByRoom = document.getElementById('group-by-room').checked;
+  const colCount = LC_COLS.length + 2;
 
   document.getElementById('table-count').textContent =
     filtered.length + ' device' + (filtered.length !== 1 ? 's' : '') +
     (filtered.length < lanEntries.length ? ' (filtered from ' + lanEntries.length + ')' : '');
 
   if(!filtered.length){
-    tbody.innerHTML = '<tr><td colspan="14" style="color:#4b5563;text-align:center;padding:1.5rem">' +
-      (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet. Paste from Device Intake or sync from Device List.') +
-      '</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${colCount}" style="color:#4b5563;text-align:center;padding:1.5rem">`
+      + (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet — paste from Device Intake or use Sync.')
+      + `</td></tr>`;
+    _appendAddRow(tbody, colCount);
     return;
   }
 
   const sorted = sortEntries(filtered);
+  // Re-index filtered to match sorted order for cell navigation
+  filtered = sorted;
 
   if(groupByRoom){
     const groups = {}, ORDER = [];
@@ -312,20 +327,31 @@ function renderSheet(){
       groups[r].push(e);
     });
     let html = '';
+    let rowIdx = 0;
     ORDER.forEach(room => {
       const devs = groups[room];
       const missing = devs.filter(d => !d.present).length;
-      const mSpan = missing > 0 ? ` <span style="color:#fca5a5;font-size:11px;font-weight:400">(${missing} missing)</span>` : '';
+      const mSpan = missing > 0 ? ` <span style="color:#fca5a5;font-weight:400">(${missing} missing)</span>` : '';
       html += `<tr style="background:#111;border-top:2px solid #374151">
-        <td colspan="14" style="padding:8px 12px;font-weight:700;color:#e5e7eb;font-size:11px;letter-spacing:.06em;text-transform:uppercase">
-          ${escHtml(room)}<span style="color:#6b7280;font-weight:400">&nbsp;—&nbsp;${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
+        <td colspan="${colCount}" style="padding:6px 12px;font-weight:700;color:#e5e7eb;font-size:11px;letter-spacing:.05em;text-transform:uppercase">
+          ${escHtml(room)}<span style="color:#6b7280;font-weight:400"> — ${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
         </td></tr>`;
-      devs.forEach(e => { html += buildEntryRow(e); });
+      devs.forEach(e => { html += buildEntryRow(e, rowIdx++); });
     });
     tbody.innerHTML = html;
   } else {
-    tbody.innerHTML = sorted.map(e => buildEntryRow(e)).join('');
+    tbody.innerHTML = sorted.map((e, i) => buildEntryRow(e, i)).join('');
   }
+  _appendAddRow(tbody, colCount);
+}
+
+function _appendAddRow(tbody, colCount){
+  const tr = document.createElement('tr');
+  tr.className = 'lc-new-row';
+  tr.innerHTML = `<td colspan="${colCount}" style="padding:4px 8px">
+    <button class="btn" style="font-size:11px;padding:3px 12px;color:#6b7280;border-color:#2d2d2d" onclick="lcAddRow()">+ Add Row</button>
+  </td>`;
+  tbody.appendChild(tr);
 }
 
 async function loadSheet(){
@@ -450,43 +476,186 @@ async function createVlanGroups(){
   }
 }
 
-// Inline cell editing (Notes field)
-document.addEventListener('click', function(ev){
-  const cell = ev.target.closest('.editable-cell');
-  if(!cell) return;
-  const ip = cell.dataset.ip;
-  const field = cell.dataset.field;
-  if(!ip || !field) return;
+/* ─── Excel-like grid interaction ───────────────────────────────────────── */
 
-  const entry = lanEntries.find(e => e.ip === ip);
-  const current = entry ? (entry[field] || '') : '';
+function _lcCellEl(row, col){
+  return document.querySelector(`#lan-tbody td.lce[data-row="${row}"][data-col="${col}"]`);
+}
 
-  const input = document.createElement('input');
-  input.value = current;
-  input.style.cssText = 'background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:2px 6px;font-size:11px;color:#d1d5db;width:160px';
-  cell.innerHTML = '';
-  cell.appendChild(input);
-  input.focus();
-  input.select();
-
-  const save = () => {
-    const val = input.value.trim();
-    fetch('/tools/api/lan-sheet/entry', {
-      method: 'PATCH',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ip, field, value: val})
-    }).then(r => r.json()).then(d => {
-      if(d.ok && entry) entry[field] = val;
-      applyFilters();
-    }).catch(() => { applyFilters(); });
-  };
-
-  input.addEventListener('blur', save);
-  input.addEventListener('keydown', e => {
-    if(e.key === 'Enter'){ e.preventDefault(); input.blur(); }
-    if(e.key === 'Escape'){ input.removeEventListener('blur', save); applyFilters(); }
+function _lcDeactivate(){
+  document.querySelectorAll('#lan-tbody td.lce.lc-active').forEach(td => {
+    td.classList.remove('lc-active');
+    // If there's an active input/select, extract its value and commit display
+    const inp = td.querySelector('input,select');
+    if(inp){
+      const ip    = td.dataset.ip;
+      const field = td.dataset.field;
+      const val   = inp.value;
+      _lcCommit(ip, field, val, td);
+    }
   });
+}
+
+function _lcActivate(row, col, startChar){
+  if(row < 0 || col < 0 || row >= filtered.length || col >= LC_COLS.length) return;
+  _lcDeactivate();
+  lcActiveRow = row;
+  lcActiveCol = col;
+
+  const td = _lcCellEl(row, col);
+  if(!td) return;
+  td.classList.add('lc-active');
+  td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+
+  const ip    = td.dataset.ip || '';
+  const field = td.dataset.field || '';
+  const colDef = LC_COLS[col];
+  const entry = lanEntries.find(e => e.ip === ip) || {};
+  const current = entry[field] || '';
+
+  let widget;
+  if(colDef.type === 'vlan' && LC_VLANS.length){
+    widget = document.createElement('select');
+    widget.innerHTML = '<option value="">—</option>'
+      + LC_VLANS.map(v => `<option value="${escHtml(v)}"${v===current?' selected':''}>${escHtml(v)}</option>`).join('');
+    widget.value = current;
+  } else {
+    widget = document.createElement('input');
+    widget.type = 'text';
+    widget.value = startChar !== undefined ? startChar : current;
+    if(startChar === undefined){ setTimeout(()=>{ widget.select(); }, 0); }
+  }
+
+  td.innerHTML = '';
+  td.appendChild(widget);
+  widget.focus();
+
+  widget.addEventListener('keydown', ev => _lcKey(ev, row, col));
+  // blur: save without navigating (e.g. clicked elsewhere)
+  widget.addEventListener('blur', () => {
+    setTimeout(() => {
+      // Only save if still active (not navigated away by keyboard)
+      if(lcActiveRow === row && lcActiveCol === col){
+        _lcSaveAndDeactivate(row, col);
+      }
+    }, 80);
+  });
+}
+
+function _lcSaveAndDeactivate(row, col){
+  const td = _lcCellEl(row, col);
+  if(!td) return;
+  const inp = td.querySelector('input,select');
+  if(!inp) return;
+  const ip    = td.dataset.ip;
+  const field = td.dataset.field;
+  _lcCommit(ip, field, inp.value, td);
+  lcActiveRow = -1;
+  lcActiveCol = -1;
+}
+
+function _lcCommit(ip, field, val, td){
+  const entry = lanEntries.find(e => e.ip === ip);
+  if(!entry) return;
+  const prev = entry[field] || '';
+  const newVal = val.trim();
+  // Update display span
+  const colDef = LC_COLS.find(c => c.field === field) || {};
+  const mono = colDef.mono ? 'font-family:monospace;' : '';
+  td.innerHTML = `<span class="lcv" style="${mono}color:${newVal?'#e5e7eb':'#374151'}">${newVal ? escHtml(newVal) : '—'}</span>`;
+  if(newVal === prev) return; // no change, skip save
+  entry[field] = newVal;
+  if(!lcDirty[ip]) lcDirty[ip] = {};
+  lcDirty[ip][field] = true;
+  td.classList.add('lc-dirty');
+  // Persist immediately via API
+  fetch('/tools/api/lan-sheet/entry', {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ip, field, value: newVal})
+  }).then(r => r.json()).then(d => {
+    if(d.ok){
+      if(lcDirty[ip]) delete lcDirty[ip][field];
+      td.classList.remove('lc-dirty');
+      // Re-run filters/stats in background without full re-render
+      updateStats();
+    }
+  }).catch(() => {}); // keep dirty indicator on failure
+}
+
+function _lcKey(ev, row, col){
+  const key = ev.key;
+  if(key === 'Escape'){
+    ev.preventDefault();
+    const td = _lcCellEl(row, col);
+    if(td){ const inp = td.querySelector('input,select'); if(inp) inp.value = (lanEntries.find(e=>e.ip===td.dataset.ip)||{})[td.dataset.field]||''; }
+    _lcSaveAndDeactivate(row, col);
+    return;
+  }
+  if(key === 'Tab'){
+    ev.preventDefault();
+    _lcSaveAndDeactivate(row, col);
+    const nextCol = ev.shiftKey ? col - 1 : col + 1;
+    if(nextCol < 0){ _lcActivate(row - 1, LC_COLS.length - 1); }
+    else if(nextCol >= LC_COLS.length){ _lcActivate(row + 1, 0); }
+    else { _lcActivate(row, nextCol); }
+    return;
+  }
+  if(key === 'Enter'){
+    ev.preventDefault();
+    _lcSaveAndDeactivate(row, col);
+    _lcActivate(ev.shiftKey ? row - 1 : row + 1, col);
+    return;
+  }
+  if(key === 'ArrowUp'   && ev.altKey){ ev.preventDefault(); _lcSaveAndDeactivate(row,col); _lcActivate(row-1,col); return; }
+  if(key === 'ArrowDown' && ev.altKey){ ev.preventDefault(); _lcSaveAndDeactivate(row,col); _lcActivate(row+1,col); return; }
+}
+
+// Click on any lce cell
+document.addEventListener('click', ev => {
+  const td = ev.target.closest('td.lce');
+  if(!td) return;
+  const row = parseInt(td.dataset.row, 10);
+  const col = parseInt(td.dataset.col, 10);
+  if(row === lcActiveRow && col === lcActiveCol) return; // already active
+  _lcActivate(row, col);
 });
+
+// Keyboard navigation when a cell is selected but not in edit mode
+document.addEventListener('keydown', ev => {
+  if(lcActiveRow < 0) return;
+  const active = document.activeElement;
+  if(active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) return;
+  const key = ev.key;
+  if(key === 'ArrowUp')   { ev.preventDefault(); _lcActivate(lcActiveRow-1, lcActiveCol); }
+  if(key === 'ArrowDown') { ev.preventDefault(); _lcActivate(lcActiveRow+1, lcActiveCol); }
+  if(key === 'ArrowLeft') { ev.preventDefault(); _lcActivate(lcActiveRow, lcActiveCol-1); }
+  if(key === 'ArrowRight'){ ev.preventDefault(); _lcActivate(lcActiveRow, lcActiveCol+1); }
+});
+
+// Typing while a cell is selected (but not yet in input) — start editing immediately
+document.addEventListener('keypress', ev => {
+  if(lcActiveRow < 0) return;
+  const active = document.activeElement;
+  if(active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) return;
+  if(ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if(ev.key.length === 1){
+    ev.preventDefault();
+    _lcActivate(lcActiveRow, lcActiveCol, ev.key);
+  }
+});
+
+/* Add a blank row */
+function lcAddRow(){
+  const blank = { name:'', ip:'', mac:'', type:'', vlan:'', vendor:'', model:'', room:'',
+                  hostname:'', serial:'', switch_port:'', multicast:'', poe_type:'', location:'', notes:'', present: false };
+  lanEntries.push(blank);
+  populateRoomFilter();
+  populateVlanFilter();
+  applyFilters();
+  // Activate first cell of the new last row
+  setTimeout(() => _lcActivate(filtered.length - 1, 0), 40);
+}
 
 loadSheet();
 </script>

@@ -1711,73 +1711,35 @@ function renderTable(){
       const nameCellHtml =
         '<div style="font-weight:500;color:#e5e7eb"><span style="display:inline-block;width:14px;color:#9ca3af">' + escapeHtml(toggleGlyph) + '</span>' + escapeHtml(d.name || '(unnamed device)') + '</div>';
       const confidenceState = deriveConfidenceState(d, r, freshness.label);
-      const typeCellHtml = buildTypeCellHtml(d, r, freshness.label);
+      // Compact type token for the condensed row view
+      const _effectiveTypeDisplay = normalizeTypeValue(
+        (r && r.effective_type) || (d && d._resolved_type) || (d && d.effective_type) || (d && d.type)
+      ) || (d.type || 'unknown');
+      const _typeBadgeColors = {confirmed:'#4b5563',inferred:'#1e3a5f',user_entered:'#3b0764',stale:'#2d2d2d',unknown:'#1a1a1a'};
+      const typeCellHtml =
+        '<div style="font-size:11px;color:#d1d5db">' + escapeHtml(_effectiveTypeDisplay) + '</div>'
+        + '<div style="margin-top:1px"><span style="font-size:9px;padding:1px 5px;border-radius:3px;background:' + (_typeBadgeColors[confidenceState]||'#1a1a1a') + ';color:#9ca3af">' + escapeHtml(confidenceState) + '</span></div>';
       const freshnessHtml =
-        '<div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:' + freshness.tone.background + ';color:' + freshness.tone.color + '">' + escapeHtml(freshness.label) + '</div>' +
-        '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280"><strong>Seen:</strong> ' + escapeHtml(freshness.lastSeen || 'Never') + '</div>' +
-        '<div style="font-size:11px;line-height:1.4;color:#6b7280"><strong>Reachable:</strong> ' + escapeHtml(freshness.lastReachable || 'Never') + '</div>' +
-        '<div style="font-size:11px;line-height:1.4;color:#6b7280"><strong>First:</strong> ' + escapeHtml(freshness.firstSeen || 'Unknown') + '</div>';
+        '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:' + freshness.tone.background + ';color:' + freshness.tone.color + '">' + escapeHtml(freshness.label) + '</span>';
       if(freshness.label === 'stale'){
         tr.style.opacity = '0.72';
       }
 
+      // Compact validation cell — detail stays in the expand drawer
       let validationButtonText = 'Validate';
       let validationButtonDisabled = '';
       if(actionState && actionState.status === 'running'){
-        validationButtonText = 'Validating...';
+        validationButtonText = '…';
         validationButtonDisabled = ' disabled';
       }
-      let validationHtml = '<div style="margin-bottom:6px">' + buildValidationSummaryHtml(validationSummary) + '</div>';
-      validationHtml += '<button class="btn" onclick="validateDevice(\'' + safeIp + '\')"' + validationButtonDisabled + '>' + escapeHtml(validationButtonText) + '</button>';
-
-      if(actionState){
-        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - Number(actionState.startedAt || Date.now())) / 1000));
-        let actionText = actionState.label || '';
-        if(actionState.status === 'running'){
-          const dots = '.'.repeat((elapsedSeconds % 3) + 1);
-          actionText = actionText + dots + ' ' + elapsedSeconds + 's elapsed';
-          if(elapsedSeconds >= 10){
-            actionText += ' - still running, please wait';
-          }
-        } else if(actionState.detail){
-          actionText += ': ' + actionState.detail;
-        }
-        const actionColor = actionState.status === 'error'
-          ? '#e5e7eb'
-          : (actionState.status === 'success' ? '#d1d5db' : '#9ca3af');
-        validationHtml += '<div style="margin-top:6px;font-size:11px;line-height:1.4;color:' + actionColor + '">' + escapeHtml(actionText) + '</div>';
-      }
-
-      if(r){
-        validationHtml += '<div style="margin-top:6px;font-size:11px;line-height:1.4">';
-        validationHtml += '<div><strong>Raw status:</strong> ' + escapeHtml(r.overall || '-') + '</div>';
-
-        if(r.open_ports && r.open_ports.length){
-          validationHtml += '<div><strong>Ports:</strong> ' + escapeHtml(r.open_ports.join(', ')) + '</div>';
-        }
-
-        if(r.fingerprint && r.fingerprint.platform && r.fingerprint.platform !== 'unknown'){
-          validationHtml += '<div><strong>AV:</strong> ' + escapeHtml(r.fingerprint.platform) + ' (' + escapeHtml(r.fingerprint.confidence || '-') + ')</div>';
-        }
-
-        if(r.observed_platform && r.observed_platform.platform && r.observed_platform.platform !== 'unknown'){
-          validationHtml += '<div><strong>Detected:</strong> ' + escapeHtml(r.observed_platform.platform) + '</div>';
-        }
-
-          let suggested = null; try { suggested = getSuggestedType(r, d.type); } catch (e) { console.error("getSuggestedType failed", e, r, d); }
-        if(suggested){
-            const safeSuggested = String(suggested.type || "").replace(/'/g, "\\'");
-            const reasonText = Array.isArray(suggested.reasons) && suggested.reasons.length
-              ? '<div style="font-size:10px;color:#9ca3af;margin-top:2px">' + escapeHtml(suggested.reasons[0]) + '</div>'
-              : '';
-            validationHtml += '<div style="margin-top:4px"><strong>Suggest:</strong> ' + escapeHtml(suggested.type) + ' (' + escapeHtml(suggested.label || 'low') + ') ';
-            validationHtml += '<button class="btn btn-primary" style="font-size:10px;padding:2px 6px;margin-left:6px" onclick="applySuggestedType(\'' + safeIp + '\', \'' + safeSuggested + '\')">Apply</button>';
-            validationHtml += reasonText + '</div>';
-          validationHtml += '</div>';
-        }
-
-        validationHtml += '</div>';
-      }
+      const vTone = {pass:'#4a7a5a',warn:'#b89050',fail:'#b87a7a',unknown:'#4b5563'};
+      const vBadgeColor = vTone[validationSummary.status] || vTone.unknown;
+      let validationHtml =
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+        + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + vBadgeColor + ';flex-shrink:0"></span>'
+        + '<span style="font-size:11px;color:#9ca3af">' + escapeHtml(validationSummary.label) + '</span>'
+        + '<button class="btn" style="font-size:10px;padding:2px 7px" onclick="validateDevice(\'' + safeIp + '\')"' + validationButtonDisabled + '>' + escapeHtml(validationButtonText) + '</button>'
+        + '</div>';
 
       tr.innerHTML =
         '<td>' + nameCellHtml + '</td>' +
