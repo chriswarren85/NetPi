@@ -93,7 +93,7 @@
   </div>
 </div>
 
-<!-- Editable table -->
+<!-- Accordion rules -->
 <div class="panel">
   <div class="panel-header">
     <span>Communication Rules</span>
@@ -103,31 +103,8 @@
       <button class="btn" onclick="saToggleAll(false)">Exclude All</button>
     </div>
   </div>
-  <div class="panel-body" style="padding:0;overflow-x:auto">
-    <table id="sa-table">
-      <thead>
-        <tr>
-          <th style="width:36px;text-align:center;padding:6px 8px">
-            <input type="checkbox" id="sa-selall" onchange="saToggleAll(this.checked)" title="Toggle all" checked>
-          </th>
-          <th style="min-width:120px">Device</th>
-          <th style="min-width:100px">IP</th>
-          <th style="min-width:80px">Zone</th>
-          <th style="min-width:80px">Type</th>
-          <th style="min-width:55px">Port</th>
-          <th style="min-width:65px">Protocol</th>
-          <th style="min-width:90px">Direction</th>
-          <th style="min-width:160px">Purpose</th>
-          <th style="min-width:130px">Level</th>
-          <th style="min-width:180px">Notes / Override</th>
-        </tr>
-      </thead>
-      <tbody id="sa-tbody">
-        <tr><td colspan="11" style="color:#6b7280;text-align:center;padding:2.5rem">
-          Load Communication Profiles to begin editing.
-        </td></tr>
-      </tbody>
-    </table>
+  <div id="sa-rules-container" style="border-top:1px solid #2e2e2e">
+    <div style="padding:2rem;text-align:center;color:#6b7280">Load Communication Profiles to begin editing.</div>
   </div>
 </div>
 
@@ -146,36 +123,59 @@
 </div>
 
 <style>
-/* ── Security Architecture editable grid ─────────────────────────────────── */
-#sa-table td { vertical-align: middle; }
-#sa-table thead th { position: sticky; top: 0; background: #222; z-index: 1; }
-#sa-table tr.sa-excl { opacity: 0.35; }
-#sa-table tr.sa-no-profile { opacity: 0.5; }
-/* Notes cell */
-.sa-note-cell { cursor: text; min-width: 160px; }
-.sa-note-cell .sa-note-view {
-  min-height: 20px; padding: 2px 4px; color: #6b7280; font-size: 11px;
-  font-style: italic; white-space: pre-wrap; word-break: break-word;
+/* ── Security Architecture accordion ─────────────────────────────────────── */
+.sa-card { border-bottom: 1px solid #1e1e1e; }
+.sa-card:last-child { border-bottom: none; }
+.sa-card-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; cursor: pointer; user-select: none;
+  background: #1a1a1a; transition: background 0.1s;
 }
-.sa-note-cell .sa-note-view.has-note { color: #d1d5db; font-style: normal; }
-.sa-note-cell input {
-  width: 100%; padding: 3px 6px; background: #0f172a;
-  border: 1px solid #3b82f6; border-radius: 3px;
-  color: #e2e8f0; font-size: 11px; outline: none; box-sizing: border-box;
+.sa-card-header:hover { background: #202020; }
+.sa-card-header.open { background: #1e1e1e; }
+.sa-chevron { font-size: 9px; color: #4b5563; flex-shrink: 0; width: 10px; }
+.sa-dev-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.sa-dev-meta { font-size: 11px; color: #4b5563; margin-top: 1px; }
+.sa-dev-ip { font-family: monospace; color: #6b7280; }
+.sa-dev-meta .sep { margin: 0 5px; }
+.sa-pill { font-size: 10px; padding: 1px 7px; border-radius: 999px; font-weight: 500; flex-shrink: 0; }
+.sa-pill-min { background: #1a0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+.sa-pill-rec { background: #1a1200; color: #f59e0b; border: 1px solid #78350f; }
+.sa-pill-excl { background: #111; color: #4b5563; border: 1px solid #222; }
+.sa-dev-acts { display: flex; gap: 5px; flex-shrink: 0; }
+/* Rule grid: ☑ | Port | Proto | Dir | Purpose | Level | Notes */
+.sa-rule-cols {
+  display: grid;
+  grid-template-columns: 28px 68px 68px 82px 1fr 138px 190px;
+  align-items: center;
 }
+.sa-rule-header { background: #141414; border-bottom: 1px solid #1e1e1e; }
+.sa-rule-header > div { padding: 4px 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #374151; }
+.sa-rule-row { border-bottom: 1px solid #111; }
+.sa-rule-row:last-child { border-bottom: none; }
+.sa-rule-row:hover > div { background: #161616; }
+.sa-rule-cell { padding: 5px 8px; font-size: 11px; color: #d1d5db; }
+.sa-rule-check { display: flex; align-items: center; justify-content: center; padding: 5px 4px; }
+.sa-rule-port { font-family: monospace; font-size: 13px; font-weight: 700; color: #7a9cb8; }
+.sa-rule-proto { color: #9ca3af; }
+.sa-rule-dir { color: #6b7280; }
+/* Notes */
+.sa-note-cell { cursor: text; }
+.sa-note-view { min-height: 18px; color: #374151; font-size: 11px; font-style: italic; }
+.sa-note-view.has-note { color: #d1d5db; font-style: normal; }
+.sa-note-cell input { width: 100%; padding: 2px 5px; background: #0f172a; border: 1px solid #3b82f6; border-radius: 3px; color: #e2e8f0; font-size: 11px; outline: none; box-sizing: border-box; }
 /* Level select */
-.sa-lvl {
-  padding: 3px 6px; font-size: 11px; background: #1a1a1a;
-  border: 1px solid #374151; border-radius: 4px; color: #e2e8f0;
-  width: 100%; cursor: pointer; outline: none;
-}
+.sa-lvl { padding: 3px 6px; font-size: 11px; background: #1a1a1a; border: 1px solid #374151; border-radius: 4px; color: #e2e8f0; width: 100%; cursor: pointer; outline: none; }
 .sa-lvl:focus { border-color: #3b82f6; }
 .sa-lvl.lv-min { border-color: #7f1d1d; color: #f87171; background: #1a0a0a; }
 .sa-lvl.lv-rec { border-color: #78350f; color: #f59e0b; background: #1a1200; }
 .sa-lvl.lv-exc { border-color: #1e1e1e; color: #4b5563; background: #111; }
-/* Stripe & device separator */
-#sa-table tr.device-first > td { border-top: 1px solid #2e2e2e; }
-#sa-table tr > td:first-child { border-top: none !important; }
+/* Excluded section */
+.sa-excl-sep { padding: 4px 14px; font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #2e2e2e; background: #0f0f0f; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; gap: 8px; }
+.sa-excl-sep::after { content: ''; flex: 1; height: 1px; background: #1e1e1e; }
+.sa-excl-row { opacity: 0.38; }
+.sa-excl-row:hover > div { background: #111 !important; }
+.sa-card-body { background: #111111; }
 </style>
 
 <script>
@@ -186,6 +186,7 @@ let saFiltered = [];   // currently visible (post-filter)
 let saDirty    = false;
 let saSourceTs = null; // ISO string: when comm profiles were generated
 let saSavedTs  = null; // human-readable: when SA was last saved
+let saExpanded = new Set(); // IP keys of expanded device cards
 
 function _esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -385,13 +386,14 @@ function resetSaFilters(){
   renderSaTable();
 }
 
-// ── Render editable table ─────────────────────────────────────────────────────
+// ── Render accordion ──────────────────────────────────────────────────────────
 function renderSaTable(){
-  const tbody = document.getElementById('sa-tbody'); if(!tbody) return;
+  const container = document.getElementById('sa-rules-container'); if(!container) return;
+  const rc = document.getElementById('sa-row-count');
 
   if(!saRows.length){
-    tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:2.5rem">No rules loaded. Press "Load from Communication Profiles".</td></tr>';
-    document.getElementById('sa-row-count').textContent = '—';
+    container.innerHTML = '<div style="padding:2rem;text-align:center;color:#6b7280">No rules loaded. Press "Load from Communication Profiles".</div>';
+    if(rc) rc.textContent = '—';
     return;
   }
 
@@ -414,68 +416,128 @@ function renderSaTable(){
     return true;
   });
 
-  document.getElementById('sa-row-count').textContent = saFiltered.length + ' of ' + saRows.length + ' rules';
+  if(rc) rc.textContent = saFiltered.length + ' of ' + saRows.length + ' rules';
 
   if(!saFiltered.length){
-    tbody.innerHTML = '<tr><td colspan="11" style="color:#6b7280;text-align:center;padding:1.5rem">No rules match the current filters.</td></tr>';
+    container.innerHTML = '<div style="padding:1.5rem;text-align:center;color:#6b7280">No rules match the current filters.</div>';
     return;
   }
 
-  let prevDev = null;
-  const html = saFiltered.map(row => {
-    const isNew   = row.device_name !== prevDev;
-    prevDev = row.device_name;
+  // Group by IP, preserving first-occurrence order
+  const groupKeys = [];
+  const groups = {};
+  saFiltered.forEach(row => {
+    const key = row.ip || row.device_name;
+    if(!groups[key]){
+      groupKeys.push(key);
+      groups[key] = { ip: row.ip, device_name: row.device_name, zone: row.zone, device_type: row.device_type, rows: [] };
+    }
+    groups[key].rows.push(row);
+  });
 
-    const excl    = !row.included || row.requirement_level === 'excluded';
-    const rid     = _esc(row._rowId);
-    const lvl     = row.requirement_level || 'recommended';
-    const lvlClass = lvl === 'min_required' ? 'lv-min' : lvl === 'recommended' ? 'lv-rec' : 'lv-exc';
-    const lvlLabel = lvl === 'min_required' ? 'Min Required' : lvl === 'recommended' ? 'Recommended' : 'Excluded';
+  let html = '';
+  groupKeys.forEach(key => {
+    const grp     = groups[key];
+    const isOpen  = saExpanded.has(key);
+    const inclRows = grp.rows.filter(r => r.included && r.requirement_level !== 'excluded');
+    const exclRows = grp.rows.filter(r => !r.included || r.requirement_level === 'excluded');
+    const mins    = inclRows.filter(r => r.requirement_level === 'min_required').length;
+    const recs    = inclRows.filter(r => r.requirement_level === 'recommended').length;
 
-    // Level select
-    const levelSel = '<select class="sa-lvl ' + lvlClass + '" data-row-id="' + rid + '" onchange="saChangeLevel(this)">'
-      + '<option value="min_required"' + (lvl==='min_required'?' selected':'') + '>Min Required</option>'
-      + '<option value="recommended"'  + (lvl==='recommended' ?' selected':'') + '>Recommended</option>'
-      + '<option value="excluded"'     + (lvl==='excluded'    ?' selected':'') + '>Excluded</option>'
-      + '</select>';
+    let pills = '';
+    if(mins) pills += '<span class="sa-pill sa-pill-min">' + mins + ' min req</span>';
+    if(recs) pills += '<span class="sa-pill sa-pill-rec">' + recs + ' rec</span>';
+    if(exclRows.length) pills += '<span class="sa-pill sa-pill-excl">' + exclRows.length + ' excl</span>';
 
-    // Notes cell
-    const noteHtml = row.notes
-      ? '<div class="sa-note-view has-note">' + _esc(row.notes) + '</div>'
-      : '<div class="sa-note-view">Add note…</div>';
-    const noteCell = '<td class="sa-note-cell" data-row-id="' + rid + '" onclick="saEditNote(this)">' + noteHtml + '</td>';
+    const safeKey = _esc(key);
 
-    // Device cell: full on first occurrence, indent arrow on subsequent
-    const deviceCell = isNew
-      ? '<td class="' + (isNew ? 'device-first' : '') + '" style="font-size:12px;font-weight:600;color:#e2e8f0">'
-          + _esc(row.device_name)
-          + '<div style="font-size:9px;color:#6b7280;font-weight:400;font-family:monospace;margin-top:1px">' + _esc(row.confidence) + '</div>'
-          + '</td>'
-      : '<td style="font-size:11px;color:#374151;padding-left:16px">↳</td>';
+    html += '<div class="sa-card">';
+    // ── Device header ──
+    html += '<div class="sa-card-header' + (isOpen ? ' open' : '') + '" data-dev-key="' + safeKey + '">';
+    html += '<span class="sa-chevron">' + (isOpen ? '▾' : '▶') + '</span>';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div class="sa-dev-name">' + _esc(grp.device_name) + '</div>';
+    html += '<div class="sa-dev-meta"><span class="sa-dev-ip">' + _esc(grp.ip) + '</span>';
+    if(grp.zone)        html += '<span class="sep">·</span>' + _esc(grp.zone);
+    if(grp.device_type) html += '<span class="sep">·</span>' + _esc(grp.device_type);
+    html += '</div></div>';
+    html += '<div style="display:flex;gap:5px;align-items:center">' + pills + '</div>';
+    html += '<div class="sa-dev-acts">';
+    html += '<button class="btn" style="font-size:11px;padding:3px 8px" data-dev-key="' + safeKey + '" data-action="include">✓ All</button>';
+    html += '<button class="btn" style="font-size:11px;padding:3px 8px" data-dev-key="' + safeKey + '" data-action="exclude">✗ Excl</button>';
+    html += '</div></div>';
 
-    const rowClass = excl ? 'sa-excl' : (row._no_profile ? 'sa-no-profile' : '');
+    // ── Expanded body ──
+    if(isOpen){
+      html += '<div class="sa-card-body">';
+      html += '<div class="sa-rule-cols sa-rule-header"><div></div><div>Port</div><div>Protocol</div><div>Direction</div><div>Purpose</div><div>Level</div><div>Notes</div></div>';
+      if(inclRows.length){
+        inclRows.forEach(row => { html += _renderRuleRow(row, false); });
+      } else {
+        html += '<div style="padding:8px 14px;font-size:11px;color:#374151;font-style:italic">No included rules — use ✓ All or change Level to include rules.</div>';
+      }
+      if(exclRows.length){
+        html += '<div class="sa-excl-sep"><span>Not in deliverable</span><span>· ' + exclRows.length + ' rule' + (exclRows.length === 1 ? '' : 's') + '</span></div>';
+        exclRows.forEach(row => { html += _renderRuleRow(row, true); });
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  });
 
-    return '<tr class="' + rowClass + (isNew ? ' device-first' : '') + '" data-row-id="' + rid + '">'
-      + '<td style="text-align:center;padding:5px 8px">'
-      +   '<input type="checkbox" data-row-id="' + rid + '" onchange="saToggleRow(this)"' + (row.included ? ' checked' : '') + '>'
-      + '</td>'
-      + deviceCell
-      + '<td style="font-family:monospace;font-size:11px;color:#9ca3af">'
-      +   '<a href="http://' + _esc(row.ip) + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted" onclick="event.stopPropagation()">' + _esc(row.ip) + '</a>'
-      + '</td>'
-      + '<td style="font-size:11px">' + _esc(row.zone || '—') + '</td>'
-      + '<td style="font-size:11px;color:#9ca3af">' + _esc(row.device_type || '—') + '</td>'
-      + '<td style="font-family:monospace;font-size:13px;font-weight:700;color:#7a9cb8">' + _esc(String(row.port)) + '</td>'
-      + '<td style="font-size:11px">' + _esc(row.protocol) + '</td>'
-      + '<td style="font-size:11px;color:#9ca3af">' + _esc(row.direction) + '</td>'
-      + '<td style="font-size:11px">' + _esc(row.purpose) + '</td>'
-      + '<td style="padding:4px 8px;min-width:130px">' + levelSel + '</td>'
-      + noteCell
-      + '</tr>';
-  }).join('');
-
-  tbody.innerHTML = html;
+  container.innerHTML = html;
   updateSaStats();
+
+  // Attach click handlers via delegation (avoids JSON.stringify quoting issues)
+  container.querySelectorAll('.sa-card-header').forEach(hdr => {
+    hdr.addEventListener('click', () => saToggleDevice(hdr.dataset.devKey));
+  });
+  container.querySelectorAll('.sa-dev-acts button').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      saDevToggleAll(btn.dataset.devKey, btn.dataset.action === 'include');
+    });
+  });
+}
+
+// ── Device accordion helpers ──────────────────────────────────────────────────
+function saToggleDevice(key){
+  if(saExpanded.has(key)) saExpanded.delete(key); else saExpanded.add(key);
+  renderSaTable();
+}
+
+function saDevToggleAll(key, enabled){
+  saRows.filter(r => (r.ip || r.device_name) === key).forEach(r => { r.included = !!enabled; });
+  _markDirty();
+  renderSaTable();
+}
+
+function _renderRuleRow(row, isExcl){
+  const rid      = _esc(row._rowId);
+  const lvl      = row.requirement_level || 'recommended';
+  const lvlClass = lvl === 'min_required' ? 'lv-min' : lvl === 'recommended' ? 'lv-rec' : 'lv-exc';
+
+  const levelSel = '<select class="sa-lvl ' + lvlClass + '" data-row-id="' + rid + '" onchange="saChangeLevel(this)">'
+    + '<option value="min_required"' + (lvl === 'min_required' ? ' selected' : '') + '>Min Required</option>'
+    + '<option value="recommended"'  + (lvl === 'recommended'  ? ' selected' : '') + '>Recommended</option>'
+    + '<option value="excluded"'     + (lvl === 'excluded'     ? ' selected' : '') + '>Excluded</option>'
+    + '</select>';
+
+  const noteHtml = row.notes
+    ? '<div class="sa-note-view has-note">' + _esc(row.notes) + '</div>'
+    : '<div class="sa-note-view">add note…</div>';
+
+  const rowCls = 'sa-rule-cols sa-rule-row' + (isExcl ? ' sa-excl-row' : '');
+
+  return '<div class="' + rowCls + '">'
+    + '<div class="sa-rule-check"><input type="checkbox" data-row-id="' + rid + '" onchange="saToggleRow(this)"' + (row.included ? ' checked' : '') + '></div>'
+    + '<div class="sa-rule-cell sa-rule-port">'    + _esc(String(row.port))    + '</div>'
+    + '<div class="sa-rule-cell sa-rule-proto">'   + _esc(row.protocol)        + '</div>'
+    + '<div class="sa-rule-cell sa-rule-dir">'     + _esc(row.direction)       + '</div>'
+    + '<div class="sa-rule-cell">'                 + _esc(row.purpose)         + '</div>'
+    + '<div class="sa-rule-cell" style="padding:4px 8px">' + levelSel          + '</div>'
+    + '<div class="sa-rule-cell sa-note-cell" data-row-id="' + rid + '" onclick="saEditNote(this)">' + noteHtml + '</div>'
+    + '</div>';
 }
 
 // ── Row interactions ──────────────────────────────────────────────────────────
@@ -487,29 +549,16 @@ function saToggleRow(cb){
   const rid = cb.getAttribute('data-row-id');
   const row = _rowByRid(rid); if(!row) return;
   row.included = cb.checked;
-  const tr = cb.closest('tr');
-  if(tr){
-    const excl = !row.included || row.requirement_level === 'excluded';
-    tr.className = (tr.className || '').replace(/\bsa-excl\b/g,'').trim();
-    if(excl) tr.className = (tr.className + ' sa-excl').trim();
-  }
-  updateSaStats();
   _markDirty();
+  renderSaTable();
 }
 
 function saChangeLevel(sel){
   const rid = sel.getAttribute('data-row-id');
   const row = _rowByRid(rid); if(!row) return;
   row.requirement_level = sel.value;
-  sel.className = 'sa-lvl ' + (sel.value==='min_required'?'lv-min':sel.value==='recommended'?'lv-rec':'lv-exc');
-  const tr = sel.closest('tr');
-  if(tr){
-    const excl = !row.included || row.requirement_level === 'excluded';
-    tr.className = (tr.className || '').replace(/\bsa-excl\b/g,'').trim();
-    if(excl) tr.className = (tr.className + ' sa-excl').trim();
-  }
-  updateSaStats();
   _markDirty();
+  renderSaTable();
 }
 
 function saEditNote(td){
