@@ -213,7 +213,19 @@ function updateRequirementsViewNote(){
   note.textContent = activeRequirementTab + ' view' + _tsLabel + ' — press Generate to refresh.';
 }
 
-function renderUnmappedDevices(){
+let _unmapDeviceTypes = null; // cached from API
+
+async function _loadUnmapDeviceTypes(){
+  if(_unmapDeviceTypes) return _unmapDeviceTypes;
+  try {
+    const res = await fetch('/tools/api/device_types');
+    const data = await res.json();
+    _unmapDeviceTypes = (res.ok && data.ok && Array.isArray(data.device_types)) ? data.device_types : [];
+  } catch(e) { _unmapDeviceTypes = []; }
+  return _unmapDeviceTypes;
+}
+
+async function renderUnmappedDevices(){
   const el = document.getElementById('requirements-unmapped');
   if(!el) return;
 
@@ -234,20 +246,75 @@ function renderUnmappedDevices(){
     return;
   }
 
-  let html = '<div style="margin-bottom:8px;color:#d1d5db">Some devices do not yet have a mapped requirement template. '
-    + '<a href="/tools/intake" style="color:#3b82f6;text-decoration:underline">Assign types in Intake</a> to generate requirements for these devices.</div>';
-  html += '<table><thead><tr><th>Device</th><th>IP</th><th>Type</th><th>Status</th></tr></thead><tbody>';
+  const types = await _loadUnmapDeviceTypes();
+  const datalistHtml = '<datalist id="unmap-type-datalist">'
+    + types.map(dt => {
+        const hint = dt.display_name + (dt.category ? ' — ' + dt.category : '');
+        return '<option value="' + escapeHtml(dt.id) + '">' + escapeHtml(hint) + '</option>';
+      }).join('')
+    + '</datalist>';
+
+  let html = '<div style="margin-bottom:8px;color:#9ca3af;font-size:12px">Assign a device type to generate communication profile requirements.</div>';
+  html += datalistHtml;
+  html += '<table><thead><tr><th>Device</th><th>IP</th><th>Current Type</th><th>Assign Type</th></tr></thead><tbody>';
   unmappedDevices.forEach(item => {
+    const deviceId = item.device_id || item.ip || '';
+    const safeAttr = deviceId.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     html += '<tr>'
       + '<td>' + escapeHtml(item.name || '(unnamed)') + '</td>'
       + '<td style="font-family:monospace">' + escapeHtml(item.ip || '-') + '</td>'
-      + '<td>' + escapeHtml(item.effective_type || item.type || 'unknown') + '</td>'
-      + '<td style="color:#d1d5db">No mapped requirement template yet — '
-      + '<a href="/tools/intake" style="color:#3b82f6">assign type in Intake</a></td>'
+      + '<td style="color:#6b7280">' + escapeHtml(item.effective_type || item.type || 'unknown') + '</td>'
+      + '<td>'
+      + '<div style="display:flex;gap:6px;align-items:center">'
+      + '<input class="unmap-type-input" list="unmap-type-datalist" data-device-id="' + safeAttr + '" '
+      + 'placeholder="e.g. qsys, barco-encoder" autocomplete="off" '
+      + 'style="flex:1;font-size:12px;padding:4px 8px;background:#111;border:1px solid #374151;border-radius:4px;color:#e2e8f0;min-width:0">'
+      + '<button class="unmap-save-btn" data-device-id="' + safeAttr + '" '
+      + 'style="font-size:11px;padding:4px 10px;background:#1e2e1e;color:#9ca3af;border:1px solid #16a34a;border-radius:4px;cursor:pointer;white-space:nowrap">Save</button>'
+      + '</div>'
+      + '<div class="unmap-status" data-device-id="' + safeAttr + '" style="font-size:11px;color:#6b7280;margin-top:3px"></div>'
+      + '</td>'
       + '</tr>';
   });
   html += '</tbody></table>';
   el.innerHTML = html;
+
+  el.querySelectorAll('.unmap-save-btn').forEach(btn => {
+    btn.addEventListener('click', () => _doAssignUnmappedType(btn.dataset.deviceId, el));
+  });
+  el.querySelectorAll('.unmap-type-input').forEach(input => {
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter') _doAssignUnmappedType(input.dataset.deviceId, el);
+    });
+  });
+}
+
+async function _doAssignUnmappedType(deviceId, containerEl){
+  const escapedId = CSS.escape(deviceId);
+  const input = containerEl.querySelector('.unmap-type-input[data-device-id="' + escapedId + '"]');
+  const statusEl = containerEl.querySelector('.unmap-status[data-device-id="' + escapedId + '"]');
+  if(!input) return;
+  const raw = input.value.trim();
+  if(!raw){ if(statusEl){ statusEl.textContent = 'Enter a type first.'; } return; }
+  const normalized = raw.toLowerCase().replace(/\s+/g, '-');
+  if(statusEl){ statusEl.textContent = 'Saving…'; statusEl.style.color = '#9ca3af'; }
+
+  try {
+    const res = await fetch('/tools/api/devices/' + encodeURIComponent(deviceId) + '/type', {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({type: normalized})
+    });
+    const data = await res.json();
+    if(!data.ok){
+      if(statusEl){ statusEl.textContent = 'Error: ' + (data.error || 'failed'); statusEl.style.color = '#d1d5db'; }
+      return;
+    }
+    if(statusEl){ statusEl.textContent = 'Saved — regenerating…'; statusEl.style.color = '#6b9e7a'; }
+    startRequirementsGeneration();
+  } catch(e) {
+    if(statusEl){ statusEl.textContent = 'Request failed'; statusEl.style.color = '#d1d5db'; }
+  }
 }
 
 function buildRequirementRowsFromResults(results){
