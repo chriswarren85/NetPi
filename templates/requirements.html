@@ -259,17 +259,19 @@ async function renderUnmappedDevices(){
   html += '<table><thead><tr><th>Device</th><th>IP</th><th>Current Type</th><th>Assign Type</th></tr></thead><tbody>';
   unmappedDevices.forEach(item => {
     const deviceId = item.device_id || item.ip || '';
+    const deviceIp = item.ip || deviceId;
     const safeAttr = deviceId.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const safeIpAttr = deviceIp.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
     html += '<tr>'
       + '<td>' + escapeHtml(item.name || '(unnamed)') + '</td>'
       + '<td style="font-family:monospace">' + escapeHtml(item.ip || '-') + '</td>'
       + '<td style="color:#6b7280">' + escapeHtml(item.effective_type || item.type || 'unknown') + '</td>'
       + '<td>'
       + '<div style="display:flex;gap:6px;align-items:center">'
-      + '<input class="unmap-type-input" list="unmap-type-datalist" data-device-id="' + safeAttr + '" '
+      + '<input class="unmap-type-input" list="unmap-type-datalist" data-device-id="' + safeAttr + '" data-device-ip="' + safeIpAttr + '" '
       + 'placeholder="e.g. qsys, barco-encoder" autocomplete="off" '
       + 'style="flex:1;font-size:12px;padding:4px 8px;background:#111;border:1px solid #374151;border-radius:4px;color:#e2e8f0;min-width:0">'
-      + '<button class="unmap-save-btn" data-device-id="' + safeAttr + '" '
+      + '<button class="unmap-save-btn" data-device-id="' + safeAttr + '" data-device-ip="' + safeIpAttr + '" '
       + 'style="font-size:11px;padding:4px 10px;background:#1e2e1e;color:#9ca3af;border:1px solid #16a34a;border-radius:4px;cursor:pointer;white-space:nowrap">Save</button>'
       + '</div>'
       + '<div class="unmap-status" data-device-id="' + safeAttr + '" style="font-size:11px;color:#6b7280;margin-top:3px"></div>'
@@ -280,16 +282,16 @@ async function renderUnmappedDevices(){
   el.innerHTML = html;
 
   el.querySelectorAll('.unmap-save-btn').forEach(btn => {
-    btn.addEventListener('click', () => _doAssignUnmappedType(btn.dataset.deviceId, el));
+    btn.addEventListener('click', () => _doAssignUnmappedType(btn.dataset.deviceId, btn.dataset.deviceIp, el));
   });
   el.querySelectorAll('.unmap-type-input').forEach(input => {
     input.addEventListener('keydown', e => {
-      if(e.key === 'Enter') _doAssignUnmappedType(input.dataset.deviceId, el);
+      if(e.key === 'Enter') _doAssignUnmappedType(input.dataset.deviceId, input.dataset.deviceIp, el);
     });
   });
 }
 
-async function _doAssignUnmappedType(deviceId, containerEl){
+async function _doAssignUnmappedType(deviceId, deviceIp, containerEl){
   const escapedId = CSS.escape(deviceId);
   const input = containerEl.querySelector('.unmap-type-input[data-device-id="' + escapedId + '"]');
   const statusEl = containerEl.querySelector('.unmap-status[data-device-id="' + escapedId + '"]');
@@ -300,7 +302,8 @@ async function _doAssignUnmappedType(deviceId, containerEl){
   if(statusEl){ statusEl.textContent = 'Saving…'; statusEl.style.color = '#9ca3af'; }
 
   try {
-    const res = await fetch('/tools/api/devices/' + encodeURIComponent(deviceId) + '/type', {
+    const lookupKey = deviceIp || deviceId;
+    const res = await fetch('/tools/api/devices/' + encodeURIComponent(lookupKey) + '/type', {
       method: 'PATCH',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({type: normalized})

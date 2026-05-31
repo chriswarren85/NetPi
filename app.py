@@ -8261,7 +8261,9 @@ def api_device_set_type(device_id):
         return jsonify({"ok": False, "error": "type required"}), 400
     devices = load_devices()
     target = next(
-        (d for d in devices if str(d.get("id") or d.get("name") or d.get("ip") or "") == device_id),
+        (d for d in devices if
+            str(d.get("id") or d.get("name") or d.get("ip") or "") == device_id
+            or (device_id and str(d.get("ip") or "") == device_id)),
         None
     )
     if target is None:
