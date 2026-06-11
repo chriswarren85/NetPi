@@ -1269,6 +1269,39 @@ def _run_discovery_job(job_id):
         )
 
 
+def _run_targeted_ip_scan_job(job_id, ips):
+    job = _get_discovery_job(job_id)
+    if not job:
+        return
+
+    ip_list_string = " ".join(ips)
+    _update_background_job(
+        job_id,
+        status="running",
+        message=f"Scanning {len(ips)} targeted IP(s)...",
+        error=""
+    )
+
+    try:
+        devices = _discover_hosts_for_subnet(ip_list_string, job_id=job_id, timeout_seconds=30)
+        final_job = _get_discovery_job(job_id)
+        if final_job and final_job.get("status") != "cancelled":
+            _update_background_job(
+                job_id,
+                status="completed",
+                message=f"Targeted scan complete: {len(devices)} host(s) found from {len(ips)} IP(s).",
+                error="",
+                results_updates={"devices": devices}
+            )
+    except Exception as exc:
+        _update_background_job(
+            job_id,
+            status="failed",
+            message=f"Targeted scan failed: {exc}",
+            error=str(exc)
+        )
+
+
 def find_dhcp_lease_file():
     lease_paths = [
         '/etc/pihole/dhcp.leases',
@@ -8000,6 +8033,33 @@ def discover_hosts():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/tools/api/lan_sheet/scan_ips", methods=["POST"])
+def lan_sheet_scan_ips():
+    ts = utc_now_iso()
+    data = request.json or {}
+    ips = data.get("ips")
+
+    if not isinstance(ips, list) or len(ips) == 0:
+        return jsonify({"ok": False, "error": "ips must be a non-empty list", "timestamp": ts}), 400
+
+    if len(ips) > 254:
+        return jsonify({"ok": False, "error": f"Too many IPs: maximum 254, got {len(ips)}", "timestamp": ts}), 400
+
+    validated_ips = []
+    for entry in ips:
+        if not isinstance(entry, str) or not entry.strip():
+            return jsonify({"ok": False, "error": "Each IP entry must be a non-empty string", "timestamp": ts}), 400
+        validated_ips.append(entry.strip())
+
+    target_label = f"targeted: {len(validated_ips)} IP{'s' if len(validated_ips) != 1 else ''}"
+    job = _create_discovery_job(target_label)
+    _start_background_job(_run_targeted_ip_scan_job, job["job_id"], validated_ips)
+
+    snap = _snapshot_discovery_job(_get_discovery_job(job["job_id"]))
+    snap["ok"] = True
+    return jsonify(snap), 202
 
 
 @app.route("/tools/api/discover_hosts/start", methods=["POST"])

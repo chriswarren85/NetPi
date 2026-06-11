@@ -36,8 +36,11 @@ def build_nmap_command(host, fast_scan=True):
     return ["sudo", "nmap"] + args
 
 
-def build_nmap_host_discovery_command(subnet, output_flag="-oG"):
-    command = ["nmap", "-sn", subnet, output_flag, "-"]
+def build_nmap_host_discovery_command(subnet, output_flag="-oG", scan_mode=None):
+    if scan_mode == "targeted":
+        command = ["nmap", "-Pn", "-p", "80,443,22,23,1710,41794,41795,50002,2202", subnet, output_flag, "-"]
+    else:
+        command = ["nmap", "-sn", subnet, output_flag, "-"]
     if is_windows():
         return command
     return ["sudo"] + command
