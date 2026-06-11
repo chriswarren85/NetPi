@@ -72,6 +72,32 @@ CHECK_EXPANDERS = {
     "sacn": ["port:5568"],
 }
 
+AV_CRITICAL_PORTS = {1710, 41794, 41795, 443, 80, 23, 50002, 2202, 22}
+
+
+def _classify_check_severity(check_name, status):
+    """Classify a validation check result by AV triage severity."""
+    if status == "pass":
+        return "info"
+    check = str(check_name or "").lower().strip()
+    if check == "ping":
+        return "critical"
+    port_num = None
+    for prefix in ("port:", "port_", "port ", "tcp:", "tcp_"):
+        if check.startswith(prefix):
+            try:
+                port_num = int(check[len(prefix):].split()[0])
+            except (ValueError, IndexError):
+                pass
+            break
+    if port_num is not None:
+        return "critical" if port_num in AV_CRITICAL_PORTS else "warning"
+    if check in ("http", "https", "http_title", "ssl"):
+        return "warning"
+    if "latency" in check:
+        return "warning"
+    return "info"
+
 
 def normalize_device_type(device_type):
     value = (device_type or "").strip().lower()
@@ -989,6 +1015,17 @@ def run_validation(device):
                     }
                 ))
 
+    for _cr in results:
+        if "severity" not in _cr:
+            _cr["severity"] = _classify_check_severity(_cr.get("check"), _cr.get("status"))
+
+    _sev_rank = {"critical": 0, "warning": 1, "info": 2}
+    _worst = "info"
+    for _cr in results:
+        _s = _cr.get("severity") or "info"
+        if _sev_rank.get(_s, 2) < _sev_rank.get(_worst, 2):
+            _worst = _s
+
     service_map = {}
     http_details = {}
     ssh_banner = ""
@@ -1033,6 +1070,7 @@ def run_validation(device):
         ),
         "results": results,
         "overall": summarize_results(results),
+        "worst_severity": _worst,
     }
 
 

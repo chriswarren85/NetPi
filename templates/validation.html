@@ -54,6 +54,8 @@
   </div>
 </div>
 
+<div id="validation-summary-bar" style="display:none;margin-bottom:16px"></div>
+
 <div class="panel">
   <div class="panel-header">
     <span>Validation Results</span>
@@ -168,6 +170,70 @@ function statusBadge(status){
   return '<span class="badge badge-blue">Unknown</span>';
 }
 
+function severityBadge(worst){
+  const cfg = {
+    critical: { label: '🔴 Critical', color: '#f87171' },
+    warning:  { label: '\uD83D\DFE1 Warning',  color: '#f59e0b' },
+    info:     { label: '\uD83D\DFE2 Pass',     color: '#22c55e' },
+  };
+  const c = cfg[worst] || cfg.info;
+  return '<span style="color:' + c.color + ';font-size:0.8rem;white-space:nowrap">' + c.label + '</span>';
+}
+
+function buildCheckRows(results){
+  return (results || []).map(function(r){
+    const sev = r.severity || 'info';
+    const sevColor = sev === 'critical' ? '#f87171' : sev === 'warning' ? '#f59e0b' : '#94a3b8';
+    const stColor = r.status === 'pass' ? '#22c55e' : r.status === 'fail' ? '#f87171' : '#f59e0b';
+    return '<div style="display:flex;gap:8px;font-size:0.8rem;margin:2px 0;flex-wrap:wrap">'
+      + '<span style="color:' + sevColor + ';min-width:64px">' + escapeHtml(sev) + '</span>'
+      + '<span style="color:#94a3b8;min-width:80px">' + escapeHtml(r.check || '') + '</span>'
+      + '<span style="color:' + stColor + ';min-width:40px">' + escapeHtml(r.status || '') + '</span>'
+      + '<span style="color:#64748b">' + escapeHtml(r.detail || '') + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function buildValidationSummaryBar(results){
+  let critical = 0, warning = 0, pass = 0;
+  (results || []).forEach(function(r){
+    const w = r.worst_severity || 'info';
+    if(w === 'critical') critical++;
+    else if(w === 'warning') warning++;
+    else pass++;
+  });
+  const total = (results || []).length;
+  if(!total) return '';
+  const criticalLink = critical > 0
+    ? ' <a href="#" onclick="scrollToFirstCritical();return false"'
+      + ' style="color:#f87171;text-decoration:none">jump to critical ›</a>'
+    : '';
+  return '<div style="padding:10px 16px;border-radius:6px;font-size:0.875rem;'
+    + 'background:#1a1d27;border:1px solid #2d3748;'
+    + 'display:flex;align-items:center;gap:16px;flex-wrap:wrap">'
+    + '<span style="color:#e2e8f0;font-weight:500">Validation complete</span>'
+    + '<span style="color:#22c55e">' + pass + ' passed</span>'
+    + (warning > 0 ? '<span style="color:#f59e0b">' + warning + ' warning' + (warning !== 1 ? 's' : '') + '</span>' : '')
+    + (critical > 0 ? '<span style="color:#f87171">' + critical + ' critical</span>' : '')
+    + criticalLink
+    + '</div>';
+}
+
+function scrollToFirstCritical(){
+  const el = document.querySelector('[data-worst-severity="critical"]');
+  if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateValidationSummaryBar(dataset){
+  const bar = document.getElementById('validation-summary-bar');
+  if(!bar) return;
+  const deviceResults = (dataset && dataset.validateAll && dataset.validateAll.results) || [];
+  if(!deviceResults.length){ bar.style.display = 'none'; return; }
+  const html = buildValidationSummaryBar(deviceResults);
+  bar.innerHTML = html;
+  bar.style.display = html ? 'block' : 'none';
+}
+
 function modePayload(mode){
   if(mode !== 'Restricted') return {};
   const vlans = (validationSettings && Array.isArray(validationSettings.vlans)) ? validationSettings.vlans : [];
@@ -222,6 +288,8 @@ function buildByDeviceRows(dataset){
         derived_from: 'POST /tools/api/validate_all',
         scope: item.ip || '',
         notes: checks ? (checks + ' check(s) evaluated.') : 'No checks returned for this device.',
+        worst_severity: item.worst_severity || 'info',
+        _rawDeviceResult: item,
       });
     });
     return rows;
@@ -445,6 +513,7 @@ function renderValidationRows(){
   const dataset = modeData[activeValidationMode] || {};
   const rows = getRowsForActiveView(dataset);
   updateModeCards(rows);
+  updateValidationSummaryBar(dataset);
 
   tbody.innerHTML = '';
   if(!rows.length){
@@ -455,11 +524,13 @@ function renderValidationRows(){
   rows.forEach((row, index) => {
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
+    if(row.worst_severity) tr.dataset.worstSeverity = row.worst_severity;
     const rowGlyph = expandedValidationIndex === index ? 'v ' : '> ';
+    const sevHtml = row.worst_severity ? (' ' + severityBadge(row.worst_severity)) : '';
     tr.innerHTML =
       '<td>' + escapeHtml(rowGlyph + row.target) + '</td>' +
       '<td>' + escapeHtml(row.expected_requirement) + '</td>' +
-      '<td>' + statusBadge(row.status) + '</td>' +
+      '<td>' + statusBadge(row.status) + sevHtml + '</td>' +
       '<td>' + escapeHtml(row.method_used) + '</td>' +
       '<td>' + escapeHtml(row.confidence) + '</td>' +
       '<td>' + escapeHtml(row.recommended_action) + '</td>';
@@ -474,6 +545,14 @@ function renderValidationRows(){
     tbody.appendChild(tr);
 
     if(expandedValidationIndex === index){
+      const rawChecks = row._rawDeviceResult && Array.isArray(row._rawDeviceResult.results)
+        ? row._rawDeviceResult.results : [];
+      const checkRowsHtml = rawChecks.length
+        ? '<div style="grid-column:1 / -1">'
+          + '<div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em;margin-bottom:4px">Check Detail</div>'
+          + buildCheckRows(rawChecks)
+          + '</div>'
+        : '';
       const detailTr = document.createElement('tr');
       detailTr.innerHTML =
         '<td colspan="6" style="padding:0;border-top:none;">'
@@ -485,6 +564,7 @@ function renderValidationRows(){
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Confidence</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.confidence) + '</div></div>'
         + '<div><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Scope</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.scope || '') + '</div></div>'
         + '<div style="grid-column:1 / -1"><div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.02em">Notes</div><div style="margin-top:2px;font-size:12px;color:#e5e7eb">' + escapeHtml(row.notes || '') + '</div></div>'
+        + checkRowsHtml
         + '</div></div></td>';
       tbody.appendChild(detailTr);
     }
