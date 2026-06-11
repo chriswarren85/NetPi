@@ -133,6 +133,21 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   <a href="http://192.168.1.50:8080" class="nav-item" target="_blank"><span class="nav-dot blue"></span>Pi-hole ↗</a>
 </div>
 <div class="main">
+  <div id="project-context-strip"
+       style="height:44px;display:flex;align-items:center;padding:0 16px;gap:16px;
+              font-size:0.8125rem;border-bottom:1px solid #2e2e2e;
+              background:#1a1a1a;color:#9ca3af;flex-shrink:0;
+              margin:-1.5rem -1.5rem 1.5rem -1.5rem">
+    <span id="ctx-project-name"
+          style="color:#e2e8f0;font-weight:500;white-space:nowrap">—</span>
+    <span id="ctx-device-count" style="white-space:nowrap">— devices</span>
+    <span id="ctx-lan-status" style="white-space:nowrap">—</span>
+    <span style="flex:1"></span>
+    <a href="/tools/settings"
+       style="color:#7a9cb8;text-decoration:none;white-space:nowrap;font-size:0.8rem">
+      Switch project
+    </a>
+  </div>
   {% block content %}{% endblock %}
 </div>
 <div id="toast-container"></div>
@@ -347,6 +362,42 @@ window.netpiStatus = (function(){
 fetch('/tools/api/project-name').then(r=>r.json()).then(d=>{
   if(d.name) document.getElementById('sidebar-project').textContent=d.name;
 });
+(function() {
+  function updateProjectStrip() {
+    fetch('/tools/api/project/status')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d.ok) return;
+        var nameEl = document.getElementById('ctx-project-name');
+        if (nameEl) {
+          var label = d.project_name || d.project_id || '—';
+          if (d.job_number) label += ' · ' + d.job_number;
+          nameEl.textContent = label;
+        }
+        var countEl = document.getElementById('ctx-device-count');
+        if (countEl) {
+          countEl.textContent = d.device_count + ' device' +
+            (d.device_count === 1 ? '' : 's');
+        }
+        var lsEl = document.getElementById('ctx-lan-status');
+        if (lsEl) {
+          if (d.lan_sheet_status === 'loaded') {
+            lsEl.textContent = '✓ LAN sheet (' + d.lan_sheet_count + ')';
+            lsEl.style.color = '#22c55e';
+          } else if (d.lan_sheet_status === 'empty') {
+            lsEl.textContent = '⚠ LAN sheet empty';
+            lsEl.style.color = '#f59e0b';
+          } else {
+            lsEl.textContent = '✗ No LAN sheet';
+            lsEl.style.color = '#f87171';
+          }
+        }
+      })
+      .catch(function() { /* silent — strip keeps placeholder values */ });
+  }
+  document.addEventListener('DOMContentLoaded', updateProjectStrip);
+  window._updateProjectStrip = updateProjectStrip;
+})();
 fetch('/tools/api/projects').then(r=>r.json()).then(d=>{
   if(!d || !d.ok) return;
   const select = document.getElementById('sidebar-project-switcher');
@@ -367,6 +418,7 @@ fetch('/tools/api/projects').then(r=>r.json()).then(d=>{
       alert((payload && payload.error) || 'Failed to switch project');
       return;
     }
+    if(window._updateProjectStrip) window._updateProjectStrip();
     window.location.reload();
   };
 });

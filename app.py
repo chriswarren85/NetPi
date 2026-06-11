@@ -6764,6 +6764,36 @@ def api_project_name():
     return jsonify({'name': name or ''})
 
 
+@app.route('/tools/api/project/status')
+def api_project_status():
+    s = load_settings()
+    devices = load_devices()
+    lan_sheet_path = _lan_sheet_file()
+
+    if not os.path.exists(lan_sheet_path):
+        lan_sheet_status = "missing"
+        lan_sheet_count = 0
+    else:
+        entries = _load_lan_sheet()
+        if entries:
+            lan_sheet_status = "loaded"
+            lan_sheet_count = len(entries)
+        else:
+            lan_sheet_status = "empty"
+            lan_sheet_count = 0
+
+    return jsonify({
+        "ok": True,
+        "project_id": get_active_project_id(),
+        "project_name": (s.get("project_name") or "").strip(),
+        "job_number": (s.get("job_number") or "").strip(),
+        "device_count": len(devices),
+        "lan_sheet_status": lan_sheet_status,
+        "lan_sheet_count": lan_sheet_count,
+        "timestamp": utc_now_iso()
+    })
+
+
 
 def _export_filename(stem):
     ts = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%dT%H%M%SZ")
