@@ -6687,8 +6687,7 @@ def api_sa_save():
             "source_ts": payload.get("source_ts"),
             "rows": rows,
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f)
+        safe_write_json(path, data)
         return jsonify({"ok": True, "saved": len(rows)})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
