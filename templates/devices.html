@@ -1,6 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}— Devices{% endblock %}
 {% block content %}
+<style>
+/* W23.1 — Device detail drawer */
+.drawer-section { margin-bottom: 20px; }
+.drawer-section-title {
+  font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #9ca3af;
+  margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #2e2e2e;
+}
+</style>
 <div class="page-title">Devices</div>
 <div class="page-sub">Define devices to check during diagnostics</div>
 <div id="success" class="success-msg">Device list saved.</div>
@@ -62,13 +71,9 @@
         <tr>
           <th>Name</th>
           <th>IP</th>
-          <th>MAC</th>
           <th>Type</th>
-          <th>VLAN</th>
-          <th>Freshness</th>
-          <th>Notes</th>
-          <th></th>
-          <th>Validation</th>
+          <th>Status</th>
+          <th style="width:30px"></th>
         </tr>
       </thead>
       <tbody id="device-table">
@@ -76,21 +81,12 @@
         <tr>
           <td>{{ d.name }}</td>
           <td style="font-family:monospace"><a href="http://{{ d.ip }}" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px">{{ d.ip }}</a></td>
-          <td style="font-family:monospace">{{ d.mac or d.mac_address or "—" }}</td>
           <td>{{ d.type }}</td>
-          <td>{{ d.vlan or "" }}</td>
-          <td>
-            <div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:#1a1a1a;color:#d1d5db">{{ d.freshness_label or "unknown" }}</div>
-            <div style="margin-top:6px;font-size:11px;line-height:1.4;color:#6b7280">Seen: {{ d.last_seen or "Never" }}</div>
-            <div style="font-size:11px;line-height:1.4;color:#6b7280">Reachable: {{ d.last_reachable or "Never" }}</div>
-            <div style="font-size:11px;line-height:1.4;color:#6b7280">First: {{ d.first_seen or "Unknown" }}</div>
-          </td>
-          <td style="color:#6b7280">{{ d.notes or "" }}</td>
-          <td><button class="btn btn-danger" onclick="removeDevice('{{ d.ip }}')">Remove</button></td>
-          <td></td>
+          <td><div style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;text-transform:capitalize;background:#1a1a1a;color:#d1d5db">{{ d.freshness_label or "unknown" }}</div></td>
+          <td style="text-align:center;color:#6b7280">›</td>
         </tr>
         {% else %}
-        <tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — use Device Intake to add or import inventory</td></tr>
+        <tr><td colspan="5" style="color:#4b5563;text-align:center;padding:1rem">No devices yet — use Device Intake to add or import inventory</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -439,6 +435,7 @@ let deviceActionProgressTimer = null;
 let deviceActionProgressStartedAt = 0;
 let activeDeviceActions = {};
 let expandedDeviceRows = {};
+var _devicesMap = {}; // W23.1: ip → device object, rebuilt by renderTable()
 
 function normalizeFreshnessLabel(value){
   const label = String(value || '').trim().toLowerCase();
@@ -1660,6 +1657,10 @@ function renderTable(){
   }
   tbody.innerHTML = '';
 
+  // W23.1: rebuild device map so drawer can look up any device by IP
+  _devicesMap = {};
+  deviceList.forEach(function(d) { if(d.ip) _devicesMap[String(d.ip).trim()] = d; });
+
   let filtered = deviceList.slice();
   if(filterVlan){
     filtered = filtered.filter(d => (d.vlan || '') === filterVlan);
@@ -1679,7 +1680,7 @@ function renderTable(){
     } else if(!filterVlan){
       emptyMessage = 'No devices in the master inventory yet. Use Device Intake to Add or Import, then run Fingerprint and Normalize as needed.';
     }
-    tbody.innerHTML = '<tr><td colspan="9" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#4b5563;text-align:center;padding:1rem">' + escapeHtml(emptyMessage) + '</td></tr>';
     return;
   }
 
@@ -1692,7 +1693,7 @@ function renderTable(){
 
   Object.keys(groups).sort().forEach(groupName => {
     const groupRow = document.createElement('tr');
-    groupRow.innerHTML = '<td colspan="9" style="background:#141414;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
+    groupRow.innerHTML = '<td colspan="5" style="background:#141414;color:#e5e7eb;font-weight:600">' + escapeHtml(groupName) + '</td>';
     tbody.appendChild(groupRow);
 
     groups[groupName].forEach(d => {
@@ -1708,8 +1709,9 @@ function renderTable(){
       const macRaw = String((d && (d.mac || d.mac_address)) || '').trim();
       const macNormalized = normalizeMacValue(macRaw);
       const macText = macNormalized || macRaw;
+      // W23.1: toggle glyph removed — row click now opens drawer
       const nameCellHtml =
-        '<div style="font-weight:500;color:#e5e7eb"><span style="display:inline-block;width:14px;color:#9ca3af">' + escapeHtml(toggleGlyph) + '</span>' + escapeHtml(d.name || '(unnamed device)') + '</div>';
+        '<div style="font-weight:500;color:#e5e7eb">' + escapeHtml(d.name || d.hostname || d.ip || '(unnamed)') + '</div>';
       const confidenceState = deriveConfidenceState(d, r, freshness.label);
       // Compact type token for the condensed row view
       const _effectiveTypeDisplay = normalizeTypeValue(
@@ -1741,27 +1743,26 @@ function renderTable(){
         + '<button class="btn" style="font-size:10px;padding:2px 7px" onclick="validateDevice(\'' + safeIp + '\')"' + validationButtonDisabled + '>' + escapeHtml(validationButtonText) + '</button>'
         + '</div>';
 
+      // W23.1: slimmed to 5 columns — MAC/VLAN/Notes/Remove/Validate moved to drawer
+      tr.dataset.deviceIp = deviceIp;
       tr.innerHTML =
         '<td>' + nameCellHtml + '</td>' +
         '<td style="font-family:monospace;font-size:12px;color:#9ca3af"><a href="http://' + escapeHtml(d.ip) + '" target="_blank" rel="noopener" style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" onclick="event.stopPropagation()">' + escapeHtml(d.ip) + '</a></td>' +
-        '<td style="font-family:monospace;font-size:12px;color:#d1d5db">' + (macText ? escapeHtml(macText) : '—') + (d.mac_conflict ? '<div style="margin-top:2px;font-size:10px;color:#d1d5db;font-family:inherit">Conflict</div>' : '') + '</td>' +
         '<td>' + typeCellHtml + '</td>' +
-        '<td>' + escapeHtml(d.vlan || '') + '</td>' +
         '<td>' + freshnessHtml + '</td>' +
-        '<td style="color:#6b7280">' + escapeHtml(d.notes || '') + '</td>' +
-        '<td><button class="btn btn-danger" onclick="removeDevice(\'' + safeIp + '\')">Remove</button></td>' +
-        '<td>' + validationHtml + '</td>';
+        '<td style="color:#6b7280;text-align:center;font-size:0.9rem;cursor:pointer">›</td>';
       tr.style.cursor = 'pointer';
       tr.addEventListener('click', (event) => {
         if(event.target && event.target.closest && event.target.closest('button, a, input, select, textarea, label')){
           return;
         }
-        expandedDeviceRows[deviceIp] = !expandedDeviceRows[deviceIp];
-        renderTable();
+        // W23.1: open drawer instead of inline expand
+        openDeviceDrawer(d);
       });
 
       tbody.appendChild(tr);
 
+      /* W23.1: inline expand replaced by right-side drawer — block preserved for reference
       if(isExpanded){
         const detailTr = document.createElement('tr');
         const suggestionObj = (r && r.type_suggestion && typeof r.type_suggestion === 'object')
@@ -1923,6 +1924,7 @@ function renderTable(){
         }
         tbody.appendChild(detailTr);
       }
+      end W23.1 comment block */
     });
   });
 }
@@ -2684,6 +2686,162 @@ loadTopologyData();
 loadDeviceTypeLibrary();
 if(window.location.hash === '#intake') showInventoryView('intake');
 
+// ── W23.1 Device Detail Drawer ────────────────────────────────────────────
+
+function openDeviceDrawer(device) {
+  document.getElementById('drawer-title').textContent =
+    device.name || device.hostname || device.ip || 'Device';
+  document.getElementById('drawer-body').innerHTML = buildDrawerBody(device);
+  document.getElementById('drawer-footer').innerHTML = buildDrawerFooter(device);
+  document.getElementById('device-drawer').style.transform = 'translateX(0)';
+  document.getElementById('drawer-backdrop').style.display = 'block';
+}
+
+function closeDeviceDrawer() {
+  document.getElementById('device-drawer').style.transform = 'translateX(100%)';
+  document.getElementById('drawer-backdrop').style.display = 'none';
+}
+
+document.getElementById('drawer-close')
+  ?.addEventListener('click', closeDeviceDrawer);
+document.getElementById('drawer-backdrop')
+  ?.addEventListener('click', closeDeviceDrawer);
+document.addEventListener('keydown', function(e) {
+  if(e.key === 'Escape') closeDeviceDrawer();
+});
+
+function buildDrawerBody(device) {
+  var r = validationResults[String(device.ip || '').trim()] || {};
+
+  function row(label, value) {
+    if(value === null || value === undefined || value === '') return '';
+    return '<div style="display:flex;gap:8px;margin-bottom:6px">'
+      + '<span style="color:#9ca3af;min-width:90px;flex-shrink:0">' + escapeHtml(label) + '</span>'
+      + '<span style="color:#e2e8f0;word-break:break-all">' + escapeHtml(String(value)) + '</span>'
+      + '</div>';
+  }
+
+  var sections = [];
+
+  // IDENTITY
+  var macRaw = String(((r.mac || r.mac_address) || (device.mac || device.mac_address)) || '').trim();
+  var macDisplay = normalizeMacValue(macRaw) || macRaw;
+  var macSrc = normalizeMacSourceValue((r.mac_source || device.mac_source), !!macDisplay);
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Identity</div>'
+    + row('IP', device.ip)
+    + row('Hostname', device.hostname)
+    + row('VLAN', device.vlan)
+    + '<div style="display:flex;gap:8px;margin-bottom:6px">'
+    + '<span style="color:#9ca3af;min-width:90px;flex-shrink:0">MAC</span>'
+    + '<span style="color:#e2e8f0;font-family:monospace;word-break:break-all">'
+    + escapeHtml(macDisplay || '—')
+    + (macSrc ? '<span style="margin-left:6px;font-size:10px;color:#6b7280">(' + escapeHtml(macSrc) + ')</span>' : '')
+    + '</span></div>'
+    + row('Vendor', device.vendor)
+    + row('Model', device.model)
+    + row('Firmware', device.firmware_version)
+    + row('Serial', device.serial)
+    + row('Room / Zone', device.room || device.zone)
+    + '</div>');
+
+  // CLASSIFICATION
+  var effectiveType = normalizeTypeValue((r.effective_type) || (device._resolved_type) || (device.effective_type) || device.type);
+  var suggestedType = normalizeTypeValue((r.suggested_type) || (device.suggested_type));
+  var confScore = (r.confidence_score !== undefined && r.confidence_score !== null) ? r.confidence_score : device.confidence_score;
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Classification</div>'
+    + row('Type', effectiveType || device.type)
+    + row('Suggested', suggestedType)
+    + (confScore !== null && confScore !== undefined ? row('Confidence', confScore + ' / 100') : '')
+    + '</div>');
+
+  // NETWORK EVIDENCE
+  var openPorts = (Array.isArray(r.open_ports) && r.open_ports.length) ? r.open_ports.join(', ')
+    : ((Array.isArray(device.open_ports) && device.open_ports.length) ? device.open_ports.join(', ') : null);
+  var deviceStatus = r.overall ? String(r.overall) : (device.status || (device.reachable ? 'online' : null));
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Network Evidence</div>'
+    + row('Status', deviceStatus)
+    + row('Open ports', openPorts)
+    + row('Last seen', device.last_seen || device.last_reachable)
+    + '</div>');
+
+  // NOTES (editable — reuses existing saveDeviceNotes)
+  var notesVal = device.notes || '';
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Notes</div>'
+    + '<textarea id="notes-' + escapeHtml(device.ip || '') + '" rows="3"'
+    + ' style="width:100%;background:#222222;border:1px solid #374151;border-radius:5px;'
+    + 'padding:6px 8px;color:#e2e8f0;font-size:12px;resize:vertical;box-sizing:border-box"'
+    + ' placeholder="Add notes for handover / client context...">'
+    + escapeHtml(notesVal)
+    + '</textarea>'
+    + '<button onclick="saveDeviceNotes(' + JSON.stringify(device.ip || '') + ')"'
+    + ' style="margin-top:4px;font-size:11px;padding:3px 10px;background:#1e1e1e;'
+    + 'color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;">Save notes</button>'
+    + '<span id="notes-status-' + escapeHtml(device.ip || '') + '"'
+    + ' style="margin-left:8px;font-size:11px;color:#9ca3af"></span>'
+    + '</div>');
+
+  return sections.join('');
+}
+
+function buildDrawerFooter(device) {
+  var safeIp = JSON.stringify(device.ip || '');
+  var btns = [];
+  btns.push('<button onclick="revalidateDevice(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #374151;'
+    + 'background:transparent;color:#e2e8f0;cursor:pointer;font-size:0.8rem">'
+    + '↺ Re-validate</button>');
+  btns.push('<button onclick="refingerprintDevice(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #374151;'
+    + 'background:transparent;color:#e2e8f0;cursor:pointer;font-size:0.8rem">'
+    + '⟳ Fingerprint</button>');
+  btns.push('<button onclick="removeDeviceFromDrawer(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #7f1d1d;'
+    + 'background:transparent;color:#f87171;cursor:pointer;font-size:0.8rem;margin-left:auto">'
+    + 'Remove</button>');
+  return btns.join('');
+}
+
+function revalidateDevice(ip) {
+  closeDeviceDrawer();
+  validateDevice(ip);
+}
+
+async function refingerprintDevice(ip) {
+  const d = _devicesMap[String(ip).trim()] || {};
+  closeDeviceDrawer();
+  try {
+    netpiStatus.post('Fingerprinting ' + ip + '…', 'running', 'DEVICES');
+    const res = await fetch('/tools/api/fingerprint_host', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ip, vendor: d.vendor || ''})
+    });
+    const data = await res.json();
+    if(data.ok || data.guessed_type) {
+      netpiStatus.post('Fingerprint complete: ' + ip, 'success');
+      const idx = deviceList.findIndex(x => x.ip === ip);
+      if(idx !== -1 && data.guessed_type) {
+        deviceList[idx] = Object.assign({}, deviceList[idx], {type: data.guessed_type});
+      }
+      renderTable();
+    } else {
+      netpiStatus.post('Fingerprint failed: ' + (data.error || 'Unknown error'), 'error');
+    }
+  } catch(e) {
+    netpiStatus.post('Fingerprint error: ' + e, 'error');
+  }
+}
+
+function removeDeviceFromDrawer(ip) {
+  if(!confirm('Remove ' + ip + ' from the device list?')) return;
+  closeDeviceDrawer();
+  removeDevice(ip);
+}
+
 // ── W20.1 Config Script Modal ─────────────────────────────────────────────
 
 function openConfigScriptModal(ip, event) {
@@ -2786,6 +2944,29 @@ function downloadConfigScript() {
     </div>
   </div>
 </div>
+
+<!-- W23.1: Device detail drawer -->
+<div id="device-drawer"
+     style="position:fixed;top:0;right:0;height:100vh;width:380px;
+            background:#1a1a1a;border-left:1px solid #2e2e2e;
+            box-shadow:-4px 0 24px rgba(0,0,0,0.4);z-index:200;
+            transform:translateX(100%);transition:transform 0.2s ease;
+            overflow-y:auto;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:16px;border-bottom:1px solid #2e2e2e;flex-shrink:0">
+    <span id="drawer-title"
+          style="font-weight:600;font-size:0.9375rem;color:#e2e8f0">Device</span>
+    <button id="drawer-close"
+            style="background:none;border:none;cursor:pointer;color:#9ca3af;
+                   font-size:1.25rem;padding:4px 8px;line-height:1">×</button>
+  </div>
+  <div id="drawer-body" style="padding:16px;flex:1;font-size:0.875rem"></div>
+  <div id="drawer-footer"
+       style="padding:16px;border-top:1px solid #2e2e2e;
+              display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0"></div>
+</div>
+<div id="drawer-backdrop"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:199"></div>
 
 {% endblock %}
 
