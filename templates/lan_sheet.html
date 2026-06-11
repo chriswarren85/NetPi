@@ -96,6 +96,11 @@
   min-width: 60px; box-sizing: border-box;
 }
 #lan-table tr.lc-new-row td { background: #0a1a0a; }
+.scan-status { font-size: 0.85em; white-space: nowrap; }
+.scan-status.online   { color: #22c55e; }
+.scan-status.offline  { color: #94a3b8; }
+.scan-status.scanning { color: #60a5fa; }
+.scan-status.error    { color: #f87171; }
 </style>
 <script>
 let lanEntries = [];
@@ -196,7 +201,7 @@ function buildThead(){
     const arrow = sortState.col === col.field ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : '';
     html += `<th style="width:${col.w};${s?'cursor:pointer;':''}white-space:nowrap"${s?` onclick="setSort('${col.field}')"`:''}>${escHtml(col.label)}${arrow}</th>`;
   });
-  html += `<th style="width:70px">Status</th><th style="width:68px"></th>`;
+  html += `<th style="width:70px">Status</th><th style="width:46px">Scan</th><th style="width:90px"></th><th style="width:68px"></th>`;
   tr.innerHTML = html;
 }
 
@@ -290,8 +295,10 @@ function buildEntryRow(e, rowIdx){
       + `<span class="lcv" style="${mono}color:${val?'#e5e7eb':'#374151'}">${val ? escHtml(val) : '—'}</span></td>`;
   });
 
-  // Status (read-only) + Remove button
+  // Status (read-only) + Scan button + Scan status + Remove button
   html += `<td style="white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present?'Present':'Missing'}</span></td>`;
+  html += `<td style="text-align:center;vertical-align:middle"><button class="btn btn-scan-ip" data-ip="${safeIp}" title="Scan this IP" style="font-size:13px;padding:1px 6px;line-height:1.4;min-width:28px">⟳</button></td>`;
+  html += `<td class="scan-status-cell" style="white-space:nowrap;vertical-align:middle"></td>`;
   html += `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${rawIp.replace(/'/g,"\\'")}')">Remove</button></td>`;
   html += '</tr>';
   return html;
@@ -301,7 +308,7 @@ function renderSheet(){
   buildThead();
   const tbody = document.getElementById('lan-tbody');
   const groupByRoom = document.getElementById('group-by-room').checked;
-  const colCount = LC_COLS.length + 2;
+  const colCount = LC_COLS.length + 4;
 
   document.getElementById('table-count').textContent =
     filtered.length + ' device' + (filtered.length !== 1 ? 's' : '') +
@@ -656,6 +663,103 @@ function lcAddRow(){
   // Activate first cell of the new last row
   setTimeout(() => _lcActivate(filtered.length - 1, 0), 40);
 }
+
+/* ─── Per-row IP scan ──────────────────────────────────────────────────────── */
+
+async function scanLanSheetIp(ip, rowEl) {
+  const btn = rowEl.querySelector('.btn-scan-ip');
+  const statusCell = rowEl.querySelector('.scan-status-cell');
+  if (!btn || !statusCell) return;
+
+  btn.disabled = true;
+  statusCell.innerHTML = '<span class="scan-status scanning">⟳ Scanning…</span>';
+
+  try {
+    const startRes = await fetch('/tools/api/lan_sheet/scan_ips', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ips: [ip] })
+    });
+    const startData = await startRes.json();
+    if (!startData.ok || !startData.job_id) {
+      statusCell.innerHTML = '<span class="scan-status error">✗ Error</span>';
+      btn.disabled = false;
+      return;
+    }
+    await pollScanJob(startData.job_id, ip, rowEl, statusCell, btn);
+  } catch (e) {
+    statusCell.innerHTML = '<span class="scan-status error">✗ Failed</span>';
+    btn.disabled = false;
+  }
+}
+
+async function pollScanJob(jobId, ip, rowEl, statusCell, btn) {
+  const MAX_POLLS = 60;
+  const INTERVAL_MS = 500;
+  for (let i = 0; i < MAX_POLLS; i++) {
+    await new Promise(r => setTimeout(r, INTERVAL_MS));
+    try {
+      const res = await fetch(`/tools/api/discover_hosts/status/${jobId}`);
+      const data = await res.json();
+      const status = data.status || '';
+      if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+        applyRowScanResult(data, ip, rowEl, statusCell, btn);
+        return;
+      }
+    } catch (e) { /* transient — keep polling */ }
+  }
+  statusCell.innerHTML = '<span class="scan-status error">✗ Timed out</span>';
+  btn.disabled = false;
+}
+
+function applyRowScanResult(data, ip, rowEl, statusCell, btn) {
+  btn.disabled = false;
+  const devices = data.devices || [];
+  const match = devices.find(d => (d.ip || '').trim() === ip.trim());
+
+  if (!match) {
+    statusCell.innerHTML = '<span class="scan-status offline">● No response</span>';
+    return;
+  }
+
+  statusCell.innerHTML = '<span class="scan-status online">● Online</span>';
+
+  if (match.hostname) {
+    const hostnameCell = rowEl.querySelector('[data-field="hostname"]');
+    if (hostnameCell) hostnameCell.querySelector('.lcv').textContent = match.hostname;
+    patchLanSheetField(ip, 'hostname', match.hostname);
+  }
+
+  if (match.vendor) {
+    const vendorCell = rowEl.querySelector('[data-field="vendor"]');
+    if (vendorCell) vendorCell.querySelector('.lcv').textContent = match.vendor;
+    patchLanSheetField(ip, 'vendor', match.vendor);
+  }
+
+  if (match.mac) {
+    const macCell = rowEl.querySelector('[data-field="mac"]');
+    if (macCell) macCell.querySelector('.lcv').textContent = match.mac;
+    // mac is not in the PATCH allowed list — display only
+  }
+}
+
+async function patchLanSheetField(ip, field, value) {
+  try {
+    await fetch('/tools/api/lan-sheet/entry', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip, field, value })
+    });
+  } catch (e) { /* best-effort — display already updated */ }
+}
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.btn-scan-ip');
+  if (!btn) return;
+  const row = btn.closest('tr');
+  const ip = btn.dataset.ip;
+  if (ip && row) scanLanSheetIp(ip, row);
+});
 
 loadSheet();
 </script>
