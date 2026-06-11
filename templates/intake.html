@@ -159,6 +159,12 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
           {% endfor %}
         </select>
       </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:6px">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.875rem;font-weight:normal">
+          <input type="checkbox" id="scan-all-vlans">
+          Scan all VLANs
+        </label>
+      </div>
       <div class="form-group">
         <label>Host / IP</label>
         <input id="checks-host" placeholder="e.g. 192.168.1.20 or hostname">
@@ -825,7 +831,8 @@ function stageAllDiscovered(){
 }
 
 async function discoverHostsForIntake(){
-  const vlan = getChecksVlan();
+  const scanAllVlans = document.getElementById('scan-all-vlans')?.checked;
+  const vlan = scanAllVlans ? '' : getChecksVlan();
   try {
     document.getElementById('checks-summary').textContent = 'Discovering hosts...';
     const res = await fetch('/tools/api/discover_hosts', {
@@ -968,5 +975,30 @@ function renderIntakeResults(){
 
 renderIntakeResults();
 loadDeviceTypeLibrary();
+
+/* ─── Scan-all-VLANs toggle ─────────────────────────────────────────────── */
+const SCAN_ALL_KEY = 'netpi.scan_all_vlans';
+
+(function() {
+  const saved = localStorage.getItem(SCAN_ALL_KEY);
+  const toggle = document.getElementById('scan-all-vlans');
+  const vlanSelect = document.getElementById('checks-vlan');
+  if (toggle && saved === 'true') {
+    toggle.checked = true;
+    if (vlanSelect) {
+      vlanSelect.disabled = true;
+      vlanSelect.style.opacity = '0.4';
+    }
+  }
+})();
+
+document.getElementById('scan-all-vlans')
+  ?.addEventListener('change', function() {
+    localStorage.setItem(SCAN_ALL_KEY, this.checked ? 'true' : 'false');
+    const vlanSelect = document.getElementById('checks-vlan');
+    if (!vlanSelect) return;
+    vlanSelect.disabled = this.checked;
+    vlanSelect.style.opacity = this.checked ? '0.4' : '';
+  });
 </script>
 {% endblock %}
