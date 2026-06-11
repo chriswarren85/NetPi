@@ -31,343 +31,381 @@
   "types": {
     "dante-audio": {
       "display_name": "Dante Audio Device",
-      "protocols": ["UDP", "TCP"],
+      "manufacturer": "Audinate",
+      "reference": "https://www.audinate.com/faq/which-network-ports-does-dante-use",
+      "protocols": ["UDP"],
       "required_ports": [
-        {"port": 4440, "protocol": "UDP", "direction": "bidirectional", "purpose": "Dante audio transport", "requirement_level": "min_required", "service": "dante-audio", "required": true},
-        {"port": 8700, "protocol": "UDP", "direction": "bidirectional", "purpose": "Dante device discovery (mDNS)", "requirement_level": "min_required", "service": "dante-discovery", "required": true},
-        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync", "requirement_level": "min_required", "service": "ptp-event", "required": true},
-        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (peer delay)", "requirement_level": "min_required", "service": "ptp-general", "required": true},
-        {"port": 14336,"protocol": "UDP", "direction": "bidirectional", "purpose": "Dante audio unicast flows", "requirement_level": "min_required", "service": "dante-unicast", "required": true},
-        {"port": 4321, "protocol": "UDP", "direction": "bidirectional", "purpose": "Dante AES67 control", "requirement_level": "recommended", "service": "dante-aes67", "required": false},
-        {"port": 8800, "protocol": "TCP", "direction": "inbound",       "purpose": "Dante Controller UI", "requirement_level": "recommended", "service": "dante-controller", "required": false}
+        {"port": 4440, "protocol": "UDP", "direction": "bidirectional", "purpose": "Dante audio transport (unicast and multicast)", "requirement_level": "min_required", "service": "dante-audio", "required": true},
+        {"port": 8700, "protocol": "UDP", "direction": "bidirectional", "purpose": "Dante device discovery and control", "requirement_level": "min_required", "service": "dante-discovery", "required": true},
+        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (event)", "requirement_level": "min_required", "service": "ptp-event", "required": true},
+        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (general)", "requirement_level": "min_required", "service": "ptp-general", "required": true}
       ],
       "required_services": ["audio-transport", "ptp-sync"],
       "multicast_required": true,
       "igmp_required": true,
       "vlan_recommendation": "Dedicated VLAN — Dante traffic must not share VLAN with general IT",
-      "av_justification": "Dante AoIP requires low-latency multicast-capable network with IGMP snooping enabled and no spanning tree interruptions",
-      "notes": ["IGMP snooping must be enabled on all switches carrying Dante traffic. Dante and AES67 require PTP grandmaster reachability."]
+      "av_justification": "Dante AoIP requires low-latency multicast-capable network with IGMP snooping enabled and no spanning tree interruptions. Verified ports per Audinate firewall documentation: UDP 4440 (audio), 8700 (discovery), 319/320 (PTP).",
+      "notes": ["IGMP snooping must be enabled on all switches carrying Dante traffic. PTP grandmaster must be reachable on the same VLAN. Dante unicast flows use port 4440; multicast flows use addresses in the 239.x.x.x range."]
     },
     "biamp-tesira": {
       "display_name": "Biamp Tesira DSP",
+      "manufacturer": "Biamp",
+      "reference": "https://support.biamp.com/Tesira/Control/Tesira_network_ports_and_protocols",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 23,  "protocol": "TCP", "direction": "inbound",       "purpose": "Telnet DSP control", "requirement_level": "recommended", "service": "telnet", "required": false},
         {"port": 443, "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and API", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 80,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (legacy)", "requirement_level": "recommended", "service": "http", "required": false},
-        {"port": 5004,"protocol": "UDP", "direction": "bidirectional", "purpose": "AES67 audio transport", "requirement_level": "min_required", "service": "aes67-audio", "required": true},
-        {"port": 319, "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync", "requirement_level": "min_required", "service": "ptp-event", "required": true},
-        {"port": 320, "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (peer delay)", "requirement_level": "min_required", "service": "ptp-general", "required": true}
+        {"port": 23,  "protocol": "TCP", "direction": "inbound",       "purpose": "Telnet DSP control (Crestron, Q-SYS, AMX integration)", "requirement_level": "recommended", "service": "telnet", "required": false},
+        {"port": 80,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (redirect to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false},
+        {"port": 5004,"protocol": "UDP", "direction": "bidirectional", "purpose": "AES67 audio transport (SMPTE ST 2110)", "requirement_level": "min_required", "service": "aes67-audio", "required": true},
+        {"port": 319, "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (event)", "requirement_level": "min_required", "service": "ptp-event", "required": true},
+        {"port": 320, "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (general)", "requirement_level": "min_required", "service": "ptp-general", "required": true}
       ],
       "required_services": ["audio-control", "management"],
       "multicast_required": true,
       "igmp_required": true,
       "vlan_recommendation": "AV Audio VLAN or dedicated DSP VLAN with IGMP snooping enabled",
-      "av_justification": "Biamp Tesira requires AES67 multicast audio transport and PTP sync. Telnet control port is used by Q-SYS and Crestron for DSP integration.",
-      "notes": ["Biamp/Tesira baseline includes optional legacy management ports. AES67 requires IGMP snooping on all switches."]
+      "av_justification": "Biamp Tesira requires AES67 multicast audio transport (UDP 5004) and PTP sync (UDP 319/320). Telnet port 23 is required for control system integration (Crestron, Q-SYS). HTTPS is required for Tesira Server-IO and Firmware Manager.",
+      "notes": ["AES67 requires IGMP snooping on all switches. Telnet (port 23) must be permitted from control processor IP only. Refer to Biamp support article for Tesira Server and EX expander port differences."]
     },
     "qsys-core": {
       "display_name": "Q-SYS Core DSP",
+      "manufacturer": "QSC",
+      "reference": "https://q-syshelp.qsc.com/q-sys_8.0/Content/Networking/Protocols.htm",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 1710, "protocol": "TCP", "direction": "inbound",       "purpose": "Q-SYS control protocol (QRC)", "requirement_level": "min_required", "service": "qsys-control", "required": true},
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and Q-SYS Designer UI", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (legacy/redirect)", "requirement_level": "recommended", "service": "http", "required": true},
-        {"port": 8443, "protocol": "TCP", "direction": "inbound",       "purpose": "Q-SYS secure API endpoint", "requirement_level": "recommended", "service": "qsys-secure-api", "required": false},
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "AES67 audio transport", "requirement_level": "recommended", "service": "aes67-audio", "required": false},
-        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync", "requirement_level": "recommended", "service": "ptp-event", "required": false},
-        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (peer delay)", "requirement_level": "recommended", "service": "ptp-general", "required": false}
+        {"port": 1710, "protocol": "TCP", "direction": "inbound",       "purpose": "Q-SYS control protocol (QRC) — required for all controller integration", "requirement_level": "min_required", "service": "qsys-control", "required": true},
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and Q-SYS Designer communication", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (redirects to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false},
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "AES67 audio transport (when AES67 licence is active)", "requirement_level": "recommended", "service": "aes67-audio", "required": false},
+        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (event) — required with AES67", "requirement_level": "recommended", "service": "ptp-event", "required": false},
+        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (general) — required with AES67", "requirement_level": "recommended", "service": "ptp-general", "required": false}
       ],
       "required_services": ["control", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV Control VLAN. If AES67 is used, ensure IGMP snooping is enabled.",
-      "av_justification": "Q-SYS Core is the central DSP and control hub. Port 1710 is required for all controller integration (Crestron, AMX, etc.).",
-      "notes": ["Core DSP/control endpoint requirements baseline."]
+      "vlan_recommendation": "AV Control VLAN. If AES67 is used, place on AV Audio VLAN with IGMP snooping enabled.",
+      "av_justification": "Q-SYS Core DSP requires TCP 1710 (QRC) for all control system integration (Crestron, AMX, Extron, third-party). Port 443 is used by Q-SYS Designer and Remote Management. AES67 ports (5004, 319, 320) only required when AES67 audio networking licence is active.",
+      "notes": ["QRC port 1710 must be open from all control processors, external control systems, and UCI panels. AES67 ports only apply when the AES67 Software Licence is installed on the Core."]
     },
     "crestron-processor": {
       "display_name": "Crestron Control Processor",
+      "manufacturer": "Crestron",
+      "reference": "https://support.crestron.com/",
       "protocols": ["TCP"],
       "required_ports": [
-        {"port": 41794, "protocol": "TCP", "direction": "inbound", "purpose": "Crestron IP (CIP) control protocol", "requirement_level": "min_required", "service": "cip", "required": true},
-        {"port": 41795, "protocol": "TCP", "direction": "inbound", "purpose": "Crestron secure CIP (secure-CIP)", "requirement_level": "min_required", "service": "secure-cip", "required": true},
-        {"port": 41796, "protocol": "TCP", "direction": "inbound", "purpose": "Crestron service port", "requirement_level": "recommended", "service": "crestron-service", "required": true},
-        {"port": 443,   "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management and web UI", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 41794, "protocol": "TCP", "direction": "inbound", "purpose": "Crestron IP (CIP) — touchpanel and device registration", "requirement_level": "min_required", "service": "cip", "required": true},
+        {"port": 41795, "protocol": "TCP", "direction": "inbound", "purpose": "Crestron Secure CIP — encrypted device registration", "requirement_level": "min_required", "service": "secure-cip", "required": true},
+        {"port": 41796, "protocol": "TCP", "direction": "inbound", "purpose": "Crestron Toolbox / programming direct connect", "requirement_level": "recommended", "service": "crestron-toolbox", "required": false},
+        {"port": 443,   "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI and XiO Cloud", "requirement_level": "min_required", "service": "https", "required": true},
         {"port": 22,    "protocol": "TCP", "direction": "inbound", "purpose": "SSH management access", "requirement_level": "recommended", "service": "ssh", "required": false},
-        {"port": 23,    "protocol": "TCP", "direction": "inbound", "purpose": "Telnet legacy management", "requirement_level": "recommended", "service": "telnet", "required": false}
+        {"port": 23,    "protocol": "TCP", "direction": "inbound", "purpose": "Telnet legacy management (disable if unused)", "requirement_level": "recommended", "service": "telnet", "required": false}
       ],
       "required_services": ["control", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV Control VLAN. Must have bidirectional access to all controlled AV endpoints.",
-      "av_justification": "Crestron control processor requires CIP ports for touchpanel and UC device registration. Must reach DSPs, displays, and cameras on the AV network.",
-      "notes": ["Control processor baseline for secure session and admin access."]
+      "vlan_recommendation": "AV Control VLAN. Must have bidirectional TCP access to all controlled AV endpoints.",
+      "av_justification": "Crestron control processors require CIP ports 41794/41795 for touchpanel, UC device, and peripheral registration. Port 443 is required for web management and XiO Cloud connectivity. Port 41796 is used only during programming via Crestron Toolbox.",
+      "notes": ["CIP (41794) is unencrypted — prefer Secure CIP (41795) in security-conscious deployments. Disable Telnet (23) if not required. Processor must be able to initiate outbound TCP to all controlled devices."]
     },
     "crestron-touchpanel": {
       "display_name": "Crestron Touch Panel",
+      "manufacturer": "Crestron",
+      "reference": "https://support.crestron.com/",
       "protocols": ["TCP"],
       "required_ports": [
-        {"port": 443,   "protocol": "TCP", "direction": "outbound", "purpose": "HTTPS to Crestron control processor", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 80,    "protocol": "TCP", "direction": "outbound", "purpose": "HTTP to control processor (legacy)", "requirement_level": "recommended", "service": "http", "required": false},
-        {"port": 41795, "protocol": "TCP", "direction": "outbound", "purpose": "Secure CIP session to control processor", "requirement_level": "min_required", "service": "secure-cip", "required": true}
+        {"port": 41795, "protocol": "TCP", "direction": "outbound", "purpose": "Secure CIP session to Crestron control processor", "requirement_level": "min_required", "service": "secure-cip", "required": true},
+        {"port": 443,   "protocol": "TCP", "direction": "outbound", "purpose": "HTTPS to Crestron control processor / XiO Cloud", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,    "protocol": "TCP", "direction": "outbound", "purpose": "HTTP to control processor (legacy)", "requirement_level": "recommended", "service": "http", "required": false}
       ],
       "required_services": ["ui", "management"],
       "multicast_required": false,
       "igmp_required": false,
       "vlan_recommendation": "AV Control VLAN. Must reach Crestron control processor on same or adjacent VLAN.",
-      "av_justification": "Crestron touch panel connects to control processor via CIP. Typically placed on AV Control VLAN alongside the processor.",
-      "notes": ["Touch panel requirements include secure controller session."]
+      "av_justification": "Crestron touch panels connect outbound to the control processor via Secure CIP. Panels placed on user-facing VLANs require firewall rules permitting outbound TCP 41795 to the processor.",
+      "notes": ["Ensure touch panel IP can reach the control processor IP on TCP 41795 and 443. XiO Cloud-registered panels also require outbound internet access on 443."]
     },
     "crestron-uc-engine": {
       "display_name": "Crestron UC Engine",
+      "manufacturer": "Crestron",
+      "reference": "https://support.crestron.com/",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 41795,"protocol": "TCP", "direction": "inbound",       "purpose": "Secure CIP to Crestron control processor", "requirement_level": "min_required", "service": "secure-cip", "required": true},
-        {"port": 5060, "protocol": "TCP", "direction": "bidirectional", "purpose": "SIP signalling for UC calls", "requirement_level": "min_required", "service": "sip", "required": false},
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP/SIP media transport", "requirement_level": "recommended", "service": "rtp-media", "required": false}
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and XiO Cloud communication", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 41795,"protocol": "TCP", "direction": "inbound",       "purpose": "Secure CIP — Crestron control processor connection", "requirement_level": "min_required", "service": "secure-cip", "required": true},
+        {"port": 5060, "protocol": "TCP", "direction": "bidirectional", "purpose": "SIP signalling to PBX / call manager", "requirement_level": "min_required", "service": "sip", "required": true},
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP media transport for SIP audio/video calls", "requirement_level": "recommended", "service": "rtp-media", "required": false}
       ],
       "required_services": ["conferencing", "control"],
       "multicast_required": false,
       "igmp_required": false,
       "vlan_recommendation": "AV Control or Corporate VLAN. Requires SIP trunk access if UC calling is enabled.",
-      "av_justification": "UC engine handles unified communications for AV spaces. Requires SIP access for call signalling and RTP for media.",
-      "notes": ["UC engine baseline for secure control and management access."]
+      "av_justification": "UC engine handles unified communications for AV spaces. TCP 5060 is required when SIP calling is enabled; RTP (UDP 5004) carries the media streams. Secure CIP connects the UC engine to the room control processor.",
+      "notes": ["SIP and RTP ports only required when Microsoft Teams / Zoom / SIP calling is configured. Verify RTP port range with PBX/call manager as dynamic RTP ports may extend beyond 5004."]
     },
     "qsys-nv-endpoint": {
       "display_name": "Q-SYS NV-Series AV-over-IP",
+      "manufacturer": "QSC",
+      "reference": "https://q-syshelp.qsc.com/q-sys_8.0/Content/Networking/Protocols.htm",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
         {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and Q-SYS Designer communication", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (redirect)", "requirement_level": "recommended", "service": "http", "required": false},
-        {"port": 554,  "protocol": "TCP", "direction": "inbound",       "purpose": "RTSP video stream setup", "requirement_level": "min_required", "service": "rtsp", "required": true},
-        {"port": 1710, "protocol": "TCP", "direction": "outbound",      "purpose": "Q-SYS Core control (outbound to Core)", "requirement_level": "min_required", "service": "qsys-control", "required": false},
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "AES67 / video-over-IP transport", "requirement_level": "min_required", "service": "av-transport", "required": false},
-        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync", "requirement_level": "recommended", "service": "ptp-event", "required": false},
-        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (peer delay)", "requirement_level": "recommended", "service": "ptp-general", "required": false}
+        {"port": 554,  "protocol": "TCP", "direction": "inbound",       "purpose": "RTSP video stream session setup", "requirement_level": "min_required", "service": "rtsp", "required": true},
+        {"port": 1710, "protocol": "TCP", "direction": "outbound",      "purpose": "Q-SYS Core control — outbound from endpoint to Core", "requirement_level": "min_required", "service": "qsys-control", "required": true},
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "AES67 / video-over-IP transport", "requirement_level": "min_required", "service": "av-transport", "required": true},
+        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (event)", "requirement_level": "recommended", "service": "ptp-event", "required": false},
+        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (general)", "requirement_level": "recommended", "service": "ptp-general", "required": false},
+        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (redirects to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false}
       ],
       "required_services": ["av-streaming", "management"],
       "multicast_required": true,
       "igmp_required": true,
-      "vlan_recommendation": "Dedicated AV Video VLAN. Must have multicast routing to Q-SYS Core.",
-      "av_justification": "Q-SYS NV endpoints encode/decode AV-over-IP streams. Multicast IGMP is required for efficient video distribution across switches.",
-      "notes": ["NV endpoint baseline for control and stream session setup."]
+      "vlan_recommendation": "Dedicated AV Video VLAN. Must have multicast routing or unicast reachability to Q-SYS Core.",
+      "av_justification": "Q-SYS NV endpoints encode/decode AV-over-IP streams. TCP 1710 (outbound) connects the endpoint to the Q-SYS Core as a peripheral. RTSP (554) handles stream session setup. UDP 5004 carries the video/audio payload. PTP sync is required for frame-accurate switching.",
+      "notes": ["NV endpoints must be able to reach the Q-SYS Core on TCP 1710 outbound. Multicast IGMP is required for video distribution. PTP grandmaster must be accessible on the AV Video VLAN."]
     },
     "generic-web-device": {
       "display_name": "Generic Web Device",
+      "manufacturer": "",
+      "reference": "",
       "protocols": ["TCP"],
       "required_ports": [
-        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS web management", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 80,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTP web management (redirect)", "requirement_level": "recommended", "service": "http", "required": false}
+        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS web management interface", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTP web management (typically redirects to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false}
       ],
       "required_services": ["management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "Management VLAN or AV VLAN as appropriate",
-      "av_justification": "Fallback profile for AV devices with web-based management interfaces.",
-      "notes": ["Fallback baseline for unmanaged web-capable endpoints."]
+      "vlan_recommendation": "Management VLAN or AV VLAN as appropriate to device function",
+      "av_justification": "Fallback profile for AV devices with web-based management interfaces not covered by a specific vendor profile. Assign specific vendor profile when available.",
+      "notes": ["This is a fallback baseline. Always prefer a specific vendor profile. Verify actual management ports in device documentation."]
     },
     "barco-clickshare": {
       "display_name": "Barco ClickShare",
-      "protocols": ["TCP"],
+      "manufacturer": "Barco",
+      "reference": "https://www.barco.com/en/support/knowledge-base/4130-which-ports-does-the-clickshare-button-and-base-unit-use",
+      "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 443,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS web management and API", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 80,   "protocol": "TCP", "direction": "inbound", "purpose": "HTTP management (redirect to HTTPS)", "requirement_level": "recommended", "service": "http", "required": true},
-        {"port": 5900, "protocol": "TCP", "direction": "inbound", "purpose": "VNC display sharing", "requirement_level": "min_required", "service": "vnc", "required": true},
-        {"port": 7000, "protocol": "TCP", "direction": "inbound", "purpose": "ClickShare collaboration service", "requirement_level": "min_required", "service": "clickshare-collab", "required": true}
+        {"port": 443,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS web management and ClickShare app connection", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,   "protocol": "TCP", "direction": "inbound", "purpose": "HTTP management (redirects to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false},
+        {"port": 5353, "protocol": "UDP", "direction": "bidirectional", "purpose": "mDNS — ClickShare device auto-discovery by presenter devices", "requirement_level": "min_required", "service": "mdns", "required": true},
+        {"port": 7236, "protocol": "TCP", "direction": "inbound", "purpose": "Miracast RTSP session setup (optional wireless display feature)", "requirement_level": "recommended", "service": "miracast-rtsp", "required": false}
       ],
       "required_services": ["wireless-presentation", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "Wireless Presentation VLAN or Corporate VLAN. Must reach presenter devices.",
-      "av_justification": "Barco ClickShare requires TCP ports for button/app connection and screen sharing. VNC port carries the shared video content.",
-      "notes": ["Ensure firewall allows presenter endpoint devices (laptops, phones) to reach ClickShare base unit on required ports."]
+      "vlan_recommendation": "Wireless Presentation VLAN or Corporate VLAN. Presenter devices (laptops, phones) must reach ClickShare base unit. mDNS (UDP 5353) must traverse the network segment.",
+      "av_justification": "Barco ClickShare uses HTTPS (443) for the ClickShare app and web management. mDNS (UDP 5353) is required for automatic base unit discovery by presenter devices on the same network segment. Miracast (TCP 7236) is optional and only required if the Miracast wireless display feature is used.",
+      "notes": ["mDNS (UDP 5353) does not cross router boundaries — ClickShare and presenter devices must be on the same Layer 2 segment, or an mDNS proxy must be configured. Disable Miracast port 7236 if the feature is not required. AirPlay requires additional ports — consult Barco documentation if AirPlay is needed."]
     },
     "av-over-ip": {
       "display_name": "AV-over-IP Endpoint",
+      "manufacturer": "Various",
+      "reference": "",
       "protocols": ["UDP", "TCP"],
       "required_ports": [
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP / AES67 AV-over-IP transport", "requirement_level": "min_required", "service": "rtp-av", "required": true},
-        {"port": 5005, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTCP control for AV-over-IP stream", "requirement_level": "min_required", "service": "rtcp", "required": true},
-        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync", "requirement_level": "min_required", "service": "ptp-event", "required": true},
-        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (peer delay)", "requirement_level": "min_required", "service": "ptp-general", "required": true},
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP / AES67 AV-over-IP transport (audio and video)", "requirement_level": "min_required", "service": "rtp-av", "required": true},
+        {"port": 5005, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTCP stream quality control and statistics", "requirement_level": "min_required", "service": "rtcp", "required": true},
+        {"port": 319,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (event)", "requirement_level": "min_required", "service": "ptp-event", "required": true},
+        {"port": 320,  "protocol": "UDP", "direction": "bidirectional", "purpose": "PTP / IEEE 1588 clock sync (general)", "requirement_level": "min_required", "service": "ptp-general", "required": true},
         {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management interface", "requirement_level": "recommended", "service": "https", "required": false}
       ],
       "required_services": ["av-transport", "management"],
       "multicast_required": true,
       "igmp_required": true,
       "vlan_recommendation": "Dedicated AV Video VLAN with IGMP snooping. Do not mix with general IT traffic.",
-      "av_justification": "AV-over-IP encoders and decoders require multicast UDP transport with PTP synchronisation. IGMP snooping is mandatory for switch multicast efficiency.",
-      "notes": ["Ensure IGMP querier is configured. PTP requires sub-microsecond switch latency."]
+      "av_justification": "AV-over-IP encoders and decoders require multicast UDP transport (RTP/AES67) with PTP clock synchronisation. IGMP snooping is mandatory to prevent multicast flooding across all switch ports. RTCP (5005) provides real-time stream quality monitoring.",
+      "notes": ["Ensure IGMP querier is active on the AV VLAN. PTP requires low-latency switch forwarding; use PTP-aware (boundary clock) switches where possible. Verify vendor documentation for specific VLAN tagging and QoS DSCP requirements."]
     },
     "display": {
       "display_name": "Display / Screen",
+      "manufacturer": "Various",
+      "reference": "",
       "protocols": ["TCP"],
       "required_ports": [
-        {"port": 80,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTP management web UI", "requirement_level": "recommended", "service": "http", "required": true},
-        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": false}
+        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTP management web UI (redirect to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false}
       ],
       "required_services": ["management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV VLAN. Management access from AV Control VLAN.",
-      "av_justification": "Managed displays require network access for remote power control, input switching, and monitoring via Crestron/Q-SYS drivers.",
-      "notes": ["Many commercial displays support RS-232 and LAN control. Verify specific display model requirements."]
+      "vlan_recommendation": "AV VLAN. Management access permitted from AV Control VLAN only.",
+      "av_justification": "Managed commercial displays require network access for remote power control, input switching, and monitoring via Crestron, Q-SYS, or manufacturer-specific control drivers. HTTPS is the standard management interface.",
+      "notes": ["Many commercial displays also support RS-232 control (not a network port). LAN control protocols vary by manufacturer (e.g., Samsung MDC, LG Sicp, Sony BRAVIA). Verify the specific display model's IP control port requirements — some use proprietary TCP ports in addition to HTTP/S."]
     },
     "camera": {
       "display_name": "IP Camera / PTZ",
+      "manufacturer": "Various",
+      "reference": "https://www.onvif.org/specs/core/ONVIF-Core-Specification.pdf",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 554,  "protocol": "TCP", "direction": "inbound",  "purpose": "RTSP video stream setup", "requirement_level": "min_required", "service": "rtsp", "required": true},
-        {"port": 80,   "protocol": "TCP", "direction": "inbound",  "purpose": "HTTP management web UI", "requirement_level": "recommended", "service": "http", "required": true},
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",  "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": false},
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP video transport", "requirement_level": "recommended", "service": "rtp-video", "required": false}
+        {"port": 554,  "protocol": "TCP", "direction": "inbound",       "purpose": "RTSP video stream session setup (ONVIF standard)", "requirement_level": "min_required", "service": "rtsp", "required": true},
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management / ONVIF device discovery", "requirement_level": "recommended", "service": "http", "required": false},
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP video transport (multicast or unicast)", "requirement_level": "recommended", "service": "rtp-video", "required": false}
       ],
       "required_services": ["video-streaming", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV Camera VLAN or AV Video VLAN. Restrict inbound access from corporate networks.",
-      "av_justification": "IP cameras serve video over RTSP. PTZ control runs over HTTP/S from control system. Video transport may use RTP multicast.",
-      "notes": ["PTZ cameras may use vendor-specific control ports. Verify manufacturer documentation."]
+      "vlan_recommendation": "AV Camera VLAN or AV Video VLAN. Restrict inbound management access to AV Control VLAN only.",
+      "av_justification": "IP cameras stream video via RTSP (TCP 554) — the standard for ONVIF-compliant cameras. HTTPS provides secure management access. RTP (UDP 5004) carries the actual video payload after RTSP session negotiation. PTZ control typically travels over the same HTTP/S management session.",
+      "notes": ["ONVIF cameras use RTSP on port 554 for stream setup; the RTP data port is negotiated during the RTSP session and may differ from 5004. Verify PTZ camera vendor documentation for any additional proprietary control ports."]
     },
     "video-switcher": {
       "display_name": "Video Switcher / Matrix",
+      "manufacturer": "Various",
+      "reference": "",
       "protocols": ["TCP"],
       "required_ports": [
-        {"port": 80,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTP management web UI", "requirement_level": "recommended", "service": "http", "required": true},
-        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": false},
-        {"port": 23,  "protocol": "TCP", "direction": "inbound", "purpose": "Telnet control from control processor", "requirement_level": "recommended", "service": "telnet", "required": false}
+        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,  "protocol": "TCP", "direction": "inbound", "purpose": "HTTP management web UI (redirect to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false},
+        {"port": 23,  "protocol": "TCP", "direction": "inbound", "purpose": "Telnet control from control processor (common for matrix routing)", "requirement_level": "recommended", "service": "telnet", "required": false}
       ],
       "required_services": ["video-routing", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV Control VLAN or AV Video VLAN. Control system must have reachability.",
-      "av_justification": "Video matrix switchers require management and Telnet/TCP control from Crestron/Q-SYS control processors for source routing.",
-      "notes": ["Physical matrix switchers may also require dedicated HDBT or fibre connections outside the IP network."]
+      "vlan_recommendation": "AV Control VLAN or AV Video VLAN. Control processor must have TCP reachability to switcher.",
+      "av_justification": "Video matrix switchers require HTTPS for web management and Telnet (TCP 23) for control system integration (Crestron, Q-SYS, AMX routing commands). Telnet is the most common control interface for Extron, Kramer, and similar matrix switchers.",
+      "notes": ["Telnet (port 23) is commonly used for matrix control integration — permit only from control processor IPs. Some switchers use vendor-specific TCP ports for control; verify manufacturer documentation. Physical matrix connections (HDBT, fibre) are outside the IP network scope."]
     },
     "ndi": {
       "display_name": "NDI Device",
+      "manufacturer": "Vizrt / NewTek",
+      "reference": "https://docs.ndi.video/all/getting-started/white-paper/ndi-related-network-ports",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 5960, "protocol": "TCP", "direction": "bidirectional", "purpose": "NDI discovery and control", "requirement_level": "min_required", "service": "ndi-discovery", "required": true},
-        {"port": 5961, "protocol": "TCP", "direction": "bidirectional", "purpose": "NDI stream data channel", "requirement_level": "min_required", "service": "ndi-stream", "required": true},
-        {"port": 5353, "protocol": "UDP", "direction": "bidirectional", "purpose": "mDNS NDI source discovery", "requirement_level": "min_required", "service": "mdns", "required": true}
+        {"port": 5960, "protocol": "TCP", "direction": "bidirectional", "purpose": "NDI discovery and control channel", "requirement_level": "min_required", "service": "ndi-discovery", "required": true},
+        {"port": 5961, "protocol": "TCP", "direction": "bidirectional", "purpose": "NDI stream data channel (primary video/audio transport)", "requirement_level": "min_required", "service": "ndi-stream", "required": true},
+        {"port": 5353, "protocol": "UDP", "direction": "bidirectional", "purpose": "mDNS — NDI source auto-discovery (required without NDI Discovery Server)", "requirement_level": "min_required", "service": "mdns", "required": true}
       ],
       "required_services": ["video-transport", "discovery"],
       "multicast_required": true,
       "igmp_required": false,
-      "vlan_recommendation": "AV Video VLAN. NDI requires low-latency multicast-capable network. Do not bridge with corporate VLAN without QoS.",
-      "av_justification": "NDI (Network Device Interface) transmits professional-grade video over standard IP. mDNS discovery is required unless NDI Discovery Server is used.",
-      "notes": ["NDI is bandwidth-intensive. 1080p60 requires approximately 125 Mbps per stream. Use NDI Discovery Server in large deployments to replace mDNS."]
+      "vlan_recommendation": "AV Video VLAN. NDI requires low-latency network. Do not bridge with corporate VLAN without QoS policy.",
+      "av_justification": "NDI (Network Device Interface) transmits professional-grade video over standard IP using TCP 5960/5961. mDNS (UDP 5353) is required for automatic source discovery unless an NDI Discovery Server is deployed. NDI is a NewTek/Vizrt proprietary protocol.",
+      "notes": ["NDI is bandwidth-intensive: 1080p60 requires approximately 125 Mbps per stream. Deploy an NDI Discovery Server to replace mDNS in routed or large-scale environments — this eliminates the mDNS broadcast requirement. NDI streams use TCP so no IGMP snooping is required."]
     },
     "streaming-encoder": {
       "display_name": "Streaming Encoder",
+      "manufacturer": "Various",
+      "reference": "",
       "protocols": ["TCP"],
       "required_ports": [
-        {"port": 1935, "protocol": "TCP", "direction": "outbound", "purpose": "RTMP live stream output", "requirement_level": "min_required", "service": "rtmp", "required": true},
-        {"port": 80,   "protocol": "TCP", "direction": "inbound",  "purpose": "HTTP management", "requirement_level": "recommended", "service": "http", "required": false},
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",  "purpose": "HTTPS management and RTMPS output", "requirement_level": "min_required", "service": "https", "required": true}
+        {"port": 1935, "protocol": "TCP", "direction": "outbound", "purpose": "RTMP live stream push to CDN / streaming platform", "requirement_level": "min_required", "service": "rtmp", "required": true},
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",  "purpose": "HTTPS management and RTMPS encrypted stream output", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,   "protocol": "TCP", "direction": "inbound",  "purpose": "HTTP management interface", "requirement_level": "recommended", "service": "http", "required": false}
       ],
       "required_services": ["live-streaming", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV VLAN with internet egress or Corporate VLAN with access to streaming CDN endpoint.",
-      "av_justification": "Streaming encoders push live content via RTMP(S) to external CDN or streaming platform. Outbound TCP 1935 must be allowed to streaming destination.",
-      "notes": ["Many streaming destinations now require RTMPS (RTMP over TLS on port 443). Verify with customer's streaming platform."]
+      "vlan_recommendation": "AV VLAN with internet egress, or Corporate VLAN with access to streaming CDN endpoint.",
+      "av_justification": "Streaming encoders push live content via RTMP (TCP 1935) to CDN platforms (YouTube, Vimeo, Restream) or RTMPS (encrypted RTMP over TLS, TCP 443). Outbound TCP 1935 must be permitted to the streaming destination IP.",
+      "notes": ["Most modern streaming platforms require RTMPS (RTMP over TLS on port 443) rather than plain RTMP on 1935. Confirm the customer's streaming platform requirements. Encoder management HTTPS (inbound 443) should be restricted to AV Control VLAN."]
     },
     "iptv": {
       "display_name": "IPTV Decoder / Encoder",
+      "manufacturer": "Various",
+      "reference": "https://datatracker.ietf.org/doc/html/rfc2326",
       "protocols": ["UDP", "TCP"],
       "required_ports": [
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP IPTV transport", "requirement_level": "min_required", "service": "rtp-iptv", "required": true},
-        {"port": 554,  "protocol": "TCP", "direction": "inbound",       "purpose": "RTSP stream control", "requirement_level": "min_required", "service": "rtsp", "required": true},
-        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management", "requirement_level": "recommended", "service": "http", "required": false},
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management", "requirement_level": "min_required", "service": "https", "required": false}
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP multicast IPTV transport", "requirement_level": "min_required", "service": "rtp-iptv", "required": true},
+        {"port": 554,  "protocol": "TCP", "direction": "inbound",       "purpose": "RTSP stream control and session setup", "requirement_level": "min_required", "service": "rtsp", "required": true},
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management interface", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 80,   "protocol": "TCP", "direction": "inbound",       "purpose": "HTTP management (redirect to HTTPS)", "requirement_level": "recommended", "service": "http", "required": false}
       ],
       "required_services": ["video-distribution", "management"],
       "multicast_required": true,
       "igmp_required": true,
-      "vlan_recommendation": "Dedicated IPTV VLAN or AV Video VLAN with IGMP snooping enabled.",
-      "av_justification": "IPTV systems rely on UDP multicast for efficient channel distribution. IGMP snooping prevents multicast flooding across all switch ports.",
-      "notes": ["Ensure IGMP querier is active on the IPTV VLAN. IPTV head-end must be reachable from all decoder endpoints."]
+      "vlan_recommendation": "Dedicated IPTV VLAN or AV Video VLAN with IGMP snooping enabled on all switches.",
+      "av_justification": "IPTV systems rely on UDP multicast (RTP, UDP 5004) for efficient channel distribution. IGMP snooping prevents multicast flooding across all switch ports. RTSP (TCP 554) handles channel selection and stream session control.",
+      "notes": ["An IGMP querier must be active on the IPTV VLAN. The IPTV head-end server must be reachable from all decoder endpoints. Verify specific system ports — IPTV platform vendors (ZeeVee, Visionary Solutions, etc.) may use additional proprietary ports."]
     },
     "wireless-presentation": {
       "display_name": "Wireless Presentation System",
+      "manufacturer": "Various",
+      "reference": "https://www.wi-fi.org/discover-wi-fi/miracast",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS app connection and management", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 5900, "protocol": "TCP", "direction": "inbound",       "purpose": "VNC / screen sharing transport", "requirement_level": "min_required", "service": "vnc", "required": true},
-        {"port": 3702, "protocol": "UDP", "direction": "bidirectional", "purpose": "WS-Discovery / device discovery", "requirement_level": "recommended", "service": "ws-discovery", "required": false}
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS app connection and management interface", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 5353, "protocol": "UDP", "direction": "bidirectional", "purpose": "mDNS — device auto-discovery by presenter devices", "requirement_level": "min_required", "service": "mdns", "required": true},
+        {"port": 7236, "protocol": "TCP", "direction": "inbound",       "purpose": "Miracast RTSP session setup (optional wireless display standard)", "requirement_level": "recommended", "service": "miracast-rtsp", "required": false}
       ],
       "required_services": ["wireless-presentation", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "Wireless Presentation VLAN or bridged Corporate VLAN. Presenter devices must reach base unit.",
-      "av_justification": "Wireless presentation systems need HTTPS and VNC-style protocols from presenter device to base unit. WS-Discovery assists device auto-discovery.",
-      "notes": ["Guest network isolation may need exception rules for wireless presentation. Verify with IT."]
+      "vlan_recommendation": "Wireless Presentation VLAN or bridged Corporate VLAN. Presenter devices must reach base unit on TCP 443 and UDP 5353.",
+      "av_justification": "Wireless presentation base units require HTTPS (443) for secure app connection and web management. mDNS (UDP 5353) is used for automatic discovery of the base unit by presenter devices on the same network segment. Miracast (TCP 7236) adds Wi-Fi Direct screen mirroring for Windows devices.",
+      "notes": ["This is a generic profile. Specific systems (Mersive Solstice, Crestron AirMedia, Barco ClickShare, Extron ShareLink) each have their own additional port requirements — consult vendor documentation. mDNS does not cross router boundaries without an mDNS proxy. Disable Miracast (7236) if the feature is not used."]
     },
     "audio-dsp": {
       "display_name": "Audio DSP (Generic)",
+      "manufacturer": "Various",
+      "reference": "",
       "protocols": ["TCP"],
       "required_ports": [
         {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management and API", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 23,  "protocol": "TCP", "direction": "inbound", "purpose": "Telnet control from control system", "requirement_level": "recommended", "service": "telnet", "required": false},
+        {"port": 23,  "protocol": "TCP", "direction": "inbound", "purpose": "Telnet control from control system (common for third-party DSP integration)", "requirement_level": "recommended", "service": "telnet", "required": false},
         {"port": 22,  "protocol": "TCP", "direction": "inbound", "purpose": "SSH management access", "requirement_level": "recommended", "service": "ssh", "required": false}
       ],
       "required_services": ["audio-control", "management"],
       "multicast_required": false,
       "igmp_required": false,
       "vlan_recommendation": "AV Audio VLAN or AV Control VLAN. Must be reachable from control processors.",
-      "av_justification": "Generic audio DSP profile for DSPs not covered by a specific vendor profile. Control system integration typically uses Telnet or vendor-specific TCP.",
-      "notes": ["Verify DSP vendor documentation for specific control ports. Common integrations use Telnet on port 23."]
+      "av_justification": "Generic audio DSP profile for DSP hardware not covered by a specific vendor profile (Biamp, Q-SYS). Control system integration commonly uses Telnet (TCP 23) for text-based command/response protocols.",
+      "notes": ["Always prefer a specific vendor profile (biamp-tesira, qsys-core) over this generic profile. Verify DSP vendor documentation for actual control ports. Restrict Telnet access to control processor IPs only."]
     },
     "vc-codec": {
       "display_name": "Video Conferencing Codec",
+      "manufacturer": "Various",
+      "reference": "https://www.rfc-editor.org/rfc/rfc3261",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP media transport (voice and video)", "requirement_level": "min_required", "service": "rtp-media", "required": true},
-        {"port": 5060, "protocol": "TCP", "direction": "bidirectional", "purpose": "SIP signalling (unencrypted)", "requirement_level": "min_required", "service": "sip", "required": true},
-        {"port": 5061, "protocol": "TCP", "direction": "bidirectional", "purpose": "SIP TLS signalling (encrypted)", "requirement_level": "min_required", "service": "sip-tls", "required": true},
-        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and cloud service registration", "requirement_level": "min_required", "service": "https", "required": true},
-        {"port": 1720, "protocol": "TCP", "direction": "bidirectional", "purpose": "H.323 call signalling (legacy)", "requirement_level": "recommended", "service": "h323", "required": false}
+        {"port": 5004, "protocol": "UDP", "direction": "bidirectional", "purpose": "RTP media transport — voice and video", "requirement_level": "min_required", "service": "rtp-media", "required": true},
+        {"port": 5060, "protocol": "TCP", "direction": "bidirectional", "purpose": "SIP signalling (unencrypted) — to PBX / call manager", "requirement_level": "min_required", "service": "sip", "required": true},
+        {"port": 5061, "protocol": "TCP", "direction": "bidirectional", "purpose": "SIP TLS signalling (encrypted) — preferred over port 5060", "requirement_level": "min_required", "service": "sip-tls", "required": true},
+        {"port": 443,  "protocol": "TCP", "direction": "inbound",       "purpose": "HTTPS management and cloud service registration (Cisco, Poly, Teams)", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 1720, "protocol": "TCP", "direction": "bidirectional", "purpose": "H.323 call signalling (legacy — disable if SIP only)", "requirement_level": "recommended", "service": "h323", "required": false}
       ],
       "required_services": ["video-conferencing", "sip-signalling", "management"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "AV Conferencing VLAN or Corporate VLAN with QoS. Must access SIP trunk / CUCM / cloud service.",
-      "av_justification": "Video conferencing codecs require SIP signalling and RTP media access to trunk or cloud service. QoS DSCP marking recommended for voice and video streams.",
-      "notes": ["CUCM / cloud-registered codecs may need additional firewall rules for registration and provisioning servers."]
+      "vlan_recommendation": "AV Conferencing VLAN or Corporate VLAN with QoS DSCP marking. Must access SIP trunk, CUCM, or cloud service endpoint.",
+      "av_justification": "Video conferencing codecs require SIP signalling (TCP 5060/5061) to a PBX or cloud service and RTP (UDP 5004) for media. HTTPS (443) is required for management and cloud platform registration (Cisco Webex, Microsoft Teams Rooms, Zoom Rooms). Prefer SIP TLS (5061) over plain SIP (5060).",
+      "notes": ["RTP port 5004 is the base — actual RTP media may use a dynamic port range (e.g., 16384–32767 for Cisco, 5004–6000 for Poly). Verify with the specific codec vendor and call manager. H.323 (1720) is legacy — disable if the deployment uses SIP only."]
     },
     "network-switch": {
       "display_name": "Network Switch",
+      "manufacturer": "Various",
+      "reference": "https://datatracker.ietf.org/doc/html/rfc1157",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
-        {"port": 22,  "protocol": "TCP", "direction": "inbound", "purpose": "SSH management access", "requirement_level": "min_required", "service": "ssh", "required": true},
-        {"port": 161, "protocol": "UDP", "direction": "inbound", "purpose": "SNMP polling from NMS", "requirement_level": "recommended", "service": "snmp", "required": true},
-        {"port": 162, "protocol": "UDP", "direction": "outbound", "purpose": "SNMP trap to NMS", "requirement_level": "recommended", "service": "snmp-trap", "required": false},
-        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": false}
+        {"port": 22,  "protocol": "TCP", "direction": "inbound", "purpose": "SSH management — primary secure management access", "requirement_level": "min_required", "service": "ssh", "required": true},
+        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management web UI", "requirement_level": "min_required", "service": "https", "required": true},
+        {"port": 161, "protocol": "UDP", "direction": "inbound", "purpose": "SNMP polling from network management system (NMS)", "requirement_level": "recommended", "service": "snmp", "required": false},
+        {"port": 162, "protocol": "UDP", "direction": "outbound", "purpose": "SNMP trap — outbound from switch to NMS", "requirement_level": "recommended", "service": "snmp-trap", "required": false}
       ],
       "required_services": ["management", "monitoring"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "Management VLAN. Switch management interfaces should not be on AV data VLANs.",
-      "av_justification": "Network switches require management access for VLAN configuration, IGMP snooping setup, and QoS policy. SNMP enables monitoring from the NMS.",
-      "notes": ["Switch management should be isolated on a dedicated management VLAN accessible only from authorised management hosts."]
+      "vlan_recommendation": "Management VLAN. Switch management interfaces must not be on AV data VLANs.",
+      "av_justification": "Network switches require SSH and HTTPS for secure management and configuration (VLAN setup, IGMP snooping, QoS policy). SNMP (UDP 161/162) enables monitoring from NMS platforms. Management access should be restricted to the management VLAN.",
+      "notes": ["Switch management should be isolated on a dedicated management VLAN accessible only from authorised management hosts. Disable HTTP (80) and Telnet (23) management if SSH and HTTPS are available. SNMPv3 is strongly preferred over SNMPv1/v2c for security."]
     },
     "wireless-ap": {
       "display_name": "Wireless Access Point",
+      "manufacturer": "Various",
+      "reference": "",
       "protocols": ["TCP", "UDP"],
       "required_ports": [
+        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management and wireless controller communication (CAPWAP over TLS)", "requirement_level": "min_required", "service": "https", "required": true},
         {"port": 22,  "protocol": "TCP", "direction": "inbound", "purpose": "SSH management access", "requirement_level": "min_required", "service": "ssh", "required": true},
-        {"port": 443, "protocol": "TCP", "direction": "inbound", "purpose": "HTTPS management and controller communication", "requirement_level": "min_required", "service": "https", "required": true},
         {"port": 161, "protocol": "UDP", "direction": "inbound", "purpose": "SNMP polling from NMS", "requirement_level": "recommended", "service": "snmp", "required": false}
       ],
       "required_services": ["management", "monitoring"],
       "multicast_required": false,
       "igmp_required": false,
-      "vlan_recommendation": "Management VLAN for AP management interface. AP data plane uses trunk ports to AV and corporate VLANs.",
-      "av_justification": "Wireless APs in AV spaces may serve presenter devices and conferencing systems. Management must be isolated from client VLANs.",
-      "notes": ["Cloud-managed APs may require additional outbound HTTPS to cloud controller. Verify with vendor."]
+      "vlan_recommendation": "Management VLAN for AP management interface. AP data plane uses trunk ports bridging AV and corporate VLANs.",
+      "av_justification": "Wireless APs in AV spaces serve presenter devices, conferencing systems, and UC peripherals. Management access on HTTPS and SSH must be isolated from client VLANs. Cloud-managed APs require outbound HTTPS to the cloud controller.",
+      "notes": ["Cloud-managed APs (Cisco Meraki, Aruba Central, Ubiquiti UniFi) require outbound HTTPS to vendor cloud controllers — verify specific FQDN and port requirements. CAPWAP (UDP 5246/5247) is required if using a wireless LAN controller. Confirm vendor documentation for controller-specific ports."]
     }
   }
 }

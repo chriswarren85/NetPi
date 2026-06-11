@@ -1,6 +1,42 @@
 import copy
 import json
 import os
+import re
+
+# Normalize common model-string prefixes to canonical manufacturer names
+_MODEL_PREFIX_MAP = {
+    "q-sys": "QSC",
+    "qsys": "QSC",
+    "audio-technica": "Audio-Technica",
+    "just add power": "Just Add Power",
+    "blackmagic": "Blackmagic Design",
+    "ptz optics": "PTZ Optics",
+}
+
+def _manufacturer_from_model(model_str):
+    """Extract the manufacturer name from a model string.
+
+    Handles patterns like:
+      'Panasonic PT-MZ882W'  → 'Panasonic'
+      'Logitech Tap Cat5e'   → 'Logitech'
+      'Q-SYS Core 8 Flex'   → 'QSC'
+      'Audio-Technica ATND1061' → 'Audio-Technica'
+      'Logitech Tap Cat5e/Dell' → 'Logitech'
+    """
+    s = str(model_str or "").strip()
+    if not s:
+        return ""
+    # Use only the part before "/" in composite model strings like "Logitech Tap/Dell"
+    s = s.split("/")[0].strip()
+    # Check known prefix normalizations (case-insensitive)
+    lower = s.lower()
+    for prefix, canonical in _MODEL_PREFIX_MAP.items():
+        if lower.startswith(prefix):
+            return canonical
+    # Fall back to the first word of the model string
+    first = s.split()[0] if s.split() else ""
+    # Exclude very short tokens (1-2 chars) that are likely not brand names
+    return first if len(first) > 2 else ""
 
 
 REQUIREMENTS_CONFIG_FILE = os.path.join(
@@ -277,6 +313,15 @@ def generate_device_requirements(device, config, settings=None):
     vlan_recommendation = str(mapping.get("vlan_recommendation") or "").strip()
     av_justification = str(mapping.get("av_justification") or "").strip()
     display_name = str(mapping.get("display_name") or "").strip()
+    reference = str(mapping.get("reference") or "").strip()
+    profile_manufacturer = str(mapping.get("manufacturer") or "").strip()
+    # Use the profile manufacturer when it is specific; fall back to model string inference
+    # for generic profiles ("Various" or blank) so the actual vendor is always surfaced.
+    if profile_manufacturer and profile_manufacturer.lower() != "various":
+        manufacturer = profile_manufacturer
+    else:
+        model_val = str(item.get("model") or "").strip()
+        manufacturer = _manufacturer_from_model(model_val) or profile_manufacturer
 
     # Zone resolution from VLAN field using settings
     vlan_id = str(item.get("vlan") or "").strip()
@@ -307,6 +352,8 @@ def generate_device_requirements(device, config, settings=None):
         "igmp_required": igmp_required,
         "vlan_recommendation": vlan_recommendation,
         "av_justification": av_justification,
+        "manufacturer": manufacturer,
+        "reference": reference,
         "port_count": port_count,
         "has_requirements": has_requirements,
     }

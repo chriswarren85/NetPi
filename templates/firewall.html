@@ -221,6 +221,8 @@ function flattenToRows(results, keepEdits){
     const zone    = String(item.zone || item.vlan || '');
     const dtype   = String(item.effective_type || item.type || '');
     const conf    = String(item.confidence || '');
+    const ref     = String(item.reference || '');
+    const mfr     = String(item.manufacturer || '');
     const ports   = Array.isArray(item.required_ports) ? item.required_ports : [];
 
     if(ports.length){
@@ -233,7 +235,7 @@ function flattenToRows(results, keepEdits){
           _rowId:            rowId,
           included:          pk._rowId !== undefined ? !!pk.included : true,
           device_name:       devName,
-          ip, zone, device_type: dtype, confidence: conf,
+          ip, zone, device_type: dtype, confidence: conf, reference: ref, manufacturer: mfr,
           port, protocol,
           direction:         String(p.direction || '—'),
           purpose:           String(p.purpose || ''),
@@ -249,7 +251,7 @@ function flattenToRows(results, keepEdits){
       rows.push({
         _rowId: rowId,
         included: pk._rowId !== undefined ? !!pk.included : false,
-        device_name: devName, ip, zone, device_type: dtype, confidence: conf,
+        device_name: devName, ip, zone, device_type: dtype, confidence: conf, reference: ref, manufacturer: mfr,
         port: '—', protocol: '—', direction: '—',
         purpose: 'No port profile matched',
         requirement_level: pk.requirement_level || 'excluded',
@@ -322,7 +324,11 @@ async function loadFromCommProfiles(){
     }
 
     saSourceTs = data.ts || null;
-    saRows = flattenToRows(data.results, saRows);  // preserve existing edits
+    // Fresh load — don't merge old edits so the user sees current profile data.
+    // Edits are only preserved when restoring a previously saved Security Architecture.
+    saRows = flattenToRows(data.results);
+    // Auto-expand all device cards so the user immediately sees the rules
+    saExpanded = new Set(saRows.map(r => r.ip || r.device_name).filter(Boolean));
     _rebuildFilters();
     renderSaTable();
     updateSaStats();
@@ -430,7 +436,7 @@ function renderSaTable(){
     const key = row.ip || row.device_name;
     if(!groups[key]){
       groupKeys.push(key);
-      groups[key] = { ip: row.ip, device_name: row.device_name, zone: row.zone, device_type: row.device_type, rows: [] };
+      groups[key] = { ip: row.ip, device_name: row.device_name, zone: row.zone, device_type: row.device_type, reference: row.reference || '', manufacturer: row.manufacturer || '', rows: [] };
     }
     groups[key].rows.push(row);
   });
@@ -458,8 +464,10 @@ function renderSaTable(){
     html += '<div style="flex:1;min-width:0">';
     html += '<div class="sa-dev-name">' + _esc(grp.device_name) + '</div>';
     html += '<div class="sa-dev-meta"><span class="sa-dev-ip">' + _esc(grp.ip) + '</span>';
-    if(grp.zone)        html += '<span class="sep">·</span>' + _esc(grp.zone);
-    if(grp.device_type) html += '<span class="sep">·</span>' + _esc(grp.device_type);
+    if(grp.zone)         html += '<span class="sep">·</span>' + _esc(grp.zone);
+    if(grp.device_type)  html += '<span class="sep">·</span>' + _esc(grp.device_type);
+    if(grp.manufacturer) html += '<span class="sep">·</span><span style="font-size:10px;color:#7a9cb8;font-weight:500">' + _esc(grp.manufacturer) + '</span>';
+    if(grp.reference)    html += '<span class="sep">·</span><a href="' + _esc(grp.reference) + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:10px;color:#3b82f6;text-decoration:none" title="Manufacturer port documentation">docs ↗</a>';
     html += '</div></div>';
     html += '<div style="display:flex;gap:5px;align-items:center">' + pills + '</div>';
     html += '<div class="sa-dev-acts">';
@@ -663,24 +671,26 @@ function generateDeliverable(){
   function _eH(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   function tableRows(rows){
-    if(!rows.length) return '<tr><td colspan="9" style="color:#999;font-style:italic;text-align:center;padding:12px">None</td></tr>';
+    if(!rows.length) return '<tr><td colspan="11" style="color:#999;font-style:italic;text-align:center;padding:12px">None</td></tr>';
     return rows.map(r =>
       '<tr>'
       + '<td>' + _eH(r.device_name) + '</td>'
       + '<td style="font-family:monospace">' + _eH(r.ip) + '</td>'
       + '<td>' + _eH(r.zone||'—') + '</td>'
       + '<td>' + _eH(r.device_type||'—') + '</td>'
+      + '<td>' + _eH(r.manufacturer||'—') + '</td>'
       + '<td style="font-family:monospace;font-weight:700">' + _eH(String(r.port)) + '</td>'
       + '<td>' + _eH(r.protocol) + '</td>'
       + '<td>' + _eH(r.direction) + '</td>'
       + '<td>' + _eH(r.purpose) + '</td>'
       + '<td>' + _eH(r.notes||'') + '</td>'
+      + '<td>' + (r.reference ? '<a href="' + _eH(r.reference) + '" style="color:#1d4ed8">docs ↗</a>' : '') + '</td>'
       + '</tr>'
     ).join('');
   }
 
-  const thead = '<thead><tr><th>Device</th><th>IP Address</th><th>Zone / VLAN</th><th>Device Type</th>'
-    + '<th>Port</th><th>Protocol</th><th>Direction</th><th>Purpose</th><th>Notes</th></tr></thead>';
+  const thead = '<thead><tr><th>Device</th><th>IP Address</th><th>Zone / VLAN</th><th>Device Type</th><th>Manufacturer</th>'
+    + '<th>Port</th><th>Protocol</th><th>Direction</th><th>Purpose</th><th>Notes</th><th>Reference</th></tr></thead>';
 
   const html = `<!DOCTYPE html>
 <html lang="en">

@@ -345,6 +345,8 @@ function buildRequirementRowsFromResults(results){
       igmp_required: !!item.igmp_required,
       vlan_recommendation: item.vlan_recommendation || '',
       av_justification: item.av_justification || '',
+      manufacturer: item.manufacturer || '',
+      reference: item.reference || '',
     };
     deviceRows.push(baseRow);
 
@@ -678,9 +680,9 @@ function _appendDetail(tbody, colSpan, content){
 
 /* ─── By Device (default) ───────────────────────────────────────────────────── */
 function renderByDevice(tbody){
-  _setThead(['Device', 'IP', 'Zone', 'Type', 'Ports', 'Confidence']);
+  _setThead(['Device', 'IP', 'Zone', 'Manufacturer', 'Type', 'Ports', 'Confidence']);
   if(!requirementDevices.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No device requirements generated.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">No device requirements generated.</td></tr>';
     return;
   }
   requirementDevices.forEach(dev => {
@@ -689,6 +691,10 @@ function renderByDevice(tbody){
     const ports = portsByDeviceId[pKey] || [];
     const isOpen = expandedKey === eKey;
 
+    const mfrCell = dev.manufacturer
+      ? '<span style="font-size:11px;color:#e2e8f0">' + escapeHtml(dev.manufacturer) + '</span>'
+      : '<span style="color:#374151;font-size:11px">—</span>';
+
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
     tr.innerHTML =
@@ -696,6 +702,7 @@ function renderByDevice(tbody){
         + escapeHtml(dev.name||'(unnamed)') + _flagBadges(dev) + '</td>'
       + '<td style="font-family:monospace;font-size:11px">' + escapeHtml(dev.ip||'—') + '</td>'
       + '<td style="font-size:11px;color:#9ca3af">' + escapeHtml(dev.zone||(dev.vlan?'VLAN '+dev.vlan:'')||'—') + '</td>'
+      + '<td>' + mfrCell + '</td>'
       + '<td style="font-size:11px">' + escapeHtml(dev.effective_type||'—') + '</td>'
       + '<td style="font-family:monospace;font-size:11px">' + (ports.length||'<span style="color:#4b5563">—</span>') + '</td>'
       + '<td style="font-size:10px;color:#6b7280">' + escapeHtml(confidenceLabelFromScore(dev.confidence_score)) + '</td>';
@@ -707,6 +714,7 @@ function renderByDevice(tbody){
       let portHtml = buildPortDetailTable(pKey);
       // Meta grid
       let meta = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px 14px;margin-top:10px">';
+      if(dev.manufacturer) meta += _metaRow('Manufacturer', dev.manufacturer, '#e2e8f0');
       meta += _metaRow('Zone',      dev.zone||(dev.vlan?'VLAN '+dev.vlan:'—'));
       meta += _metaRow('VLAN',      dev.vlan||'—');
       meta += _metaRow('Type',      dev.effective_type||'—');
@@ -720,12 +728,16 @@ function renderByDevice(tbody){
         meta += '<div style="grid-column:1/-1"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">AV Justification</div>'
           + '<div style="font-size:11px;color:#d1d5db;font-style:italic;margin-top:1px">' + escapeHtml(dev.av_justification) + '</div></div>';
       }
+      if(dev.reference){
+        meta += '<div style="grid-column:1/-1"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Port Documentation</div>'
+          + '<div style="font-size:11px;margin-top:1px"><a href="' + escapeHtml(dev.reference) + '" target="_blank" rel="noopener" style="color:#3b82f6">' + escapeHtml(dev.reference) + ' ↗</a></div></div>';
+      }
       if(Array.isArray(dev.notes)&&dev.notes.length){
         meta += '<div style="grid-column:1/-1"><div style="font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Notes</div>'
           + '<div style="font-size:11px;color:#d1d5db;margin-top:1px">' + escapeHtml(dev.notes.join(' · ')) + '</div></div>';
       }
       meta += '</div>';
-      _appendDetail(tbody, 6, portHtml + meta);
+      _appendDetail(tbody, 7, portHtml + meta);
     }
   });
 }
@@ -934,13 +946,13 @@ function renderRequirementRows(){
   tbody.innerHTML = '';
 
   if(requirementsLoadState === 'idle'){
-    _setThead(['Device','IP','Zone','Type','Ports','Confidence']);
-    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1.5rem">Press <strong>Generate</strong> to build requirement rows.</td></tr>';
+    _setThead(['Device','IP','Zone','Manufacturer','Type','Ports','Confidence']);
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1.5rem">Press <strong>Generate</strong> to build requirement rows.</td></tr>';
     return;
   }
   if(requirementsLoadState === 'loading'){
-    _setThead(['Device','IP','Zone','Type','Ports','Confidence']);
-    tbody.innerHTML = '<tr><td colspan="6" style="color:#9ca3af;text-align:center;padding:1.5rem">Generating requirements…</td></tr>';
+    _setThead(['Device','IP','Zone','Manufacturer','Type','Ports','Confidence']);
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#9ca3af;text-align:center;padding:1.5rem">Generating requirements…</td></tr>';
     return;
   }
   if(requirementsLoadState === 'error'){
@@ -949,8 +961,8 @@ function renderRequirementRows(){
     return;
   }
   if(requirementsLoadState === 'empty'){
-    _setThead(['Device','IP','Zone','Type','Ports','Confidence']);
-    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1.5rem">No requirements generated — check that devices have types assigned.</td></tr>';
+    _setThead(['Device','IP','Zone','Manufacturer','Type','Ports','Confidence']);
+    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1.5rem">No requirements generated — check that devices have types assigned.</td></tr>';
     return;
   }
 
@@ -1003,10 +1015,10 @@ function exportRequirementsCsv(){
   });
 
   const headers = [
-    'Device', 'IP', 'Zone', 'VLAN', 'Effective Type', 'Port', 'Protocol',
+    'Device', 'IP', 'Zone', 'VLAN', 'Manufacturer', 'Effective Type', 'Port', 'Protocol',
     'Direction', 'Purpose', 'Requirement Level', 'Multicast Required',
     'IGMP Required', 'VLAN Recommendation', 'AV Justification',
-    'Derived From', 'Confidence Score'
+    'Reference', 'Derived From', 'Confidence Score'
   ];
   const lines = [headers.map(csvCell).join(',')];
   rows.forEach(row => {
@@ -1015,6 +1027,7 @@ function exportRequirementsCsv(){
       row.ip || '',
       row.zone || '',
       row.vlan || '',
+      row.manufacturer || '',
       row.effective_type || '',
       row.port || '',
       row.protocol || '',
@@ -1025,6 +1038,7 @@ function exportRequirementsCsv(){
       row.igmp_required ? 'Yes' : 'No',
       row.vlan_recommendation || '',
       row.av_justification || '',
+      row.reference || '',
       row.derived_from || '',
       row.confidence_score != null ? String(row.confidence_score) : ''
     ].map(csvCell).join(','));
