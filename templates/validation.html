@@ -62,7 +62,8 @@
     <span style="font-size:11px;color:#9ca3af">Click a row to expand detail</span>
   </div>
   <div class="panel-body" style="padding:0">
-    <table>
+    <div id="val-empty-wrap">
+    <table id="val-main-table">
       <thead>
         <tr>
           <th>Target</th>
@@ -75,6 +76,7 @@
       </thead>
       <tbody id="validation-results-table"></tbody>
     </table>
+    </div>
   </div>
 </div>
 
@@ -109,6 +111,41 @@
 </div>
 
 <script>
+// ── W23.3 empty-state helpers ────────────────────────────────────────────────
+function renderEmptyState(containerId, config) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+  var panel = document.createElement('div');
+  panel.className = 'empty-state-panel';
+  panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:12px';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:0.9375rem;font-weight:600;color:#e2e8f0';
+  title.textContent = config.title;
+  var body = document.createElement('div');
+  body.style.cssText = 'font-size:0.875rem;color:#94a3b8;max-width:360px;line-height:1.5';
+  body.textContent = config.body;
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px';
+  (config.actions || []).forEach(function(action) {
+    var btn = document.createElement('a');
+    btn.href = action.href || '#';
+    if (action.onclick) { btn.setAttribute('onclick', action.onclick + ';return false;'); }
+    btn.textContent = action.label;
+    btn.style.cssText = 'padding:6px 14px;border-radius:4px;font-size:0.8rem;text-decoration:none;cursor:pointer;' + (action.primary ? 'background:#2dd4bf;color:#000;font-weight:600' : 'border:1px solid #2d3748;color:#94a3b8');
+    actions.appendChild(btn);
+  });
+  panel.appendChild(title); panel.appendChild(body); panel.appendChild(actions);
+  container.appendChild(panel);
+}
+function clearEmptyState(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+}
+
 function escapeHtml(str){
   return String(str || '')
     .replace(/&/g, '&amp;')
@@ -510,6 +547,9 @@ function generateMulticastGroups(){
 function renderValidationRows(){
   const tbody = document.getElementById('validation-results-table');
   if(!tbody) return;
+  clearEmptyState('val-empty-wrap');
+  var _valTable = document.getElementById('val-main-table');
+  if(_valTable) _valTable.style.display = '';
   const dataset = modeData[activeValidationMode] || {};
   const rows = getRowsForActiveView(dataset);
   updateModeCards(rows);
@@ -517,7 +557,20 @@ function renderValidationRows(){
 
   tbody.innerHTML = '';
   if(!rows.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No validation rows available for this mode/view.</td></tr>';
+    const hasFetched = dataset.validateAll && dataset.validateAll.ok === true;
+    if(hasFetched){
+      if(_valTable) _valTable.style.display = 'none';
+      renderEmptyState('val-empty-wrap', {
+        title: 'No validation results yet',
+        body: 'Run Validate All to check port reachability and service availability for every device in the project.',
+        actions: [
+          { label: 'Validate All',   onclick: "setValidationMode('Live', document.querySelector('#validation-mode-tabs button'))", primary: true },
+          { label: 'Go to Devices',  href: '/tools/devices' }
+        ]
+      });
+    } else {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No validation rows available for this mode/view.</td></tr>';
+    }
     return;
   }
 

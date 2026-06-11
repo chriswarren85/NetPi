@@ -72,7 +72,8 @@
     <span style="font-size:11px;color:#6b7280">Click any row to expand</span>
   </div>
   <div class="panel-body" style="padding:0">
-    <table>
+    <div id="req-empty-wrap">
+    <table id="req-main-table">
       <thead id="requirements-thead">
         <tr>
           <th>Device</th>
@@ -85,6 +86,7 @@
       </thead>
       <tbody id="requirements-table"></tbody>
     </table>
+    </div>
   </div>
 </div>
 
@@ -96,6 +98,41 @@
 </div>
 
 <script>
+// ── W23.3 empty-state helpers ────────────────────────────────────────────────
+function renderEmptyState(containerId, config) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+  var panel = document.createElement('div');
+  panel.className = 'empty-state-panel';
+  panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:12px';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:0.9375rem;font-weight:600;color:#e2e8f0';
+  title.textContent = config.title;
+  var body = document.createElement('div');
+  body.style.cssText = 'font-size:0.875rem;color:#94a3b8;max-width:360px;line-height:1.5';
+  body.textContent = config.body;
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px';
+  (config.actions || []).forEach(function(action) {
+    var btn = document.createElement('a');
+    btn.href = action.href || '#';
+    if (action.onclick) { btn.setAttribute('onclick', action.onclick + ';return false;'); }
+    btn.textContent = action.label;
+    btn.style.cssText = 'padding:6px 14px;border-radius:4px;font-size:0.8rem;text-decoration:none;cursor:pointer;' + (action.primary ? 'background:#2dd4bf;color:#000;font-weight:600' : 'border:1px solid #2d3748;color:#94a3b8');
+    actions.appendChild(btn);
+  });
+  panel.appendChild(title); panel.appendChild(body); panel.appendChild(actions);
+  container.appendChild(panel);
+}
+function clearEmptyState(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+}
+
 const REQUIREMENTS_STATE_KEY = 'netpi.requirements.state.v1';
 let requirementRows = [];
 let requirementDevices = [];
@@ -943,6 +980,9 @@ function renderByService(tbody){
 function renderRequirementRows(){
   const tbody = document.getElementById('requirements-table');
   if(!tbody) return;
+  clearEmptyState('req-empty-wrap');
+  var _reqTable = document.getElementById('req-main-table');
+  if(_reqTable) _reqTable.style.display = '';
   tbody.innerHTML = '';
 
   if(requirementsLoadState === 'idle'){
@@ -961,8 +1001,15 @@ function renderRequirementRows(){
     return;
   }
   if(requirementsLoadState === 'empty'){
-    _setThead(['Device','IP','Zone','Manufacturer','Type','Ports','Confidence']);
-    tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1.5rem">No requirements generated — check that devices have types assigned.</td></tr>';
+    if(_reqTable) _reqTable.style.display = 'none';
+    renderEmptyState('req-empty-wrap', {
+      title: 'No communication profiles yet',
+      body: 'Communication profiles are generated from your device types. Classify your devices first, then generate profiles here.',
+      actions: [
+        { label: 'Generate profiles', onclick: 'startRequirementsGeneration()', primary: true },
+        { label: 'Classify devices',  href: '/tools/devices' }
+      ]
+    });
     return;
   }
 

@@ -75,6 +75,7 @@
     </div>
   </div>
   <div class="panel-body" style="padding:0;overflow-x:auto">
+    <div id="lan-empty-wrap">
     <table id="lan-table" style="font-size:11px;table-layout:fixed">
       <thead>
         <tr id="lan-thead-row">
@@ -85,6 +86,7 @@
         <tr><td colspan="14" style="color:#6b7280;text-align:center;padding:1.5rem">Loading…</td></tr>
       </tbody>
     </table>
+    </div>
   </div>
 </div>
 
@@ -110,6 +112,41 @@
 .scan-status.error    { color: #f87171; }
 </style>
 <script>
+// ── W23.3 empty-state helpers ────────────────────────────────────────────────
+function renderEmptyState(containerId, config) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+  var panel = document.createElement('div');
+  panel.className = 'empty-state-panel';
+  panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:12px';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:0.9375rem;font-weight:600;color:#e2e8f0';
+  title.textContent = config.title;
+  var body = document.createElement('div');
+  body.style.cssText = 'font-size:0.875rem;color:#94a3b8;max-width:360px;line-height:1.5';
+  body.textContent = config.body;
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px';
+  (config.actions || []).forEach(function(action) {
+    var btn = document.createElement('a');
+    btn.href = action.href || '#';
+    if (action.onclick) { btn.setAttribute('onclick', action.onclick + ';return false;'); }
+    btn.textContent = action.label;
+    btn.style.cssText = 'padding:6px 14px;border-radius:4px;font-size:0.8rem;text-decoration:none;cursor:pointer;' + (action.primary ? 'background:#2dd4bf;color:#000;font-weight:600' : 'border:1px solid #2d3748;color:#94a3b8');
+    actions.appendChild(btn);
+  });
+  panel.appendChild(title); panel.appendChild(body); panel.appendChild(actions);
+  container.appendChild(panel);
+}
+function clearEmptyState(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+}
+
 let lanEntries = [];
 let filtered = [];
 let sortState = { col: 'room', dir: 'asc' };
@@ -313,6 +350,9 @@ function buildEntryRow(e, rowIdx){
 }
 
 function renderSheet(){
+  clearEmptyState('lan-empty-wrap');
+  var _lanTable = document.getElementById('lan-table');
+  if(_lanTable) _lanTable.style.display = '';
   buildThead();
   const tbody = document.getElementById('lan-tbody');
   const groupByRoom = document.getElementById('group-by-room').checked;
@@ -323,9 +363,19 @@ function renderSheet(){
     (filtered.length < lanEntries.length ? ' (filtered from ' + lanEntries.length + ')' : '');
 
   if(!filtered.length){
-    tbody.innerHTML = `<tr><td colspan="${colCount}" style="color:#4b5563;text-align:center;padding:1.5rem">`
-      + (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet — paste from Device Intake or use Sync.')
-      + `</td></tr>`;
+    if(!lanEntries.length){
+      if(_lanTable) _lanTable.style.display = 'none';
+      renderEmptyState('lan-empty-wrap', {
+        title: 'No LAN sheet entries yet',
+        body: 'The LAN sheet is your design register and the source of truth for all generated deliverables. Add devices manually or import from the intake workflow.',
+        actions: [
+          { label: '+ Add device',  onclick: 'lcAddRow()', primary: true },
+          { label: 'Paste Import',  href: '/tools/devices#intake' }
+        ]
+      });
+      return;
+    }
+    tbody.innerHTML = `<tr><td colspan="${colCount}" style="color:#4b5563;text-align:center;padding:1.5rem">No entries match the current filters.</td></tr>`;
     _appendAddRow(tbody, colCount);
     updateBatchButtons();
     return;
