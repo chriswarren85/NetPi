@@ -11,6 +11,8 @@
     <button class="btn" onclick="createVlanGroups()">Create VLAN Groups for Project</button>
     <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
     <a class="btn" href="/tools/devices">Device List</a>
+    <button id="btn-scan-selected" class="btn" disabled title="Scan checked rows">⟳ Scan Selected (<span id="scan-selected-count">0</span>)</button>
+    <button id="btn-scan-all" class="btn" title="Scan all visible rows">⟳ Scan All</button>
     <button class="btn btn-danger" onclick="clearLanSheet()">Clear LAN Sheet</button>
   </div>
 </div>
@@ -195,7 +197,7 @@ function buildThead(){
   const tr = document.getElementById('lan-thead-row');
   if(!tr) return;
   const sortable = new Set(['room','name','location','vendor','vlan','ip','hostname','switch_port','status']);
-  let html = '';
+  let html = '<th style="width:32px;text-align:center;padding:4px"><input type="checkbox" id="check-all-rows" title="Select all"></th>';
   LC_COLS.forEach(col => {
     const s = sortable.has(col.field);
     const arrow = sortState.col === col.field ? (sortState.dir === 'asc' ? ' ▲' : ' ▼') : '';
@@ -286,7 +288,8 @@ function buildEntryRow(e, rowIdx){
   const statusBg    = e.present ? '#0d2015' : '#1a0d0d';
   const statusColor = e.present ? '#86efac' : '#fca5a5';
 
-  let html = '<tr>';
+  let html = `<tr data-row-ip="${safeIp}">`;
+  html += `<td style="width:32px;text-align:center;padding:4px;vertical-align:middle"><input type="checkbox" class="row-check" data-ip="${safeIp}"></td>`;
   LC_COLS.forEach((col, colIdx) => {
     const val  = String(e[col.field] || '');
     const isDirty = lcDirty[rawIp] && lcDirty[rawIp][col.field];
@@ -308,7 +311,7 @@ function renderSheet(){
   buildThead();
   const tbody = document.getElementById('lan-tbody');
   const groupByRoom = document.getElementById('group-by-room').checked;
-  const colCount = LC_COLS.length + 4;
+  const colCount = LC_COLS.length + 5;
 
   document.getElementById('table-count').textContent =
     filtered.length + ' device' + (filtered.length !== 1 ? 's' : '') +
@@ -319,6 +322,7 @@ function renderSheet(){
       + (lanEntries.length ? 'No entries match the current filters.' : 'No entries yet — paste from Device Intake or use Sync.')
       + `</td></tr>`;
     _appendAddRow(tbody, colCount);
+    updateBatchButtons();
     return;
   }
 
@@ -350,6 +354,7 @@ function renderSheet(){
     tbody.innerHTML = sorted.map((e, i) => buildEntryRow(e, i)).join('');
   }
   _appendAddRow(tbody, colCount);
+  updateBatchButtons();
 }
 
 function _appendAddRow(tbody, colCount){
@@ -760,6 +765,124 @@ document.addEventListener('click', function(e) {
   const ip = btn.dataset.ip;
   if (ip && row) scanLanSheetIp(ip, row);
 });
+
+/* ─── Batch scan ─────────────────────────────────────────────────────────── */
+
+function updateBatchButtons() {
+  const checked = document.querySelectorAll('.row-check:checked');
+  const btn = document.getElementById('btn-scan-selected');
+  const countSpan = document.getElementById('scan-selected-count');
+  if (btn) btn.disabled = checked.length === 0;
+  if (countSpan) countSpan.textContent = checked.length;
+}
+
+async function batchScanIps(ips) {
+  if (!ips || ips.length === 0) return;
+
+  const btnSelected = document.getElementById('btn-scan-selected');
+  const btnAll = document.getElementById('btn-scan-all');
+  if (btnSelected) btnSelected.disabled = true;
+  if (btnAll) btnAll.disabled = true;
+
+  ips.forEach(ip => {
+    const row = document.querySelector(`tr[data-row-ip="${ip}"]`);
+    if (!row) return;
+    const statusCell = row.querySelector('.scan-status-cell');
+    const scanBtn = row.querySelector('.btn-scan-ip');
+    if (statusCell) statusCell.innerHTML = '<span class="scan-status scanning">⟳ Scanning…</span>';
+    if (scanBtn) scanBtn.disabled = true;
+  });
+
+  try {
+    const startRes = await fetch('/tools/api/lan_sheet/scan_ips', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ips })
+    });
+    const startData = await startRes.json();
+    if (!startData.ok || !startData.job_id) {
+      ips.forEach(ip => markRowError(ip));
+      return;
+    }
+
+    const finalData = await pollBatchJob(startData.job_id);
+    const devices = (finalData && finalData.devices) || [];
+    ips.forEach(ip => {
+      const row = document.querySelector(`tr[data-row-ip="${ip}"]`);
+      if (!row) return;
+      const statusCell = row.querySelector('.scan-status-cell');
+      const scanBtn = row.querySelector('.btn-scan-ip');
+      applyRowScanResult({ devices }, ip, row, statusCell, scanBtn);
+    });
+
+  } catch(e) {
+    ips.forEach(ip => markRowError(ip));
+  } finally {
+    if (btnAll) btnAll.disabled = false;
+    updateBatchButtons();
+  }
+}
+
+async function pollBatchJob(jobId) {
+  const MAX_POLLS = 120;
+  const INTERVAL_MS = 500;
+  for (let i = 0; i < MAX_POLLS; i++) {
+    await new Promise(r => setTimeout(r, INTERVAL_MS));
+    try {
+      const res = await fetch(`/tools/api/discover_hosts/status/${jobId}`);
+      const data = await res.json();
+      const status = data.status || '';
+      if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+        return data;
+      }
+    } catch(e) { /* keep polling on transient error */ }
+  }
+  return null;
+}
+
+function markRowError(ip) {
+  const row = document.querySelector(`tr[data-row-ip="${ip}"]`);
+  if (!row) return;
+  const statusCell = row.querySelector('.scan-status-cell');
+  const scanBtn = row.querySelector('.btn-scan-ip');
+  if (statusCell) statusCell.innerHTML = '<span class="scan-status error">✗ Failed</span>';
+  if (scanBtn) scanBtn.disabled = false;
+}
+
+document.addEventListener('change', function(e) {
+  if (e.target.id === 'check-all-rows') {
+    document.querySelectorAll('.row-check').forEach(cb => {
+      cb.checked = e.target.checked;
+    });
+    updateBatchButtons();
+  }
+  if (e.target.classList.contains('row-check')) {
+    updateBatchButtons();
+    const all = document.querySelectorAll('.row-check');
+    const checked = document.querySelectorAll('.row-check:checked');
+    const selectAll = document.getElementById('check-all-rows');
+    if (selectAll) {
+      selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+      selectAll.checked = checked.length === all.length && all.length > 0;
+    }
+  }
+});
+
+document.getElementById('btn-scan-selected')
+  ?.addEventListener('click', function() {
+    const ips = [...document.querySelectorAll('.row-check:checked')]
+      .map(cb => cb.dataset.ip)
+      .filter(Boolean);
+    batchScanIps(ips);
+  });
+
+document.getElementById('btn-scan-all')
+  ?.addEventListener('click', function() {
+    const ips = [...document.querySelectorAll('.row-check')]
+      .map(cb => cb.dataset.ip)
+      .filter(Boolean);
+    batchScanIps(ips);
+  });
 
 loadSheet();
 </script>
