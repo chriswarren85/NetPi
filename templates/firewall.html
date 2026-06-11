@@ -134,13 +134,13 @@
 .sa-card-header:hover { background: #202020; }
 .sa-card-header.open { background: #1e1e1e; }
 .sa-chevron { font-size: 9px; color: #4b5563; flex-shrink: 0; width: 10px; }
-.sa-dev-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.sa-dev-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .sa-dev-meta { font-size: 11px; color: #4b5563; margin-top: 1px; }
 .sa-dev-ip { font-family: monospace; color: #6b7280; }
 .sa-dev-meta .sep { margin: 0 5px; }
 .sa-pill { font-size: 10px; padding: 1px 7px; border-radius: 999px; font-weight: 500; flex-shrink: 0; }
-.sa-pill-min { background: #1a0a0a; color: #f87171; border: 1px solid #7f1d1d; }
-.sa-pill-rec { background: #1a1200; color: #f59e0b; border: 1px solid #78350f; }
+.sa-pill-min { background: #1a0a0a; color: var(--color-critical); border: 1px solid #7f1d1d; }
+.sa-pill-rec { background: #1a1200; color: var(--color-warning); border: 1px solid #78350f; }
 .sa-pill-excl { background: #111; color: #4b5563; border: 1px solid #222; }
 .sa-dev-acts { display: flex; gap: 5px; flex-shrink: 0; }
 /* Rule grid: ☑ | Port | Proto | Dir | Purpose | Level | Notes */
@@ -163,12 +163,12 @@
 .sa-note-cell { cursor: text; }
 .sa-note-view { min-height: 18px; color: #374151; font-size: 11px; font-style: italic; }
 .sa-note-view.has-note { color: #d1d5db; font-style: normal; }
-.sa-note-cell input { width: 100%; padding: 2px 5px; background: #0f172a; border: 1px solid #3b82f6; border-radius: 3px; color: #e2e8f0; font-size: 11px; outline: none; box-sizing: border-box; }
+.sa-note-cell input { width: 100%; padding: 2px 5px; background: #0f172a; border: 1px solid #3b82f6; border-radius: 3px; color: var(--text); font-size: 11px; outline: none; box-sizing: border-box; }
 /* Level select */
-.sa-lvl { padding: 3px 6px; font-size: 11px; background: #1a1a1a; border: 1px solid #374151; border-radius: 4px; color: #e2e8f0; width: 100%; cursor: pointer; outline: none; }
+.sa-lvl { padding: 3px 6px; font-size: 11px; background: #1a1a1a; border: 1px solid #374151; border-radius: 4px; color: var(--text); width: 100%; cursor: pointer; outline: none; }
 .sa-lvl:focus { border-color: #3b82f6; }
-.sa-lvl.lv-min { border-color: #7f1d1d; color: #f87171; background: #1a0a0a; }
-.sa-lvl.lv-rec { border-color: #78350f; color: #f59e0b; background: #1a1200; }
+.sa-lvl.lv-min { border-color: #7f1d1d; color: var(--color-critical); background: #1a0a0a; }
+.sa-lvl.lv-rec { border-color: #78350f; color: var(--color-warning); background: #1a1200; }
 .sa-lvl.lv-exc { border-color: #1e1e1e; color: #4b5563; background: #111; }
 /* Excluded section */
 .sa-excl-sep { padding: 4px 14px; font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #2e2e2e; background: #0f0f0f; border-top: 1px solid #1a1a1a; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; gap: 8px; }
@@ -757,7 +757,7 @@ function generateDeliverable(){
   .sc.rec .v { color: #b45309; }
   h2 { font-size: 13px; font-weight: 700; margin: 20px 0 8px; padding: 6px 10px; border-radius: 4px; }
   h2.min-req { background: #fef2f2; color: #991b1b; border-left: 4px solid #991b1b; }
-  h2.rec-hd  { background: #fffbeb; color: #b45309; border-left: 4px solid #f59e0b; }
+  h2.rec-hd  { background: #fffbeb; color: #b45309; border-left: 4px solid var(--color-warning); }
   table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 10px; }
   th { text-align: left; padding: 5px 8px; background: #f5f5f5; border-bottom: 2px solid #ccc; font-weight: 600; white-space: nowrap; position: sticky; top: 0; }
   td { padding: 4px 8px; border-bottom: 1px solid #eee; vertical-align: top; }

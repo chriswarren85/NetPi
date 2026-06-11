@@ -5,8 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AV NetWorker {% block title %}{% endblock %}</title>
 <style>
+:root {
+  /* Base surfaces */
+  --color-base:      #0f1117;
+  --color-surface:   #1a1d27;
+  --color-surface-2: #1e2333;
+  /* Borders */
+  --border: #2d3748;
+  /* Text */
+  --text:        #e2e8f0;
+  --text-muted:  #94a3b8;
+  --text-subtle: #64748b;
+  /* Accent — single teal for primary actions and active states */
+  --accent:        #2dd4bf;
+  --accent-subtle: rgba(45, 212, 191, 0.08);
+  /* Severity — semantic, do not use for decoration */
+  --color-critical: #f87171;
+  --color-warning:  #f59e0b;
+  --color-pass:     #22c55e;
+  --color-info:     #60a5fa;
+  /* Backward-compat alias */
+  --surface: var(--color-surface);
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111111;color:#e2e8f0;min-height:100vh;display:flex}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111111;color:var(--text);min-height:100vh;display:flex}
 .sidebar{width:220px;background:#1a1a1a;border-right:1px solid #2e2e2e;padding:1rem 0;flex-shrink:0;min-height:100vh}
 .sidebar-logo{padding:0.75rem 1rem 1.25rem;font-size:15px;font-weight:600;color:#fff;border-bottom:1px solid #2e2e2e;margin-bottom:0.5rem}
 .sidebar-logo span{color:#d1d5db}
@@ -22,7 +44,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .nav-section.s-config{color:#9ca3af}
 .nav-section.s-external{color:#6b7280}
 .nav-item{display:flex;align-items:center;gap:10px;padding:7px 1rem;font-size:13px;color:#9ca3af;text-decoration:none;border-left:2px solid transparent;transition:all 0.1s}
-.nav-item:hover{color:#e2e8f0;background:#222222}
+.nav-item:hover{color:var(--text);background:#222222}
 .nav-item.active{color:#fff;border-left:2px solid #7a9cb8;background:#222222}
 .nav-dot{width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0}
 .nav-dot.green{background:#6b9e7a}
@@ -39,11 +61,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .card-value{font-size:22px;font-weight:600;color:#fff}
 .card-sub{font-size:11px;color:#4b5563;margin-top:2px}
 .panel{background:#1a1a1a;border:1px solid #2e2e2e;border-radius:8px;margin-bottom:1rem;overflow:hidden}
-.panel-header{padding:10px 14px;background:#222222;border-bottom:1px solid #2e2e2e;font-size:13px;font-weight:500;color:#e2e8f0;display:flex;justify-content:space-between;align-items:center}
+.panel-header{padding:10px 14px;background:#222222;border-bottom:1px solid #2e2e2e;font-size:13px;font-weight:500;color:var(--text);display:flex;justify-content:space-between;align-items:center}
 .panel-body{padding:14px}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th{text-align:left;padding:6px 10px;color:#6b7280;font-weight:500;border-bottom:1px solid #2e2e2e;font-size:11px;text-transform:uppercase;letter-spacing:0.05em}
-td{padding:7px 10px;border-bottom:1px solid #1e1e1e;color:#e2e8f0}
+td{padding:7px 10px;border-bottom:1px solid #1e1e1e;color:var(--text)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:#222222}
 .badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500}
@@ -51,7 +73,7 @@ tr:hover td{background:#222222}
 .badge-red{background:#2e1a1a;color:#d1d5db}
 .badge-amber{background:#2e2414;color:#d1d5db}
 .badge-blue{background:#1e1e1e;color:#d1d5db}
-.btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #374151;background:#222222;color:#e2e8f0;transition:all 0.1s}
+.btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid #374151;background:#222222;color:var(--text);transition:all 0.1s}
 .btn:hover{background:#2e2e2e;border-color:#4b5563}
 .btn-primary{background:#374151;border-color:#4b5563;color:#fff}
 .btn-primary:hover{background:#4b5563}
@@ -59,7 +81,7 @@ tr:hover td{background:#222222}
 .btn-danger:hover{background:#7f1d1d}
 .btn-success{background:#1a4731;border-color:#2d6b4e;color:#d1fae5}
 .btn-success:hover{background:#1e5a3e}
-input,select,textarea{background:#222222;border:1px solid #374151;border-radius:6px;padding:7px 10px;color:#e2e8f0;font-size:13px;width:100%;outline:none}
+input,select,textarea{background:#222222;border:1px solid #374151;border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;width:100%;outline:none}
 input:focus,select:focus,textarea:focus{border-color:#6b7280}
 label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 .form-group{margin-bottom:1rem}
@@ -73,14 +95,14 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 .toast{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;max-width:340px;opacity:0;transform:translateY(8px);transition:opacity 0.2s,transform 0.2s;pointer-events:auto;box-shadow:0 4px 12px rgba(0,0,0,.4)}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast-success{background:#1a2e1a;border:1px solid #2d4a2d;color:#d1d5db}
-.toast-error{background:#2e1a1a;border:1px solid #4a2d2d;color:#e2e8f0}
-.toast-warn{background:#2e2414;border:1px solid #4a3a1e;color:#e2e8f0}
+.toast-error{background:#2e1a1a;border:1px solid #4a2d2d;color:var(--text)}
+.toast-warn{background:#2e2414;border:1px solid #4a3a1e;color:var(--text)}
 .toast-info{background:#1e1e1e;border:1px solid #374151;color:#d1d5db}
 /* ── Global status bar ──────────────────────────────────────────────────── */
 #netpi-statusbar{position:fixed;bottom:0;left:0;right:0;z-index:800;background:#0d0d0d;border-top:1px solid #222}
 #nsb-bar{display:flex;align-items:center;gap:10px;padding:0 14px;height:32px;font-size:11px;color:#6b7280;min-width:0}
 #nsb-dot{width:8px;height:8px;border-radius:50%;background:#2a2a2a;border:1px solid #374151;flex-shrink:0;transition:background 0.3s,border-color 0.3s}
-#nsb-dot.running{background:#d97706;border-color:#f59e0b;animation:nsb-pulse 1s ease-in-out infinite}
+#nsb-dot.running{background:#d97706;border-color:var(--color-warning);animation:nsb-pulse 1s ease-in-out infinite}
 #nsb-dot.done{background:#4a7a5a;border-color:#6b9e7a}
 #nsb-dot.error{background:#991b1b;border-color:#ef4444}
 @keyframes nsb-pulse{0%,100%{opacity:1}50%{opacity:0.3}}
@@ -104,12 +126,12 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 /* ── Workflow sidebar ───────────────────────────────────────────────────── */
 .workflow-step{display:flex;align-items:center;gap:8px;padding:7px 12px;text-decoration:none;border-radius:4px;margin:0 4px;transition:background 0.1s}
 .workflow-step:hover{background:#222222}
-.workflow-step.active{background:rgba(45,212,191,0.08)}
+.workflow-step.active{background:var(--accent-subtle)}
 .workflow-step .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.workflow-step .step-label{font-size:0.8125rem;color:#e2e8f0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.workflow-step.active .step-label{color:#2dd4bf}
-.workflow-step .step-badge{font-size:0.7rem;color:#64748b;white-space:nowrap}
-.sidebar-workflow-header{padding:0.5rem 1rem 0.25rem;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;color:#64748b;border-top:1px solid #2e2e2e;margin-top:0.5rem}
+.workflow-step .step-label{font-size:0.8125rem;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workflow-step.active .step-label{color:var(--accent)}
+.workflow-step .step-badge{font-size:0.7rem;color:var(--text-subtle);white-space:nowrap}
+.sidebar-workflow-header{padding:0.5rem 1rem 0.25rem;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;color:var(--text-subtle);border-top:1px solid #2e2e2e;margin-top:0.5rem}
 #sidebar-collapse-btn{display:block;margin:8px 12px;padding:4px 8px;background:none;border:1px solid #2e2e2e;border-radius:4px;color:#6b7280;cursor:pointer;font-size:0.75rem;text-align:left;width:calc(100% - 24px)}
 #sidebar-collapse-btn:hover{color:#9ca3af;border-color:#374151;background:#1a1a1a}
 .sidebar.collapsed{width:40px;overflow:hidden}

@@ -100,16 +100,16 @@
 #lan-table td.lce.lc-active { outline: 2px solid #3b82f6; outline-offset: -1px; background: #111827; }
 #lan-table td.lce.lc-dirty  { background: #1a1a0a; }
 #lan-table td.lce input, #lan-table td.lce select {
-  width: 100%; padding: 4px 6px; background: #111827; color: #e2e8f0;
+  width: 100%; padding: 4px 6px; background: #111827; color: var(--text);
   border: none; outline: none; font-size: 11px; font-family: inherit;
   min-width: 60px; box-sizing: border-box;
 }
 #lan-table tr.lc-new-row td { background: #0a1a0a; }
 .scan-status { font-size: 0.85em; white-space: nowrap; }
-.scan-status.online   { color: #22c55e; }
-.scan-status.offline  { color: #94a3b8; }
-.scan-status.scanning { color: #60a5fa; }
-.scan-status.error    { color: #f87171; }
+.scan-status.online   { color: var(--color-pass); }
+.scan-status.offline  { color: var(--text-muted); }
+.scan-status.scanning { color: var(--color-info); }
+.scan-status.error    { color: var(--color-critical); }
 </style>
 <script>
 // ── W23.3 empty-state helpers ────────────────────────────────────────────────
