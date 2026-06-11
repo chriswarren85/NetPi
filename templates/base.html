@@ -101,6 +101,27 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 .nsb-row .m.error{color:#7f1d1d}
 .nsb-row .m.warn{color:#78450a}
 .nsb-row .m.running{color:#78450a}
+/* ── Workflow sidebar ───────────────────────────────────────────────────── */
+.workflow-step{display:flex;align-items:center;gap:8px;padding:7px 12px;text-decoration:none;border-radius:4px;margin:0 4px;transition:background 0.1s}
+.workflow-step:hover{background:#222222}
+.workflow-step.active{background:rgba(45,212,191,0.08)}
+.workflow-step .step-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.workflow-step .step-label{font-size:0.8125rem;color:#e2e8f0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workflow-step.active .step-label{color:#2dd4bf}
+.workflow-step .step-badge{font-size:0.7rem;color:#64748b;white-space:nowrap}
+.sidebar-workflow-header{padding:0.5rem 1rem 0.25rem;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;font-weight:600;color:#64748b;border-top:1px solid #2e2e2e;margin-top:0.5rem}
+#sidebar-collapse-btn{display:block;margin:8px 12px;padding:4px 8px;background:none;border:1px solid #2e2e2e;border-radius:4px;color:#6b7280;cursor:pointer;font-size:0.75rem;text-align:left;width:calc(100% - 24px)}
+#sidebar-collapse-btn:hover{color:#9ca3af;border-color:#374151;background:#1a1a1a}
+.sidebar.collapsed{width:40px;overflow:hidden}
+.sidebar.collapsed .nav-item{font-size:0;padding:7px 16px}
+.sidebar.collapsed .nav-section,.sidebar.collapsed .sidebar-logo,.sidebar.collapsed .project-label,.sidebar.collapsed .project-switch-wrap,.sidebar.collapsed .sidebar-workflow-header,.sidebar.collapsed .step-label,.sidebar.collapsed .step-badge,.sidebar.collapsed #sidebar-collapse-btn{display:none}
+.sidebar.collapsed .workflow-step{padding:7px 16px;justify-content:center}
+@media(max-width:900px){
+  .sidebar{width:40px;overflow:hidden}
+  .sidebar .nav-item{font-size:0;padding:7px 16px}
+  .sidebar .nav-section,.sidebar .sidebar-logo,.sidebar .project-label,.sidebar .project-switch-wrap,.sidebar .sidebar-workflow-header,.sidebar .step-label,.sidebar .step-badge,.sidebar #sidebar-collapse-btn{display:none}
+  .sidebar .workflow-step{padding:7px 16px;justify-content:center}
+}
 </style>
 </head>
 <body>
@@ -131,6 +152,9 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   <a href="/tools/settings" class="nav-item {% if request.path == '/tools/settings' %}active{% endif %}"><span class="nav-dot blue"></span>Settings</a>
   <div class="nav-section s-external" style="margin-top:0.5rem">External</div>
   <a href="http://192.168.1.50:8080" class="nav-item" target="_blank"><span class="nav-dot blue"></span>Pi-hole ↗</a>
+  <div class="sidebar-workflow-header">Workflow</div>
+  <div id="workflow-steps"></div>
+  <button id="sidebar-collapse-btn" aria-label="Collapse sidebar">&#x2039; Collapse</button>
 </div>
 <div class="main">
   <div id="project-context-strip"
@@ -419,9 +443,92 @@ fetch('/tools/api/projects').then(r=>r.json()).then(d=>{
       return;
     }
     if(window._updateProjectStrip) window._updateProjectStrip();
+    if(window._refreshWorkflowSidebar) window._refreshWorkflowSidebar();
     window.location.reload();
   };
 });
+</script>
+<script>
+/* ── W23.4 Guided workflow sidebar ──────────────────────────────────────── */
+(function() {
+  var WORKFLOW_STEPS = [
+    { num: 1, label: 'Discover',   href: '/tools/devices#intake', badgeKey: 'discover' },
+    { num: 2, label: 'Classify',   href: '/tools/devices',        badgeKey: 'classify' },
+    { num: 3, label: 'LAN Sheet',  href: '/tools/lan-sheet',      badgeKey: 'lansheet' },
+    { num: 4, label: 'Generate',   href: '/tools/firewall',       badgeKey: 'generate' },
+    { num: 5, label: 'Export',     href: '/tools/settings',       badgeKey: 'export'   }
+  ];
+
+  var DOT_COLORS = { green: '#22c55e', amber: '#f59e0b', red: '#f87171', grey: '#475569' };
+
+  function buildStepBadges(statusData) {
+    var d = statusData || {};
+    var deviceCount = d.device_count || 0;
+    var lsStatus = d.lan_sheet_status || 'missing';
+    var lsCount = d.lan_sheet_count || 0;
+    return {
+      discover: deviceCount > 0 ? { dot: 'green', text: deviceCount + ' hosts' } : { dot: 'grey', text: 'Not run' },
+      classify: deviceCount > 0 ? { dot: 'amber', text: deviceCount + ' devices' } : { dot: 'grey', text: '—' },
+      lansheet: lsStatus === 'loaded' ? { dot: 'green', text: lsCount + ' entries' }
+              : lsStatus === 'empty'  ? { dot: 'amber', text: 'Empty' }
+              :                         { dot: 'red',   text: 'Missing' },
+      generate: lsStatus === 'loaded' ? { dot: 'green', text: 'Ready' } : { dot: 'grey', text: 'Needs LAN sheet' },
+      export:   { dot: 'grey', text: '—' }
+    };
+  }
+
+  function renderWorkflowSteps(statusData) {
+    window._lastSidebarStatus = statusData;
+    var container = document.getElementById('workflow-steps');
+    if (!container) return;
+    var badges = buildStepBadges(statusData);
+    var currentPath = window.location.pathname;
+    container.innerHTML = WORKFLOW_STEPS.map(function(step) {
+      var badge = badges[step.badgeKey] || { dot: 'grey', text: '—' };
+      var isActive = currentPath === step.href.split('#')[0];
+      var dotColor = DOT_COLORS[badge.dot] || DOT_COLORS.grey;
+      return '<a href="' + step.href + '" class="workflow-step' + (isActive ? ' active' : '') + '">'
+        + '<span class="step-dot" style="background:' + dotColor + '"></span>'
+        + '<span class="step-label">' + step.num + ' ' + step.label + '</span>'
+        + '<span class="step-badge">' + badge.text + '</span>'
+        + '</a>';
+    }).join('');
+  }
+
+  function loadSidebarStatus() {
+    fetch('/tools/api/project/status')
+      .then(function(r) { return r.json(); })
+      .then(function(d) { if (d && d.ok) renderWorkflowSteps(d); else renderWorkflowSteps(null); })
+      .catch(function() { renderWorkflowSteps(null); });
+  }
+
+  var SIDEBAR_KEY = 'netpi.sidebar_collapsed';
+
+  function applySidebarState() {
+    var sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    if (localStorage.getItem(SIDEBAR_KEY) === 'true') {
+      sidebar.classList.add('collapsed');
+    } else {
+      sidebar.classList.remove('collapsed');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    applySidebarState();
+    loadSidebarStatus();
+    var btn = document.getElementById('sidebar-collapse-btn');
+    if (btn) {
+      btn.addEventListener('click', function() {
+        var collapsed = localStorage.getItem(SIDEBAR_KEY) === 'true';
+        localStorage.setItem(SIDEBAR_KEY, collapsed ? 'false' : 'true');
+        applySidebarState();
+      });
+    }
+  });
+
+  window._refreshWorkflowSidebar = loadSidebarStatus;
+})();
 </script>
 </body>
 </html>
