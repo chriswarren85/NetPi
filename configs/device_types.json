@@ -1,0 +1,494 @@
+{
+  "device_types": [
+    {
+      "id": "qsys-core",
+      "display_name": "Q-SYS Core DSP",
+      "category": "DSP",
+      "role": "DSP",
+      "typical_ports": [1710, 443, 80],
+      "typical_vlans": ["AV Control", "Dante Audio"],
+      "manufacturer_examples": ["QSC"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "qsys-io-bridge",
+      "display_name": "Q-SYS I/O Bridge",
+      "category": "DSP",
+      "role": "DSP",
+      "typical_ports": [1710, 443, 80],
+      "typical_vlans": ["Dante Audio"],
+      "manufacturer_examples": ["QSC"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "biamp-tesira",
+      "display_name": "Biamp Tesira",
+      "category": "DSP",
+      "role": "DSP",
+      "typical_ports": [443, 80, 23],
+      "typical_vlans": ["AV Control", "Dante Audio"],
+      "manufacturer_examples": ["Biamp"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "symetrix-edge",
+      "display_name": "Symetrix Edge / Radius",
+      "category": "DSP",
+      "role": "DSP",
+      "typical_ports": [443, 80, 8000],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Symetrix"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "crown-iqt",
+      "display_name": "Crown IQT Amplifier",
+      "category": "DSP",
+      "role": "Amplifier",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["Dante Audio", "AV Control"],
+      "manufacturer_examples": ["Crown", "BSS"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "dante-device",
+      "display_name": "Dante Audio Endpoint",
+      "category": "Dante Audio",
+      "role": "Audio Endpoint",
+      "typical_ports": [443, 80, 14336, 8700],
+      "typical_vlans": ["Dante Audio"],
+      "manufacturer_examples": ["Audinate", "Shure", "Biamp", "QSC", "Yamaha"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "shure-mxa",
+      "display_name": "Shure MXA Microphone Array",
+      "category": "Dante Audio",
+      "role": "Microphone",
+      "typical_ports": [443, 80, 8080],
+      "typical_vlans": ["Dante Audio"],
+      "manufacturer_examples": ["Shure"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "shure-qlxd",
+      "display_name": "Shure QLXD / ULXD Wireless Receiver",
+      "category": "Dante Audio",
+      "role": "Wireless Audio",
+      "typical_ports": [443, 80, 2202],
+      "typical_vlans": ["AV Control", "Dante Audio"],
+      "manufacturer_examples": ["Shure"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "dante-amplifier",
+      "display_name": "Dante Network Amplifier",
+      "category": "Dante Audio",
+      "role": "Amplifier",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["Dante Audio"],
+      "manufacturer_examples": ["Powersoft", "Lab.gruppen", "Crown", "QSC"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "dante-gateway",
+      "display_name": "Dante Network Gateway / Bridge",
+      "category": "Dante Audio",
+      "role": "Gateway",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["Dante Audio"],
+      "manufacturer_examples": ["Audinate"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "crestron-processor",
+      "display_name": "Crestron Control Processor",
+      "category": "Control System",
+      "role": "Control Processor",
+      "typical_ports": [41794, 41795, 41796, 443, 80],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Crestron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "crestron-touchpanel",
+      "display_name": "Crestron Touch Panel",
+      "category": "Control System",
+      "role": "Control Endpoint",
+      "typical_ports": [443, 80, 41795],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Crestron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "crestron-uc-engine",
+      "display_name": "Crestron UC Engine",
+      "category": "Control System",
+      "role": "Conferencing",
+      "typical_ports": [443, 41795],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Crestron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "amx-processor",
+      "display_name": "AMX Control Processor",
+      "category": "Control System",
+      "role": "Control Processor",
+      "typical_ports": [1319, 443, 80, 23],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["AMX"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "amx-touchpanel",
+      "display_name": "AMX Touch Panel",
+      "category": "Control System",
+      "role": "Control Endpoint",
+      "typical_ports": [1319, 443, 80],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["AMX"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "extron-controller",
+      "display_name": "Extron Control Processor",
+      "category": "Control System",
+      "role": "Control Processor",
+      "typical_ports": [443, 80, 23],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Extron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "extron-touchpanel",
+      "display_name": "Extron Touch Panel",
+      "category": "Control System",
+      "role": "Control Endpoint",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Extron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "qsys-nv-endpoint",
+      "display_name": "Q-SYS NV Endpoint",
+      "category": "AV-over-IP Video",
+      "role": "Video Endpoint",
+      "typical_ports": [443, 80, 554],
+      "typical_vlans": ["AV-over-IP", "AV Control"],
+      "manufacturer_examples": ["QSC"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "barco-ctrl-server",
+      "display_name": "Barco Control Server",
+      "category": "AV-over-IP Video",
+      "role": "Video Controller",
+      "typical_ports": [443, 80, 9004],
+      "typical_vlans": ["AV Control", "AV-over-IP"],
+      "manufacturer_examples": ["Barco"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "barco-encoder",
+      "display_name": "Barco / JPEG XS Encoder",
+      "category": "AV-over-IP Video",
+      "role": "Video Encoder",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV-over-IP"],
+      "manufacturer_examples": ["Barco", "Blustream", "Just Add Power"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "barco-decoder",
+      "display_name": "Barco / JPEG XS Decoder",
+      "category": "AV-over-IP Video",
+      "role": "Video Decoder",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV-over-IP"],
+      "manufacturer_examples": ["Barco", "Blustream", "Just Add Power"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "blustream-encoder",
+      "display_name": "Blustream HDIP Encoder",
+      "category": "AV-over-IP Video",
+      "role": "Video Encoder",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV-over-IP", "IPTV"],
+      "manufacturer_examples": ["Blustream"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "blustream-decoder",
+      "display_name": "Blustream HDIP Decoder",
+      "category": "AV-over-IP Video",
+      "role": "Video Decoder",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV-over-IP", "IPTV"],
+      "manufacturer_examples": ["Blustream"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "magewell-encoder",
+      "display_name": "Magewell Pro Convert Encoder",
+      "category": "AV-over-IP Video",
+      "role": "Video Encoder",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV-over-IP"],
+      "manufacturer_examples": ["Magewell"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "ndi-device",
+      "display_name": "NDI Device",
+      "category": "AV-over-IP Video",
+      "role": "Video Endpoint",
+      "typical_ports": [443, 80, 5960, 5961],
+      "typical_vlans": ["AV-over-IP"],
+      "manufacturer_examples": ["NewTek", "PTZ Optics", "Vizrt"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "iptv-encoder",
+      "display_name": "IPTV Encoder / Head-End",
+      "category": "AV-over-IP Video",
+      "role": "Video Encoder",
+      "typical_ports": [443, 80, 554],
+      "typical_vlans": ["IPTV"],
+      "manufacturer_examples": ["Exterity", "ZyCast", "Triax", "Haivision"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "iptv-decoder",
+      "display_name": "IPTV Decoder / Set-Top Box",
+      "category": "AV-over-IP Video",
+      "role": "Video Decoder",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["IPTV"],
+      "manufacturer_examples": ["Exterity", "ZyCast", "Triax"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "lightware-matrix",
+      "display_name": "Lightware Matrix Switcher",
+      "category": "Matrix/Switcher",
+      "role": "Matrix Switcher",
+      "typical_ports": [443, 80, 6107],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Lightware"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "extron-matrix",
+      "display_name": "Extron Matrix Switcher",
+      "category": "Matrix/Switcher",
+      "role": "Matrix Switcher",
+      "typical_ports": [443, 80, 23],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Extron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "kramer-matrix",
+      "display_name": "Kramer Matrix Switcher",
+      "category": "Matrix/Switcher",
+      "role": "Matrix Switcher",
+      "typical_ports": [443, 80, 23, 14000],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Kramer"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "blackmagic-videohub",
+      "display_name": "Blackmagic VideoHub",
+      "category": "Matrix/Switcher",
+      "role": "Matrix Switcher",
+      "typical_ports": [9990, 443, 80],
+      "typical_vlans": ["AV Control", "AV-over-IP"],
+      "manufacturer_examples": ["Blackmagic Design"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "extron-presentation-switcher",
+      "display_name": "Extron Presentation Switcher",
+      "category": "Matrix/Switcher",
+      "role": "Presentation Switcher",
+      "typical_ports": [443, 80, 23],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Extron"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "commercial-display",
+      "display_name": "Commercial Display / Monitor",
+      "category": "Display",
+      "role": "Display",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV Control", "IPTV"],
+      "manufacturer_examples": ["Samsung", "LG", "Sony", "Philips", "NEC"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "projector",
+      "display_name": "Projector",
+      "category": "Display",
+      "role": "Display",
+      "typical_ports": [443, 80, 7142],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Panasonic", "Epson", "Barco", "Christie", "NEC"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "video-wall-processor",
+      "display_name": "Video Wall Processor",
+      "category": "Display",
+      "role": "Video Wall",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV Control", "AV-over-IP"],
+      "manufacturer_examples": ["Novastar", "Unilumin", "Absen", "Userful"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "projection-screen",
+      "display_name": "Motorised Projection Screen",
+      "category": "Display",
+      "role": "Screen",
+      "typical_ports": [443, 80],
+      "typical_vlans": ["AV Control"],
+      "manufacturer_examples": ["Draper", "Da-Lite", "Screen Technics"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "ms-teams-room",
+      "display_name": "Microsoft Teams Room System",
+      "category": "Conferencing",
+      "role": "Conferencing",
+      "typical_ports": [443, 80, 5061],
+      "typical_vlans": ["AV Control", "Corporate"],
+      "manufacturer_examples": ["Crestron", "Poly", "Logitech", "Yealink"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "zoom-room",
+      "display_name": "Zoom Room System",
+      "category": "Conferencing",
+      "role": "Conferencing",
+      "typical_ports": [443, 80, 8801, 8802],
+      "typical_vlans": ["AV Control", "Corporate"],
+      "manufacturer_examples": ["Crestron", "Poly", "Logitech"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "poly-video",
+      "display_name": "Poly / HP Video Conferencing",
+      "category": "Conferencing",
+      "role": "Conferencing",
+      "typical_ports": [443, 80, 1720, 5060],
+      "typical_vlans": ["AV Control", "Corporate"],
+      "manufacturer_examples": ["Poly", "HP"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "cisco-webex-room",
+      "display_name": "Cisco Webex Room Device",
+      "category": "Conferencing",
+      "role": "Conferencing",
+      "typical_ports": [443, 80, 22],
+      "typical_vlans": ["AV Control", "Corporate"],
+      "manufacturer_examples": ["Cisco"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "managed-switch",
+      "display_name": "Managed Network Switch",
+      "category": "IT Infrastructure",
+      "role": "Network Infrastructure",
+      "typical_ports": [22, 23, 443, 80, 161],
+      "typical_vlans": ["Management"],
+      "manufacturer_examples": ["Cisco", "Aruba", "Juniper", "Netgear", "TP-Link"],
+      "snmp_oids_of_interest": ["1.3.6.1.2.1.1.1.0", "1.3.6.1.2.1.17.7.1.2.2"]
+    },
+    {
+      "id": "wireless-ap",
+      "display_name": "Wireless Access Point",
+      "category": "IT Infrastructure",
+      "role": "Network Infrastructure",
+      "typical_ports": [443, 80, 22],
+      "typical_vlans": ["Management"],
+      "manufacturer_examples": ["Cisco", "Aruba", "Ruckus", "Ubiquiti"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "firewall-router",
+      "display_name": "Firewall / Router",
+      "category": "IT Infrastructure",
+      "role": "Network Infrastructure",
+      "typical_ports": [22, 443, 80],
+      "typical_vlans": ["Management"],
+      "manufacturer_examples": ["Cisco", "Fortinet", "Palo Alto", "pfSense"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "server",
+      "display_name": "Server / Virtual Machine",
+      "category": "IT Infrastructure",
+      "role": "Server",
+      "typical_ports": [22, 443, 80, 3389],
+      "typical_vlans": ["Management", "Corporate"],
+      "manufacturer_examples": ["Dell", "HP", "VMware"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "ntp-server",
+      "display_name": "NTP Server",
+      "category": "IT Infrastructure",
+      "role": "Network Service",
+      "typical_ports": [123],
+      "typical_vlans": ["Management"],
+      "manufacturer_examples": ["Cisco", "Meinberg", "Raspberry Pi"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "pi-hole",
+      "display_name": "Pi-hole DNS / DHCP",
+      "category": "IT Infrastructure",
+      "role": "Network Service",
+      "typical_ports": [53, 443, 80, 67],
+      "typical_vlans": ["Management"],
+      "manufacturer_examples": ["Raspberry Pi Foundation"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "windows-host",
+      "display_name": "Windows Host / PC",
+      "category": "IT Infrastructure",
+      "role": "Workstation",
+      "typical_ports": [3389, 445, 443, 80],
+      "typical_vlans": ["Corporate"],
+      "manufacturer_examples": ["Dell", "HP", "Lenovo"],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "generic-web-device",
+      "display_name": "Generic Web Device",
+      "category": "Unknown",
+      "role": "Unclassified",
+      "typical_ports": [443, 80],
+      "typical_vlans": [],
+      "manufacturer_examples": [],
+      "snmp_oids_of_interest": []
+    },
+    {
+      "id": "generic-device",
+      "display_name": "Generic Device",
+      "category": "Unknown",
+      "role": "Unclassified",
+      "typical_ports": [],
+      "typical_vlans": [],
+      "manufacturer_examples": [],
+      "snmp_oids_of_interest": []
+    }
+  ]
+}
