@@ -8011,6 +8011,16 @@ def download_csv():
 def discover_hosts():
     s = load_settings()
     data = request.json or {}
+    raw_vlan = (data.get("vlan") or "").strip()
+    if "/" in raw_vlan:
+        try:
+            network = ipaddress.ip_network(raw_vlan, strict=False)
+            prefix = network.prefixlen
+        except ValueError:
+            return jsonify({"ok": False, "error": f"Invalid CIDR: {raw_vlan!r}", "timestamp": utc_now_iso()}), 400
+        if prefix < 16:
+            return jsonify({"ok": False, "error": f"Subnet {raw_vlan} is too broad (/{prefix}). Maximum supported is /16.", "timestamp": utc_now_iso()}), 400
+        data["vlan"] = raw_vlan
     subnets, is_auto_mode = _resolve_discovery_subnets(s, data.get("vlan"))
     subnet = subnets[0] if len(subnets) == 1 else ("configured VLAN subnets" if subnets else "")
 

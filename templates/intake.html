@@ -157,7 +157,12 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
           {% for v in s.vlans %}
           <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
           {% endfor %}
+          <option value="__custom__">Custom subnet…</option>
         </select>
+      </div>
+      <div class="form-group" id="custom-subnet-group" style="display:none">
+        <label>Custom Subnet (CIDR)</label>
+        <input id="custom-subnet-input" placeholder="e.g. 192.168.40.0/24" style="width:180px">
       </div>
       <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:6px">
         <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.875rem;font-weight:normal">
@@ -830,9 +835,7 @@ function stageAllDiscovered(){
   discoveredRows.forEach((_, idx) => stageDiscoveredByIndex(idx));
 }
 
-async function discoverHostsForIntake(){
-  const scanAllVlans = document.getElementById('scan-all-vlans')?.checked;
-  const vlan = scanAllVlans ? '' : getChecksVlan();
+async function _runDiscoveryWithVlan(vlan) {
   try {
     document.getElementById('checks-summary').textContent = 'Discovering hosts...';
     const res = await fetch('/tools/api/discover_hosts', {
@@ -856,6 +859,31 @@ async function discoverHostsForIntake(){
     showIntakeStatus('Discover hosts failed: ' + e, 'error');
     document.getElementById('checks-summary').textContent = 'Discovery failed.';
   }
+}
+
+async function discoverHostsForIntake(){
+  const scanAllVlans = document.getElementById('scan-all-vlans')?.checked;
+  if (scanAllVlans) { return _runDiscoveryWithVlan(''); }
+  const sel = (document.getElementById('checks-vlan')?.value || '').trim();
+  if (sel === '__custom__') {
+    const cidr = (document.getElementById('custom-subnet-input')?.value || '').trim();
+    if (!cidr) {
+      showIntakeStatus('Enter a CIDR subnet (e.g. 192.168.40.0/24).', 'error');
+      return;
+    }
+    const parts = cidr.split('/');
+    const prefix = parts.length === 2 ? parseInt(parts[1], 10) : NaN;
+    if (isNaN(prefix) || prefix < 0 || prefix > 32) {
+      showIntakeStatus('Invalid CIDR — prefix must be 0–32.', 'error');
+      return;
+    }
+    if (prefix < 24) {
+      const proceed = await showWideSubnetWarning(cidr);
+      if (!proceed) return;
+    }
+    return _runDiscoveryWithVlan(cidr);
+  }
+  return _runDiscoveryWithVlan(sel);
 }
 
 function selectAllRows(nextValue){
@@ -977,6 +1005,31 @@ renderIntakeResults();
 loadDeviceTypeLibrary();
 
 /* ─── Scan-all-VLANs toggle ─────────────────────────────────────────────── */
+/* ─── Wide-subnet warning modal ─────────────────────────────────────────── */
+function showWideSubnetWarning(cidr) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.id = 'wide-subnet-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+        <div style="font-size:1rem;font-weight:600;margin-bottom:10px;color:#f8fafc">Wide Subnet Warning</div>
+        <div style="font-size:0.875rem;color:#94a3b8;margin-bottom:20px">
+          <strong style="color:#fbbf24">${cidr}</strong> covers a large address space.
+          Scanning a broad subnet can take a very long time and may impact the network.
+          Are you sure you want to continue?
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button id="wide-cancel" class="btn" style="min-width:80px">Cancel</button>
+          <button id="wide-proceed" class="btn btn-primary" style="min-width:80px">Scan anyway</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#wide-cancel').onclick = () => { overlay.remove(); resolve(false); };
+    overlay.querySelector('#wide-proceed').onclick = () => { overlay.remove(); resolve(true); };
+  });
+}
+
 const SCAN_ALL_KEY = 'netpi.scan_all_vlans';
 
 (function() {
@@ -999,6 +1052,24 @@ document.getElementById('scan-all-vlans')
     if (!vlanSelect) return;
     vlanSelect.disabled = this.checked;
     vlanSelect.style.opacity = this.checked ? '0.4' : '';
+    if (this.checked) {
+      document.getElementById('custom-subnet-group').style.display = 'none';
+    }
+  });
+
+document.getElementById('checks-vlan')
+  ?.addEventListener('change', function() {
+    const isCustom = this.value === '__custom__';
+    document.getElementById('custom-subnet-group').style.display = isCustom ? '' : 'none';
+    const toggle = document.getElementById('scan-all-vlans');
+    if (toggle) {
+      toggle.disabled = isCustom;
+      toggle.style.opacity = isCustom ? '0.4' : '';
+      if (isCustom) {
+        toggle.checked = false;
+        localStorage.setItem(SCAN_ALL_KEY, 'false');
+      }
+    }
   });
 </script>
 {% endblock %}
