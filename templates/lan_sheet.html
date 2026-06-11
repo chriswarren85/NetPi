@@ -11,6 +11,11 @@
     <button class="btn" onclick="createVlanGroups()">Create VLAN Groups for Project</button>
     <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
     <a class="btn" href="/tools/devices">Device List</a>
+    <select id="ls-scan-mode-select" style="width:140px" title="Scan mode">
+      <option value="av_port_probe">AV Port Probe</option>
+      <option value="standard">Standard</option>
+      <option value="deep_fingerprint">Deep Fingerprint</option>
+    </select>
     <button id="btn-scan-selected" class="btn" disabled title="Scan checked rows">⟳ Scan Selected (<span id="scan-selected-count">0</span>)</button>
     <button id="btn-scan-all" class="btn" title="Scan all visible rows">⟳ Scan All</button>
     <button class="btn btn-danger" onclick="clearLanSheet()">Clear LAN Sheet</button>
@@ -680,10 +685,11 @@ async function scanLanSheetIp(ip, rowEl) {
   statusCell.innerHTML = '<span class="scan-status scanning">⟳ Scanning…</span>';
 
   try {
+    const lsScanMode = document.getElementById('ls-scan-mode-select')?.value || 'av_port_probe';
     const startRes = await fetch('/tools/api/lan_sheet/scan_ips', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ips: [ip] })
+      body: JSON.stringify({ ips: [ip], scan_mode: lsScanMode })
     });
     const startData = await startRes.json();
     if (!startData.ok || !startData.job_id) {
@@ -794,10 +800,11 @@ async function batchScanIps(ips) {
   });
 
   try {
+    const lsScanMode = document.getElementById('ls-scan-mode-select')?.value || 'av_port_probe';
     const startRes = await fetch('/tools/api/lan_sheet/scan_ips', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ips })
+      body: JSON.stringify({ ips, scan_mode: lsScanMode })
     });
     const startData = await startRes.json();
     if (!startData.ok || !startData.job_id) {
@@ -885,5 +892,21 @@ document.getElementById('btn-scan-all')
   });
 
 loadSheet();
+
+/* ─── LAN sheet scan mode persistence ────────────────────────────────────── */
+const LS_SCAN_MODE_KEY = 'netpi.ls_scan_mode';
+
+(function() {
+  const saved = localStorage.getItem(LS_SCAN_MODE_KEY);
+  const sel = document.getElementById('ls-scan-mode-select');
+  if (sel && saved && sel.querySelector(`option[value="${saved}"]`)) {
+    sel.value = saved;
+  }
+})();
+
+document.getElementById('ls-scan-mode-select')
+  ?.addEventListener('change', function() {
+    localStorage.setItem(LS_SCAN_MODE_KEY, this.value);
+  });
 </script>
 {% endblock %}

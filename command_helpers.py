@@ -37,10 +37,25 @@ def build_nmap_command(host, fast_scan=True):
 
 
 def build_nmap_host_discovery_command(subnet, output_flag="-oG", scan_mode=None):
-    if scan_mode == "targeted":
-        command = ["nmap", "-Pn", "-p", "80,443,22,23,1710,41794,41795,50002,2202", subnet, output_flag, "-"]
+    mode = (scan_mode or "standard").lower()
+
+    if mode in ("av_port_probe", "targeted"):
+        # -Pn: skip host discovery, probe AV ports directly
+        command = ["nmap", "-Pn", "-p",
+                   "80,443,22,23,1710,41794,41795,50002,2202",
+                   subnet, output_flag, "-"]
+    elif mode == "arp_only":
+        # ARP-only: fastest on same L2 segment, cannot cross routed boundary
+        command = ["nmap", "-sn", "-PR", subnet, output_flag, "-"]
+    elif mode == "deep_fingerprint":
+        # -sV: service version detection + AV ports
+        command = ["nmap", "-Pn", "-sV", "-p",
+                   "80,443,22,23,1710,41794,41795,50002,2202",
+                   subnet, output_flag, "-"]
     else:
+        # standard (default): ping sweep
         command = ["nmap", "-sn", subnet, output_flag, "-"]
+
     if is_windows():
         return command
     return ["sudo"] + command

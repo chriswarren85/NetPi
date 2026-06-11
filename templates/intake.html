@@ -171,6 +171,18 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
         </label>
       </div>
       <div class="form-group">
+        <label>Scan mode</label>
+        <select id="scan-mode-select" style="width:160px">
+          <option value="standard">Standard</option>
+          <option value="av_port_probe">AV Port Probe</option>
+          <option value="arp_only">ARP Only</option>
+          <option value="deep_fingerprint">Deep Fingerprint</option>
+        </select>
+        <span id="scan-mode-hint"
+              style="font-size:0.8em;color:#94a3b8;display:block;margin-top:3px">
+        </span>
+      </div>
+      <div class="form-group">
         <label>Host / IP</label>
         <input id="checks-host" placeholder="e.g. 192.168.1.20 or hostname">
       </div>
@@ -838,10 +850,11 @@ function stageAllDiscovered(){
 async function _runDiscoveryWithVlan(vlan) {
   try {
     document.getElementById('checks-summary').textContent = 'Discovering hosts...';
+    const scanMode = document.getElementById('scan-mode-select')?.value || 'standard';
     const res = await fetch('/tools/api/discover_hosts', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ vlan })
+      body: JSON.stringify({ vlan, scan_mode: scanMode })
     });
     const data = await res.json();
     if(!res.ok || data.error){
@@ -1029,6 +1042,39 @@ function showWideSubnetWarning(cidr) {
     overlay.querySelector('#wide-proceed').onclick = () => { overlay.remove(); resolve(true); };
   });
 }
+
+/* ─── Scan mode selector ─────────────────────────────────────────────────── */
+const SCAN_MODE_HINTS = {
+  standard:        'Fast ping sweep. May show false positives if ICMP is blocked.',
+  av_port_probe:   'Probes AV ports directly. Best choice on managed networks.',
+  arp_only:        '⚠ Same VLAN only — will not detect devices across a routed boundary.',
+  deep_fingerprint:'⚠ Slow (2–5 min per subnet) — returns service type evidence upfront.'
+};
+const SCAN_MODE_KEY = 'netpi.scan_mode';
+
+function updateScanModeHint() {
+  const sel = document.getElementById('scan-mode-select');
+  const hint = document.getElementById('scan-mode-hint');
+  if (!sel || !hint) return;
+  hint.textContent = SCAN_MODE_HINTS[sel.value] || '';
+  hint.style.color = (sel.value === 'arp_only' || sel.value === 'deep_fingerprint')
+    ? '#f59e0b' : '#94a3b8';
+}
+
+document.getElementById('scan-mode-select')
+  ?.addEventListener('change', function() {
+    localStorage.setItem(SCAN_MODE_KEY, this.value);
+    updateScanModeHint();
+  });
+
+(function() {
+  const saved = localStorage.getItem(SCAN_MODE_KEY);
+  const sel = document.getElementById('scan-mode-select');
+  if (sel && saved && sel.querySelector(`option[value="${saved}"]`)) {
+    sel.value = saved;
+  }
+  updateScanModeHint();
+})();
 
 const SCAN_ALL_KEY = 'netpi.scan_all_vlans';
 
