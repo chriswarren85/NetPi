@@ -198,6 +198,25 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
 
     <div id="checks-summary" style="margin-bottom:10px;color:#9ca3af"></div>
 
+    <!-- ── W23.5 Inline discovery progress card ─────────────────────────── -->
+    <div id="discovery-inline-card"
+         style="display:none;border:1px solid #2e2e2e;border-radius:6px;
+                padding:12px 16px;margin-bottom:12px;background:#1a1a1a">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span id="dic-label"
+              style="font-size:0.875rem;font-weight:500;color:#e2e8f0">Scanning&#8230;</span>
+        <button id="dic-stop-btn"
+                style="padding:3px 10px;font-size:0.75rem;border-radius:4px;
+                       border:1px solid #7f1d1d;color:#f87171;
+                       background:transparent;cursor:pointer">Stop</button>
+      </div>
+      <div style="background:#2e2e2e;border-radius:3px;height:4px;overflow:hidden;margin-bottom:8px">
+        <div id="dic-progress-bar"
+             style="height:100%;background:#2dd4bf;width:0%;transition:width 0.4s ease"></div>
+      </div>
+      <div id="dic-status-text" style="font-size:0.8rem;color:#94a3b8"></div>
+    </div>
+
     <div id="discover-wrap" style="display:none;overflow-x:auto;margin-bottom:10px">
       <table>
         <thead>
@@ -266,6 +285,62 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
 let intakeRows = [];
 let discoveredRows = [];
 let deviceTypeLibrary = [];
+var _discoveryController = null;
+
+/* ── W23.5 Inline discovery progress card ──────────────────────────────── */
+function showDiscoveryCard() {
+  var card = document.getElementById('discovery-inline-card');
+  if (card) card.style.display = '';
+  var bar = document.getElementById('dic-progress-bar');
+  if (bar) { bar.style.width = '0%'; bar.style.transition = 'none'; }
+  setTimeout(function() {
+    if (bar) { bar.style.transition = 'width 0.4s ease'; bar.style.width = '25%'; }
+  }, 50);
+  var stopBtn = document.getElementById('dic-stop-btn');
+  if (stopBtn) stopBtn.onclick = function() { _abortDiscovery(); };
+  window._onGlobalJobUpdate = function(data) { updateDiscoveryCard(data); };
+}
+
+function hideDiscoveryCard() {
+  var card = document.getElementById('discovery-inline-card');
+  if (card) card.style.display = 'none';
+  window._onGlobalJobUpdate = null;
+}
+
+function _abortDiscovery() {
+  if (_discoveryController) { _discoveryController.abort(); _discoveryController = null; }
+  hideDiscoveryCard();
+  window._globalStatusBar && window._globalStatusBar.setIdle();
+  var summary = document.getElementById('checks-summary');
+  if (summary) summary.textContent = 'Discovery cancelled.';
+}
+
+function updateDiscoveryCard(data) {
+  if (!data) return;
+  var label  = document.getElementById('dic-label');
+  var bar    = document.getElementById('dic-progress-bar');
+  var txt    = document.getElementById('dic-status-text');
+  var status = data.status || '';
+  var found  = data.devices_found_count || 0;
+  var msg    = data.progress_message || data.message || '';
+  if (label) {
+    if (status === 'running' || status === 'queued') { label.textContent = '⌛ Scanning…'; }
+    else if (status === 'completed') { label.textContent = '✓ Scan complete'; }
+    else if (status === 'failed')    { label.textContent = '✗ Scan failed'; }
+    else if (status === 'cancelled') { label.textContent = '— Cancelled'; }
+  }
+  if (bar) {
+    if (status === 'completed' || status === 'failed') { bar.style.width = '100%'; }
+    else if (found > 0) { bar.style.width = Math.min(90, found * 5) + '%'; }
+  }
+  if (txt) txt.textContent = msg || (found > 0 ? found + ' hosts found' : '');
+  if (status === 'completed' || status === 'cancelled') {
+    setTimeout(function() {
+      hideDiscoveryCard();
+      window._globalStatusBar && window._globalStatusBar.setIdle();
+    }, 3000);
+  }
+}
 
 async function loadDeviceTypeLibrary(){
   try {
@@ -848,29 +923,43 @@ function stageAllDiscovered(){
 }
 
 async function _runDiscoveryWithVlan(vlan) {
+  _discoveryController = new AbortController();
+  document.getElementById('checks-summary').textContent = 'Discovering hosts...';
+  window._globalStatusBar && window._globalStatusBar.setRunning('Discovery');
+  showDiscoveryCard();
   try {
-    document.getElementById('checks-summary').textContent = 'Discovering hosts...';
     const scanMode = document.getElementById('scan-mode-select')?.value || 'standard';
     const res = await fetch('/tools/api/discover_hosts', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ vlan, scan_mode: scanMode })
+      body: JSON.stringify({ vlan, scan_mode: scanMode }),
+      signal: _discoveryController.signal
     });
     const data = await res.json();
     if(!res.ok || data.error){
       showIntakeStatus(data.error || 'Discover hosts failed.', 'error');
       document.getElementById('checks-summary').textContent = data.error || 'Discovery failed.';
+      updateDiscoveryCard({ status: 'failed', message: data.error || 'Discovery failed.' });
+      window._globalStatusBar && window._globalStatusBar.setIdle();
       return;
     }
 
     discoveredRows = (Array.isArray(data.devices) ? data.devices : []).map(item => ({ ...item, selected: true }));
     renderDiscoveredTable();
-    document.getElementById('checks-summary').textContent = 'Discovery found ' + (data.count || 0) + ' host(s) on ' + (data.subnet || 'selected subnet') + '.';
+    const foundCount = data.count || 0;
+    document.getElementById('checks-summary').textContent = 'Discovery found ' + foundCount + ' host(s) on ' + (data.subnet || 'selected subnet') + '.';
     showIntakeStatus('Discovery completed. Stage rows into Intake Results as needed.', 'success');
-    appendCheckOutput('Discovery complete: ' + (data.count || 0) + ' hosts.');
+    appendCheckOutput('Discovery complete: ' + foundCount + ' hosts.');
+    updateDiscoveryCard({ status: 'completed', devices_found_count: foundCount, message: 'Found ' + foundCount + ' host(s)' });
+    appendEventLog && appendEventLog('Discovery complete: ' + foundCount + ' host(s) on ' + (data.subnet || 'selected subnet'));
   } catch (e) {
+    if (e && e.name === 'AbortError') return;
     showIntakeStatus('Discover hosts failed: ' + e, 'error');
     document.getElementById('checks-summary').textContent = 'Discovery failed.';
+    updateDiscoveryCard({ status: 'failed', message: String(e) });
+    window._globalStatusBar && window._globalStatusBar.setIdle();
+  } finally {
+    _discoveryController = null;
   }
 }
 

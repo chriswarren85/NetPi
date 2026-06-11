@@ -183,16 +183,42 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
 </button>
 <!-- ── Status bar ──────────────────────────────────────────────────────── -->
 <div id="netpi-statusbar">
-  <div id="nsb-bar">
-    <span id="nsb-dot"></span>
-    <span id="nsb-label">NETWORKER</span>
-    <span id="nsb-text">Ready</span>
-    <span id="nsb-elapsed" style="display:none"></span>
-    <span id="nsb-countdown" style="display:none"></span>
-    <span id="nsb-clock"></span>
-    <button id="nsb-toggle" onclick="window.netpiStatus._toggleLog()" title="Toggle event log">▾ Log</button>
+  <!-- Slim 36px status row -->
+  <div style="display:flex;align-items:center;gap:10px;height:36px;padding:0 16px;font-size:0.8rem">
+    <span id="global-status-dot"
+          style="width:8px;height:8px;border-radius:50%;background:#475569;flex-shrink:0"></span>
+    <span id="global-status-label"
+          style="color:#94a3b8;white-space:nowrap">Idle</span>
+    <span id="global-status-elapsed"
+          style="color:#64748b;font-variant-numeric:tabular-nums;display:none"></span>
+    <span style="flex:1"></span>
+    <button id="global-status-expand"
+            style="display:none;background:none;border:none;cursor:pointer;
+                   color:#94a3b8;padding:0 4px;font-size:0.9rem"
+            title="Show event log">&#9658;</button>
   </div>
-  <div id="nsb-log"></div>
+  <!-- Legacy IDs preserved for window.netpiStatus compatibility — not displayed -->
+  <span id="nsb-dot" style="display:none"></span>
+  <span id="nsb-label" style="display:none"></span>
+  <span id="nsb-text" style="display:none"></span>
+  <span id="nsb-elapsed" style="display:none"></span>
+  <span id="nsb-countdown" style="display:none"></span>
+  <span id="nsb-clock" style="display:none"></span>
+  <button id="nsb-toggle" style="display:none"></button>
+  <div id="nsb-log" style="display:none"></div>
+</div>
+<!-- Event log drawer — slides up from above the status bar -->
+<div id="event-log-drawer"
+     style="position:fixed;bottom:36px;left:0;right:0;
+            max-height:200px;overflow-y:auto;
+            background:#111827;
+            border-top:1px solid #2e2e2e;
+            font-size:0.75rem;font-family:monospace;
+            padding:8px 16px;
+            transform:translateY(100%);
+            transition:transform 0.2s ease;
+            z-index:150">
+  <div id="event-log-content" style="color:#94a3b8">No events yet.</div>
 </div>
 <script>
 window.showToast = function(message, type, duration) {
@@ -528,6 +554,140 @@ fetch('/tools/api/projects').then(r=>r.json()).then(d=>{
   });
 
   window._refreshWorkflowSidebar = loadSidebarStatus;
+})();
+</script>
+<script>
+/* ── W23.5 Slim global status bar ───────────────────────────────────────── */
+function appendEventLog(message) {
+  var content = document.getElementById('event-log-content');
+  if (!content || !message) return;
+  if (content.textContent === 'No events yet.') content.textContent = '';
+  var line = document.createElement('div');
+  line.style.cssText = 'padding:2px 0;border-bottom:1px solid #1e2333';
+  var ts = new Date().toLocaleTimeString('en-GB');
+  line.textContent = '[' + ts + '] ' + message;
+  content.appendChild(line);
+  if (content.scrollTop + content.clientHeight >= content.scrollHeight - 40) {
+    content.scrollTop = content.scrollHeight;
+  }
+}
+
+(function() {
+  var POLL_MS = 1000;
+  var _pollTimer = null;
+  var _jobStartedAt = null;
+  var _elapsedTimer = null;
+
+  function formatElapsed(startedAtIso) {
+    if (!startedAtIso) return '';
+    var secs = Math.floor((Date.now() - new Date(startedAtIso).getTime()) / 1000);
+    if (secs < 0) secs = 0;
+    var m = Math.floor(secs / 60), s = secs % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function setBarState(state, label) {
+    var dot    = document.getElementById('global-status-dot');
+    var lbl    = document.getElementById('global-status-label');
+    var el     = document.getElementById('global-status-elapsed');
+    var expand = document.getElementById('global-status-expand');
+    if (!dot) return;
+    var colors = { idle:'#475569', running:'#60a5fa', completed:'#22c55e', failed:'#f87171' };
+    dot.style.background = colors[state] || colors.idle;
+    if (state === 'idle') {
+      if (lbl)    { lbl.textContent = 'Idle'; lbl.style.color = '#94a3b8'; }
+      if (el)     el.style.display = 'none';
+      if (expand) expand.style.display = 'none';
+      clearInterval(_elapsedTimer); _elapsedTimer = null;
+    } else {
+      if (lbl)    { lbl.textContent = label || 'Running'; lbl.style.color = '#e2e8f0'; }
+      if (el)     { el.style.display = ''; el.textContent = formatElapsed(_jobStartedAt); }
+      if (expand) expand.style.display = '';
+      if (!_elapsedTimer) {
+        _elapsedTimer = setInterval(function() {
+          var e2 = document.getElementById('global-status-elapsed');
+          if (e2 && e2.style.display !== 'none') e2.textContent = formatElapsed(_jobStartedAt);
+        }, 1000);
+      }
+    }
+  }
+
+  function pollActiveJob() {
+    var jobId = sessionStorage.getItem('netpi.active_job_id');
+    if (!jobId) { setBarState('idle', null); clearInterval(_pollTimer); _pollTimer = null; return; }
+    fetch('/tools/api/discover_hosts/status/' + jobId)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var status = d.status || 'idle';
+        _jobStartedAt = _jobStartedAt || d.started_at;
+        appendEventLog(d.progress_message || d.message || '');
+        if (status === 'running' || status === 'queued') {
+          setBarState('running', 'Discovery');
+        } else if (status === 'completed') {
+          setBarState('completed', 'Discovery complete');
+          sessionStorage.removeItem('netpi.active_job_id');
+          clearInterval(_pollTimer); _pollTimer = null;
+          setTimeout(function() { setBarState('idle', null); }, 4000);
+        } else if (status === 'failed' || status === 'cancelled') {
+          setBarState('failed', 'Failed');
+          sessionStorage.removeItem('netpi.active_job_id');
+          clearInterval(_pollTimer); _pollTimer = null;
+          setTimeout(function() { setBarState('idle', null); }, 4000);
+        }
+        if (window._onGlobalJobUpdate) window._onGlobalJobUpdate(d);
+      })
+      .catch(function() { /* silent on network error */ });
+  }
+
+  function startPolling(jobId, startedAt) {
+    sessionStorage.setItem('netpi.active_job_id', jobId);
+    _jobStartedAt = startedAt || new Date().toISOString();
+    setBarState('running', 'Discovery');
+    clearInterval(_pollTimer);
+    _pollTimer = setInterval(pollActiveJob, POLL_MS);
+  }
+
+  function setRunning(label) {
+    _jobStartedAt = new Date().toISOString();
+    setBarState('running', label || 'Discovery');
+  }
+
+  function setIdle() {
+    clearInterval(_pollTimer); _pollTimer = null;
+    setBarState('idle', null);
+    _jobStartedAt = null;
+  }
+
+  function stopPolling() {
+    clearInterval(_pollTimer); _pollTimer = null;
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var jobId = sessionStorage.getItem('netpi.active_job_id');
+    if (jobId) {
+      setBarState('running', 'Discovery');
+      _pollTimer = setInterval(pollActiveJob, POLL_MS);
+    } else {
+      setBarState('idle', null);
+    }
+    var expandBtn = document.getElementById('global-status-expand');
+    if (expandBtn) {
+      expandBtn.addEventListener('click', function() {
+        var drawer = document.getElementById('event-log-drawer');
+        if (!drawer) return;
+        var isOpen = drawer.style.transform === 'translateY(0%)';
+        drawer.style.transform = isOpen ? 'translateY(100%)' : 'translateY(0%)';
+        this.textContent = isOpen ? '▸' : '▾';
+      });
+    }
+  });
+
+  window._globalStatusBar = {
+    startPolling: startPolling,
+    stopPolling:  stopPolling,
+    setRunning:   setRunning,
+    setIdle:      setIdle
+  };
 })();
 </script>
 </body>
