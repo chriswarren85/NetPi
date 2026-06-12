@@ -194,6 +194,14 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
        style="color:#7a9cb8;text-decoration:none;white-space:nowrap;font-size:0.8rem">
       Switch project
     </a>
+    <button id="topbar-save-settings-btn"
+            onclick="globalSaveSettings()"
+            style="display:none;padding:3px 10px;background:transparent;
+                   border:1px solid #374151;border-radius:4px;
+                   color:#e2e8f0;font-size:0.8rem;font-weight:500;
+                   cursor:pointer;white-space:nowrap">
+      Save settings
+    </button>
   </div>
   {% block content %}{% endblock %}
 </div>
@@ -209,6 +217,8 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   if(window.location.pathname === '/tools/settings'){
     var btn = document.getElementById('global-save-settings-btn');
     if(btn) btn.style.display = '';
+    var topBtn = document.getElementById('topbar-save-settings-btn');
+    if(topBtn) topBtn.style.display = '';
   }
   window.globalSaveSettings = function(){
     var f = document.getElementById('settings-form');
