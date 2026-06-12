@@ -160,7 +160,7 @@ const LC_COLS = [
   { field: 'vendor',      label: 'Make',              w: '90px'  },
   { field: 'model',       label: 'Model',             w: '110px' },
   { field: 'vlan',        label: 'VLAN',              w: '90px', type: 'vlan' },
-  { field: 'ip',          label: 'IP',                w: '110px', mono: true },
+  { field: 'ip',          label: 'IP',                w: '110px', mono: true, readonly: true },
   { field: 'multicast',   label: 'Multicast',         w: '80px'  },
   { field: 'hostname',    label: 'Hostname',          w: '120px', mono: true },
   { field: 'mac',         label: 'MAC',               w: '130px', mono: true },
@@ -575,6 +575,7 @@ function _lcDeactivate(){
 
 function _lcActivate(row, col, startChar){
   if(row < 0 || col < 0 || row >= filtered.length || col >= LC_COLS.length) return;
+  if(LC_COLS[col] && LC_COLS[col].readonly) return;
   _lcDeactivate();
   lcActiveRow = row;
   lcActiveCol = col;
@@ -695,6 +696,7 @@ document.addEventListener('click', ev => {
   const row = parseInt(td.dataset.row, 10);
   const col = parseInt(td.dataset.col, 10);
   if(row === lcActiveRow && col === lcActiveCol) return; // already active
+  if(LC_COLS[col] && LC_COLS[col].readonly) return; // read-only — link/display only
   _lcActivate(row, col);
 });
 
