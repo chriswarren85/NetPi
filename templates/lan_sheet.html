@@ -337,8 +337,17 @@ function buildEntryRow(e, rowIdx){
     const val  = String(e[col.field] || '');
     const isDirty = lcDirty[rawIp] && lcDirty[rawIp][col.field];
     const mono = col.mono ? 'font-family:monospace;' : '';
+    let cellContent;
+    if (col.field === 'ip' && val) {
+      cellContent = `<a href="http://${escHtml(val)}" target="_blank" rel="noopener"
+        onclick="event.stopPropagation()"
+        style="font-family:monospace;color:#7dd3fc;text-decoration:none;cursor:pointer"
+        title="Open http://${escHtml(val)} in browser">${escHtml(val)}</a>`;
+    } else {
+      cellContent = `<span class="lcv" style="${mono}color:${val?'#e5e7eb':'#374151'}">${val ? escHtml(val) : '—'}</span>`;
+    }
     html += `<td class="lce${isDirty?' lc-dirty':''}" data-row="${rowIdx}" data-col="${colIdx}" data-ip="${safeIp}" data-field="${escHtml(col.field)}">`
-      + `<span class="lcv" style="${mono}color:${val?'#e5e7eb':'#374151'}">${val ? escHtml(val) : '—'}</span></td>`;
+      + cellContent + `</td>`;
   });
 
   // Status (read-only) + Scan button + Scan status + Remove button
