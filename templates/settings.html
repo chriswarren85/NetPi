@@ -358,5 +358,29 @@
   }
 
   loadProjectVersionHistory();
+
+  // Intercept form submit — AJAX instead of redirect
+  var settingsForm = document.getElementById('settings-form');
+  if(settingsForm){
+    settingsForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      var fd = new FormData(this);
+      fetch('/tools/settings', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: new URLSearchParams(fd)
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.success){
+          var suc = document.getElementById('success');
+          if(suc){ suc.style.display = 'block'; setTimeout(function(){ suc.style.display = 'none'; }, 3000); }
+          var lbl = document.getElementById('global-status-label');
+          if(lbl){ var p = lbl.textContent; lbl.textContent = 'Saved ✓'; setTimeout(function(){ lbl.textContent = p; }, 2000); }
+        }
+      })
+      .catch(function(){ alert('Save failed. Please try again.'); });
+    });
+  }
 </script>
 {% endblock %}

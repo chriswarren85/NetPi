@@ -413,6 +413,9 @@ function buildBySystemRows(dataset){
     const fail = Number(counts.fail || 0);
     const warn = Number(counts.warn || 0);
     const pass = Number(counts.pass || 0);
+    const resultCount = Number(item.result_count || 0);
+    // Skip groups with no actual validation results — structural placeholders from typing inference
+    if (resultCount === 0 && pass === 0 && warn === 0 && fail === 0) return;
     const status = fail > 0 ? 'fail' : (warn > 0 ? 'warn' : (pass > 0 ? 'pass' : 'unknown'));
     rows.push({
       target: String(item.system_id || 'Unnamed system'),
@@ -427,6 +430,22 @@ function buildBySystemRows(dataset){
       notes: 'Results: ' + (item.result_count || 0) + ' | pass=' + (counts.pass || 0) + ', warn=' + (counts.warn || 0) + ', fail=' + (counts.fail || 0),
     });
   });
+
+  // All groups had zero results — surface a clear message instead of silent empty rows
+  if (!rows.length && groups.length > 0) {
+    rows.push({
+      target: 'System validation',
+      expected_requirement: 'System group relationship validation',
+      status: 'unknown',
+      method_used: 'validate_systems grouped',
+      confidence: 'Low',
+      recommended_action: 'Set device types on Device List or LAN Sheet, then re-run validation',
+      why_required: 'System validation requires devices with recognized AV types to build relationship maps.',
+      derived_from: 'POST /tools/api/validate_systems system_group_results',
+      scope: '',
+      notes: 'No system relationships found — ensure devices are classified by type before running system validation.',
+    });
+  }
 
   if(!rows.length){
     const detected = ((dataset.validateSystems || {}).detected_systems || {}).systems || [];
@@ -664,6 +683,7 @@ function setValidationMode(mode, btn){
 
 function loadValidationMode(mode){
   setStatus('Loading ' + mode + ' validation data...', '#6b7280');
+  window._globalStatusBar && window._globalStatusBar.setRunning('Validating (' + mode + ')…');
   const payload = modePayload(mode);
 
   if(mode === 'Logical'){
@@ -679,11 +699,13 @@ function loadValidationMode(mode){
         renderValidationRows();
         renderMulticastGroups(systemData.multicast_groups || multicastData);
         setStatus('Loaded Logical mode from /tools/api/validate_systems.', '#6b7280');
+        window._globalStatusBar && window._globalStatusBar.setIdle();
       })
       .catch(err => {
         modeData[mode] = { validateAll: {results: []}, validateSystems: {results: [], connectivity: [], system_group_results: [], detected_systems: {systems: []}} };
         renderValidationRows();
         setStatus('Unable to load Logical mode: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
+        window._globalStatusBar && window._globalStatusBar.setIdle();
       });
     return;
   }
@@ -714,11 +736,13 @@ function loadValidationMode(mode){
       } else {
         setStatus('Loaded Live mode from real validation endpoints.', '#6b7280');
       }
+      window._globalStatusBar && window._globalStatusBar.setIdle();
     })
     .catch(err => {
       modeData[mode] = { validateAll: {results: []}, validateSystems: {results: [], connectivity: [], system_group_results: [], detected_systems: {systems: []}} };
       renderValidationRows();
       setStatus('Unable to load ' + mode + ' mode: ' + (err && err.message ? err.message : 'unknown error'), '#374151');
+      window._globalStatusBar && window._globalStatusBar.setIdle();
     });
 }
 

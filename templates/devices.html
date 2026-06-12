@@ -1431,6 +1431,7 @@ function removeDevice(ip){
   delete validationResults[ip];
   saveValidationState();
   renderTable();
+  saveDevices();
   refreshRequirementsStateFromEndpoint();
 }
 

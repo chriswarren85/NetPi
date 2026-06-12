@@ -198,12 +198,43 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   {% block content %}{% endblock %}
 </div>
 <div id="toast-container"></div>
-<!-- Save settings: sits above the status bar -->
+<!-- Save settings: sits above the status bar — shown only on /tools/settings -->
 <button id="global-save-settings-btn"
-  onclick="var f=document.getElementById('settings-form');if(f){f.submit();}else{window.location.href='/tools/settings';}"
-  style="position:fixed;bottom:38px;left:14px;z-index:820;padding:5px 12px;background:#1a1a1a;border:1px solid #374151;border-radius:5px;color:#6b7280;font-size:11px;font-weight:500;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)">
+  onclick="globalSaveSettings()"
+  style="position:fixed;bottom:38px;left:14px;z-index:820;padding:5px 12px;background:#1a1a1a;border:1px solid #374151;border-radius:5px;color:#6b7280;font-size:11px;font-weight:500;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none">
   Save settings
 </button>
+<script>
+(function(){
+  if(window.location.pathname === '/tools/settings'){
+    var btn = document.getElementById('global-save-settings-btn');
+    if(btn) btn.style.display = '';
+  }
+  window.globalSaveSettings = function(){
+    var f = document.getElementById('settings-form');
+    if(!f) return;
+    var fd = new FormData(f);
+    fetch('/tools/settings', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      body: new URLSearchParams(fd)
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var lbl = document.getElementById('global-status-label');
+      if(lbl){
+        var prev = lbl.textContent;
+        lbl.textContent = d.success ? 'Saved ✓' : 'Save failed';
+        setTimeout(function(){ lbl.textContent = prev; }, 2000);
+      }
+    })
+    .catch(function(){
+      var lbl = document.getElementById('global-status-label');
+      if(lbl){ lbl.textContent = 'Save failed'; setTimeout(function(){ lbl.textContent = 'Idle'; }, 2000); }
+    });
+  };
+})();
+</script>
 <!-- ── Status bar ──────────────────────────────────────────────────────── -->
 <div id="netpi-statusbar">
   <!-- Slim 36px status row -->

@@ -17,6 +17,7 @@
       <option value="deep_fingerprint">Deep Fingerprint</option>
     </select>
     <button id="btn-scan-selected" class="btn" disabled title="Scan checked rows">⟳ Scan Selected (<span id="scan-selected-count">0</span>)</button>
+    <button id="btn-copy-ips" class="btn" disabled title="Copy selected IPs to clipboard" onclick="copySelectedIPs()">Copy IPs</button>
     <button id="btn-scan-all" class="btn" title="Scan all visible rows">⟳ Scan All</button>
     <button class="btn btn-danger" onclick="clearLanSheet()">Clear LAN Sheet</button>
   </div>
@@ -341,7 +342,7 @@ function buildEntryRow(e, rowIdx){
   });
 
   // Status (read-only) + Scan button + Scan status + Remove button
-  html += `<td style="white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present?'Present':'Missing'}</span></td>`;
+  html += `<td class="device-status-cell" style="white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${statusBg};color:${statusColor}">${e.present?'Present':'Missing'}</span></td>`;
   html += `<td style="text-align:center;vertical-align:middle"><button class="btn btn-scan-ip" data-ip="${safeIp}" title="Scan this IP" style="font-size:13px;padding:1px 6px;line-height:1.4;min-width:28px">⟳</button></td>`;
   html += `<td class="scan-status-cell" style="white-space:nowrap;vertical-align:middle"></td>`;
   html += `<td><button class="btn btn-danger" style="font-size:11px;padding:2px 8px;white-space:nowrap" onclick="removeEntry('${rawIp.replace(/'/g,"\\'")}')">Remove</button></td>`;
@@ -733,6 +734,7 @@ async function scanLanSheetIp(ip, rowEl) {
 
   btn.disabled = true;
   statusCell.innerHTML = '<span class="scan-status scanning">⟳ Scanning…</span>';
+  window._globalStatusBar && window._globalStatusBar.setRunning('Scanning ' + ip + '…');
 
   try {
     const lsScanMode = document.getElementById('ls-scan-mode-select')?.value || 'av_port_probe';
@@ -751,6 +753,8 @@ async function scanLanSheetIp(ip, rowEl) {
   } catch (e) {
     statusCell.innerHTML = '<span class="scan-status error">✗ Failed</span>';
     btn.disabled = false;
+  } finally {
+    window._globalStatusBar && window._globalStatusBar.setIdle();
   }
 }
 
@@ -778,12 +782,15 @@ function applyRowScanResult(data, ip, rowEl, statusCell, btn) {
   const devices = data.devices || [];
   const match = devices.find(d => (d.ip || '').trim() === ip.trim());
 
+  const statusColCell = rowEl.querySelector('.device-status-cell');
   if (!match) {
-    statusCell.innerHTML = '<span class="scan-status offline">● No response</span>';
+    if (statusColCell) statusColCell.innerHTML = '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#1a0d0d;color:#fca5a5">No response</span>';
+    statusCell.innerHTML = '';
     return;
   }
 
-  statusCell.innerHTML = '<span class="scan-status online">● Online</span>';
+  if (statusColCell) statusColCell.innerHTML = '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#0d2015;color:#86efac">Online</span>';
+  statusCell.innerHTML = '';
 
   if (match.hostname) {
     const hostnameCell = rowEl.querySelector('[data-field="hostname"]');
@@ -827,9 +834,25 @@ document.addEventListener('click', function(e) {
 function updateBatchButtons() {
   const checked = document.querySelectorAll('.row-check:checked');
   const btn = document.getElementById('btn-scan-selected');
+  const copyBtn = document.getElementById('btn-copy-ips');
   const countSpan = document.getElementById('scan-selected-count');
   if (btn) btn.disabled = checked.length === 0;
+  if (copyBtn) copyBtn.disabled = checked.length === 0;
   if (countSpan) countSpan.textContent = checked.length;
+}
+
+function copySelectedIPs() {
+  const ips = [...document.querySelectorAll('.row-check:checked')]
+    .map(cb => cb.dataset.ip)
+    .filter(Boolean)
+    .join('\n');
+  if (!ips) return;
+  navigator.clipboard.writeText(ips)
+    .then(() => {
+      window._globalStatusBar && window._globalStatusBar.setRunning('IPs copied to clipboard');
+      setTimeout(() => window._globalStatusBar && window._globalStatusBar.setIdle(), 2000);
+    })
+    .catch(() => { alert('Copy failed — select IPs manually.'); });
 }
 
 async function batchScanIps(ips) {
@@ -839,6 +862,7 @@ async function batchScanIps(ips) {
   const btnAll = document.getElementById('btn-scan-all');
   if (btnSelected) btnSelected.disabled = true;
   if (btnAll) btnAll.disabled = true;
+  window._globalStatusBar && window._globalStatusBar.setRunning('Scanning ' + ips.length + ' IP' + (ips.length !== 1 ? 's' : '') + '…');
 
   ips.forEach(ip => {
     const row = document.querySelector(`tr[data-row-ip="${ip}"]`);
@@ -877,6 +901,7 @@ async function batchScanIps(ips) {
   } finally {
     if (btnAll) btnAll.disabled = false;
     updateBatchButtons();
+    window._globalStatusBar && window._globalStatusBar.setIdle();
   }
 }
 
