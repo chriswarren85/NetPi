@@ -752,7 +752,7 @@ async function scanLanSheetIp(ip, rowEl) {
 
   btn.disabled = true;
   statusCell.innerHTML = '<span class="scan-status scanning">⟳ Scanning…</span>';
-  window._globalStatusBar && window._globalStatusBar.setRunning('Scanning ' + ip + '…');
+  window.netpiStatus && window.netpiStatus.startTimer('Scanning ' + ip);
 
   try {
     const lsScanMode = document.getElementById('ls-scan-mode-select')?.value || 'av_port_probe';
@@ -772,7 +772,7 @@ async function scanLanSheetIp(ip, rowEl) {
     statusCell.innerHTML = '<span class="scan-status error">✗ Failed</span>';
     btn.disabled = false;
   } finally {
-    window._globalStatusBar && window._globalStatusBar.setIdle();
+    window.netpiStatus && window.netpiStatus.stopTimer();
   }
 }
 
@@ -809,6 +809,9 @@ function applyRowScanResult(data, ip, rowEl, statusCell, btn) {
 
   if (statusColCell) statusColCell.innerHTML = '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#0d2015;color:#86efac">Online</span>';
   statusCell.innerHTML = '';
+
+  const nowIso = new Date().toISOString();
+  patchLanSheetField(ip, 'last_seen', nowIso);
 
   if (match.hostname) {
     const hostnameCell = rowEl.querySelector('[data-field="hostname"]');
@@ -867,8 +870,7 @@ function copySelectedIPs() {
   if (!ips) return;
   navigator.clipboard.writeText(ips)
     .then(() => {
-      window._globalStatusBar && window._globalStatusBar.setRunning('IPs copied to clipboard');
-      setTimeout(() => window._globalStatusBar && window._globalStatusBar.setIdle(), 2000);
+      window.netpiStatus && window.netpiStatus.post('IPs copied to clipboard', 'success');
     })
     .catch(() => { alert('Copy failed — select IPs manually.'); });
 }
@@ -880,7 +882,7 @@ async function batchScanIps(ips) {
   const btnAll = document.getElementById('btn-scan-all');
   if (btnSelected) btnSelected.disabled = true;
   if (btnAll) btnAll.disabled = true;
-  window._globalStatusBar && window._globalStatusBar.setRunning('Scanning ' + ips.length + ' IP' + (ips.length !== 1 ? 's' : '') + '…');
+  window.netpiStatus && window.netpiStatus.startTimer('Scanning ' + ips.length + ' IP' + (ips.length !== 1 ? 's' : ''));
 
   ips.forEach(ip => {
     const row = document.querySelector(`tr[data-row-ip="${ip}"]`);
@@ -919,7 +921,7 @@ async function batchScanIps(ips) {
   } finally {
     if (btnAll) btnAll.disabled = false;
     updateBatchButtons();
-    window._globalStatusBar && window._globalStatusBar.setIdle();
+    window.netpiStatus && window.netpiStatus.stopTimer();
   }
 }
 

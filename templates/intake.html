@@ -286,6 +286,7 @@ let intakeRows = [];
 let discoveredRows = [];
 let deviceTypeLibrary = [];
 var _discoveryController = null;
+var _activeDiscoveryJobId = null;
 
 /* ── W23.5 Inline discovery progress card ──────────────────────────────── */
 function showDiscoveryCard() {
@@ -309,8 +310,12 @@ function hideDiscoveryCard() {
 
 function _abortDiscovery() {
   if (_discoveryController) { _discoveryController.abort(); _discoveryController = null; }
+  if (_activeDiscoveryJobId) {
+    fetch('/tools/api/discover_hosts/cancel/' + _activeDiscoveryJobId, { method: 'POST' }).catch(function(){});
+    _activeDiscoveryJobId = null;
+  }
   hideDiscoveryCard();
-  window._globalStatusBar && window._globalStatusBar.setIdle();
+  window.netpiStatus && window.netpiStatus.stopTimer();
   var summary = document.getElementById('checks-summary');
   if (summary) summary.textContent = 'Discovery cancelled.';
 }
@@ -337,7 +342,7 @@ function updateDiscoveryCard(data) {
   if (status === 'completed' || status === 'cancelled') {
     setTimeout(function() {
       hideDiscoveryCard();
-      window._globalStatusBar && window._globalStatusBar.setIdle();
+      window.netpiStatus && window.netpiStatus.stopTimer();
     }, 3000);
   }
 }
@@ -924,40 +929,84 @@ function stageAllDiscovered(){
 
 async function _runDiscoveryWithVlan(vlan) {
   _discoveryController = new AbortController();
+  const signal = _discoveryController.signal;
   document.getElementById('checks-summary').textContent = 'Discovering hosts...';
-  window._globalStatusBar && window._globalStatusBar.setRunning('Discovery');
+  window.netpiStatus && window.netpiStatus.startTimer('Discovery');
   showDiscoveryCard();
+
   try {
     const scanMode = document.getElementById('scan-mode-select')?.value || 'standard';
-    const res = await fetch('/tools/api/discover_hosts', {
+    const startRes = await fetch('/tools/api/discover_hosts/start', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ vlan, scan_mode: scanMode }),
-      signal: _discoveryController.signal
+      signal
     });
-    const data = await res.json();
-    if(!res.ok || data.error){
-      showIntakeStatus(data.error || 'Discover hosts failed.', 'error');
-      document.getElementById('checks-summary').textContent = data.error || 'Discovery failed.';
-      updateDiscoveryCard({ status: 'failed', message: data.error || 'Discovery failed.' });
-      window._globalStatusBar && window._globalStatusBar.setIdle();
+    const startData = await startRes.json();
+    if (!startRes.ok || !startData.ok || !startData.job_id) {
+      const err = (startData && startData.error) || 'Discovery failed to start.';
+      showIntakeStatus(err, 'error');
+      document.getElementById('checks-summary').textContent = err;
+      updateDiscoveryCard({ status: 'failed', message: err });
+      window.netpiStatus && window.netpiStatus.stopTimer();
       return;
     }
 
-    discoveredRows = (Array.isArray(data.devices) ? data.devices : []).map(item => ({ ...item, selected: true }));
-    renderDiscoveredTable();
-    const foundCount = data.count || 0;
-    document.getElementById('checks-summary').textContent = 'Discovery found ' + foundCount + ' host(s) on ' + (data.subnet || 'selected subnet') + '.';
-    showIntakeStatus('Discovery completed. Stage rows into Intake Results as needed.', 'success');
-    appendCheckOutput('Discovery complete: ' + foundCount + ' hosts.');
-    updateDiscoveryCard({ status: 'completed', devices_found_count: foundCount, message: 'Found ' + foundCount + ' host(s)' });
-    appendEventLog && appendEventLog('Discovery complete: ' + foundCount + ' host(s) on ' + (data.subnet || 'selected subnet'));
+    _activeDiscoveryJobId = startData.job_id;
+
+    // Poll for progress — each update drives the inline card so per-subnet
+    // progress ("Scanning subnet 2 of 3: 10.110.60.0/24") is shown live.
+    const MAX_POLLS = 360; // 3 min at 500 ms
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      if (signal.aborted) return;
+
+      let d;
+      try {
+        const r = await fetch('/tools/api/discover_hosts/status/' + _activeDiscoveryJobId, { signal });
+        d = await r.json();
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        continue; // transient network error — keep polling
+      }
+
+      updateDiscoveryCard(d);
+
+      if (d.status === 'completed') {
+        _activeDiscoveryJobId = null;
+        discoveredRows = (Array.isArray(d.devices) ? d.devices : []).map(item => ({ ...item, selected: true }));
+        renderDiscoveredTable();
+        const foundCount = d.devices_found_count || discoveredRows.length;
+        const subnet = d.subnet || (d.subnets || []).join(', ') || 'configured subnets';
+        document.getElementById('checks-summary').textContent = 'Discovery found ' + foundCount + ' host(s) on ' + subnet + '.';
+        showIntakeStatus('Discovery completed. Stage rows into Intake Results as needed.', 'success');
+        appendCheckOutput && appendCheckOutput('Discovery complete: ' + foundCount + ' hosts.');
+        appendEventLog && appendEventLog('Discovery complete: ' + foundCount + ' host(s) on ' + subnet);
+        return;
+      }
+      if (d.status === 'failed') {
+        _activeDiscoveryJobId = null;
+        const msg = d.message || 'Discovery failed.';
+        showIntakeStatus(msg, 'error');
+        document.getElementById('checks-summary').textContent = msg;
+        window.netpiStatus && window.netpiStatus.stopTimer();
+        return;
+      }
+      if (d.status === 'cancelled') { _activeDiscoveryJobId = null; return; }
+    }
+
+    // Timed out
+    _activeDiscoveryJobId = null;
+    document.getElementById('checks-summary').textContent = 'Discovery timed out.';
+    window.netpiStatus && window.netpiStatus.stopTimer();
+
   } catch (e) {
+    _activeDiscoveryJobId = null;
     if (e && e.name === 'AbortError') return;
     showIntakeStatus('Discover hosts failed: ' + e, 'error');
     document.getElementById('checks-summary').textContent = 'Discovery failed.';
     updateDiscoveryCard({ status: 'failed', message: String(e) });
-    window._globalStatusBar && window._globalStatusBar.setIdle();
+    window.netpiStatus && window.netpiStatus.stopTimer();
   } finally {
     _discoveryController = null;
   }

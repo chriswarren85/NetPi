@@ -990,6 +990,13 @@ def _parse_discovery_line(line):
     if 'Host:' not in line:
         return None
 
+    # With -Pn, nmap emits a Host: line for every target regardless of whether it
+    # responded. When port data is present (Ports: or Ignored State: field), the
+    # host is only genuinely reachable if at least one port is open. Filtered or
+    # closed-only results mean no real response was received.
+    if ('Ports:' in line or 'Ignored State:' in line) and '/open/' not in line:
+        return None
+
     parts = line.split()
     if len(parts) < 2:
         return None
@@ -5587,7 +5594,8 @@ def settings():
 
 @app.route('/tools/scanner')
 def scanner():
-    return redirect('/tools/intake')
+    s = load_settings()
+    return render_template('scanner.html', s=s)
 
 
 @app.route('/tools/dns')
@@ -7589,6 +7597,20 @@ def api_project_version():
     })
 
 
+@app.route("/tools/api/project/save", methods=["POST"])
+def api_project_save():
+    ts = utc_now_iso()
+    project = get_active_project_id()
+    if not project:
+        return jsonify({"ok": False, "error": "No active project", "timestamp": ts}), 400
+    s = load_settings()
+    save_settings(s)
+    entries = _load_lan_sheet()
+    _save_lan_sheet(entries)
+    append_audit_entry("project_saved", f"Manual save: {project}")
+    return jsonify({"ok": True, "project": project, "timestamp": ts})
+
+
 @app.route("/tools/api/project/snapshot", methods=["GET"])
 def api_project_snapshot():
     files, missing_optional, notes = _collect_snapshot_files()
@@ -9374,6 +9396,7 @@ def api_lan_sheet_patch_entry():
         "name", "type", "vlan", "vendor", "model", "room", "notes",
         "area", "location", "hostname", "subnet", "gateway", "multicast",
         "serial", "switch_port", "poe_type", "rack_location", "zone",
+        "last_seen",
     }
     if not ip or field not in allowed:
         return jsonify({"ok": False, "error": "ip and valid field required"}), 400
