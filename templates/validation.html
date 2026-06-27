@@ -413,21 +413,28 @@ function buildBySystemRows(dataset){
     const fail = Number(counts.fail || 0);
     const warn = Number(counts.warn || 0);
     const pass = Number(counts.pass || 0);
-    const resultCount = Number(item.result_count || 0);
-    // Skip groups with no actual validation results — structural placeholders from typing inference
-    if (resultCount === 0 && pass === 0 && warn === 0 && fail === 0) return;
+    const total = fail + warn + pass;
     const status = fail > 0 ? 'fail' : (warn > 0 ? 'warn' : (pass > 0 ? 'pass' : 'unknown'));
+    const types = (item.types || []);
+    const typeStr = types.length ? types.join(' / ') : 'AV subsystem';
+    const whyRequired = 'Validates expected ' + typeStr + ' control and media relationships within this system group.';
+    let notesStr;
+    if(total === 0){
+      notesStr = 'No validation rules matched — device types in this group may lack inter-system relationship definitions, or scan data is absent.';
+    } else {
+      notesStr = 'pass=' + (counts.pass || 0) + '  warn=' + (counts.warn || 0) + '  fail=' + (counts.fail || 0) + '  ('+total+' checks)';
+    }
     rows.push({
       target: String(item.system_id || 'Unnamed system'),
-      expected_requirement: 'System group relationship validation',
+      expected_requirement: types.length ? typeStr + ' group validation' : 'System group relationship validation',
       status: status,
       method_used: 'validate_systems grouped',
       confidence: confidenceLabel(item.confidence || 0),
       recommended_action: deriveAction(status, 'system group topology membership'),
-      why_required: 'Ensures grouped AV subsystems meet expected control and media relationships.',
+      why_required: whyRequired,
       derived_from: 'POST /tools/api/validate_systems system_group_results',
-      scope: (item.types || []).join(', '),
-      notes: 'Results: ' + (item.result_count || 0) + ' | pass=' + (counts.pass || 0) + ', warn=' + (counts.warn || 0) + ', fail=' + (counts.fail || 0),
+      scope: types.join(', '),
+      notes: notesStr,
     });
   });
 
@@ -450,17 +457,18 @@ function buildBySystemRows(dataset){
   if(!rows.length){
     const detected = ((dataset.validateSystems || {}).detected_systems || {}).systems || [];
     detected.forEach(item => {
+      const chain = String(item.summary_chain || '').trim();
       rows.push({
         target: String(item.system_id || 'Detected system'),
         expected_requirement: 'Detected system relationship chain',
         status: 'unknown',
         method_used: 'validate_systems detected_systems',
         confidence: 'Low',
-        recommended_action: 'Confirm expected system membership',
-        why_required: 'Detected systems provide context for modeled validation.',
+        recommended_action: 'Confirm expected system membership and assign device types in LAN sheet',
+        why_required: 'Detected systems are inferred from device type co-location — no rule-based validation ran yet.',
         derived_from: 'POST /tools/api/validate_systems detected_systems',
         scope: (item.devices || []).join(', '),
-        notes: String(item.summary_chain || '').trim() || 'No summary chain available.',
+        notes: chain || 'No relationship chain summary available.',
       });
     });
   }
@@ -672,7 +680,7 @@ function setValidationMode(mode, btn){
   }
   const help = document.getElementById('validation-mode-help');
   if(help){
-    help.textContent = 'Live = direct observed checks | Logical = system/topology analysis | Restricted = scoped validation on a reduced VLAN context when available';
+    help.textContent = 'Live = observed port and reachability checks (requires scan data) | Logical = type-driven topology analysis (works without scan data — uses device types from LAN sheet) | Restricted = both check types scoped to a single VLAN';
   }
   const note = document.getElementById('validation-view-note');
   if(note){

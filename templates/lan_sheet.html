@@ -337,17 +337,17 @@ function buildEntryRow(e, rowIdx){
     const val  = String(e[col.field] || '');
     const isDirty = lcDirty[rawIp] && lcDirty[rawIp][col.field];
     const mono = col.mono ? 'font-family:monospace;' : '';
-    let cellContent;
-    if (col.field === 'ip' && val) {
-      cellContent = `<a href="http://${escHtml(val)}" target="_blank" rel="noopener"
-        onclick="event.stopPropagation()"
-        style="font-family:monospace;color:#7dd3fc;text-decoration:none;cursor:pointer"
-        title="Open http://${escHtml(val)} in browser">${escHtml(val)}</a>`;
+    let cellInner;
+    if(col.field === 'ip' && val){
+      cellInner = `<span class="lcv" style="${mono}color:#e5e7eb">${escHtml(val)}`
+        + `<a href="http://${escHtml(val)}" target="_blank" rel="noopener"`
+        + ` onclick="event.stopPropagation()" title="Open device web UI"`
+        + ` style="margin-left:5px;color:#475569;text-decoration:none;font-size:10px">↗</a></span>`;
     } else {
-      cellContent = `<span class="lcv" style="${mono}color:${val?'#e5e7eb':'#374151'}">${val ? escHtml(val) : '—'}</span>`;
+      cellInner = `<span class="lcv" style="${mono}color:${val?'#e5e7eb':'#374151'}">${val ? escHtml(val) : '—'}</span>`;
     }
     html += `<td class="lce${isDirty?' lc-dirty':''}" data-row="${rowIdx}" data-col="${colIdx}" data-ip="${safeIp}" data-field="${escHtml(col.field)}">`
-      + cellContent + `</td>`;
+      + cellInner + `</td>`;
   });
 
   // Status (read-only) + Scan button + Scan status + Remove button
@@ -408,9 +408,9 @@ function renderSheet(){
       const devs = groups[room];
       const missing = devs.filter(d => !d.present).length;
       const mSpan = missing > 0 ? ` <span style="color:#fca5a5;font-weight:400">(${missing} missing)</span>` : '';
-      html += `<tr style="background:#111;border-top:2px solid #374151">
-        <td colspan="${colCount}" style="padding:6px 12px;font-weight:700;color:#e5e7eb;font-size:11px;letter-spacing:.05em;text-transform:uppercase">
-          ${escHtml(room)}<span style="color:#6b7280;font-weight:400"> — ${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
+      html += `<tr class="ls-group-header" data-group-header="true" data-group-room="${escHtml(room)}" style="background:#0f172a;border-top:2px solid #374151;pointer-events:none">
+        <td colspan="100" style="padding:4px 12px;font-weight:600;color:#94a3b8;font-size:11px;letter-spacing:.06em;text-transform:uppercase">
+          ${escHtml(room)}<span style="color:#4b5563;font-weight:400"> — ${devs.length} device${devs.length!==1?'s':''}</span>${mSpan}
         </td></tr>`;
       devs.forEach(e => { html += buildEntryRow(e, rowIdx++); });
     });
@@ -425,7 +425,7 @@ function renderSheet(){
 function _appendAddRow(tbody, colCount){
   const tr = document.createElement('tr');
   tr.className = 'lc-new-row';
-  tr.innerHTML = `<td colspan="${colCount}" style="padding:4px 8px">
+  tr.innerHTML = `<td colspan="100" style="padding:4px 8px">
     <button class="btn" style="font-size:11px;padding:3px 12px;color:#6b7280;border-color:#2d2d2d" onclick="lcAddRow()">+ Add Row</button>
   </td>`;
   tbody.appendChild(tr);
@@ -726,7 +726,14 @@ document.addEventListener('keypress', ev => {
 
 /* Add a blank row */
 function lcAddRow(){
-  const blank = { name:'', ip:'', mac:'', type:'', vlan:'', vendor:'', model:'', room:'',
+  // Inherit room from the active room filter or the last group-header visible in the table
+  const roomFilter = (document.getElementById('f-room') || {}).value || '';
+  let inheritRoom = (roomFilter && roomFilter !== '') ? roomFilter : '';
+  if(!inheritRoom){
+    const headers = document.querySelectorAll('tr[data-group-header="true"]');
+    if(headers.length) inheritRoom = headers[headers.length - 1].dataset.groupRoom || '';
+  }
+  const blank = { name:'', ip:'', mac:'', type:'', vlan:'', vendor:'', model:'', room: inheritRoom,
                   hostname:'', serial:'', switch_port:'', multicast:'', poe_type:'', location:'', notes:'', present: false };
   lanEntries.push(blank);
   populateRoomFilter();

@@ -26,7 +26,18 @@
     "ip-camera": "camera",
     "ptz": "camera",
     "ndi-device": "ndi",
-    "barco": "barco-clickshare"
+    "barco": "barco-clickshare",
+    "barco_ctrl": "barco-clickshare",
+    "dante": "dante-audio",
+    "dante-audio-device": "dante-audio",
+    "dante audio device": "dante-audio",
+    "shure": "audio-dsp",
+    "audio-device": "audio-dsp",
+    "projector": "display",
+    "nvx": "av-over-ip",
+    "dm-nvx": "av-over-ip",
+    "network-device": "network-switch",
+    "novastar": "display"
   },
   "types": {
     "dante-audio": {

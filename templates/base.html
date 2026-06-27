@@ -166,7 +166,7 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   <a href="/tools/validation" class="nav-item {% if request.path == '/tools/validation' %}active{% endif %}"><span class="nav-dot red"></span>Validation</a>
   <a href="/tools/recommendations" class="nav-item {% if request.path == '/tools/recommendations' %}active{% endif %}"><span class="nav-dot blue"></span>Commissioning Recommendations</a>
   <div class="nav-section s-network">Network</div>
-  <a href="/tools/scanner" class="nav-item {% if request.path == '/tools/scanner' %}active{% endif %}"><span class="nav-dot green"></span>Device scanner</a>
+  <a href="/tools/intake" class="nav-item {% if request.path in ['/tools/intake', '/tools/scanner'] %}active{% endif %}"><span class="nav-dot green"></span>Device scanner</a>
   <a href="/tools/dns" class="nav-item {% if request.path == '/tools/dns' %}active{% endif %}"><span class="nav-dot green"></span>DNS records</a>
   <a href="/tools/network" class="nav-item {% if request.path == '/tools/network' %}active{% endif %}"><span class="nav-dot green"></span>Network tools</a>
   <a href="/tools/dhcp" class="nav-item {% if request.path == '/tools/dhcp' %}active{% endif %}"><span class="nav-dot amber"></span>DHCP leases</a>
@@ -206,45 +206,6 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
   {% block content %}{% endblock %}
 </div>
 <div id="toast-container"></div>
-<!-- Save settings: sits above the status bar — shown only on /tools/settings -->
-<button id="global-save-settings-btn"
-  onclick="globalSaveSettings()"
-  style="position:fixed;bottom:38px;left:14px;z-index:820;padding:5px 12px;background:#1a1a1a;border:1px solid #374151;border-radius:5px;color:#6b7280;font-size:11px;font-weight:500;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none">
-  Save settings
-</button>
-<script>
-(function(){
-  if(window.location.pathname === '/tools/settings'){
-    var btn = document.getElementById('global-save-settings-btn');
-    if(btn) btn.style.display = '';
-    var topBtn = document.getElementById('topbar-save-settings-btn');
-    if(topBtn) topBtn.style.display = '';
-  }
-  window.globalSaveSettings = function(){
-    var f = document.getElementById('settings-form');
-    if(!f) return;
-    var fd = new FormData(f);
-    fetch('/tools/settings', {
-      method: 'POST',
-      headers: { 'Accept': 'application/json' },
-      body: new URLSearchParams(fd)
-    })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var lbl = document.getElementById('global-status-label');
-      if(lbl){
-        var prev = lbl.textContent;
-        lbl.textContent = d.success ? 'Saved ✓' : 'Save failed';
-        setTimeout(function(){ lbl.textContent = prev; }, 2000);
-      }
-    })
-    .catch(function(){
-      var lbl = document.getElementById('global-status-label');
-      if(lbl){ lbl.textContent = 'Save failed'; setTimeout(function(){ lbl.textContent = 'Idle'; }, 2000); }
-    });
-  };
-})();
-</script>
 <!-- ── Status bar ──────────────────────────────────────────────────────── -->
 <div id="netpi-statusbar">
   <!-- Slim 36px status row -->
@@ -252,13 +213,16 @@ label{font-size:12px;color:#9ca3af;display:block;margin-bottom:4px}
     <span id="global-status-dot"
           style="width:8px;height:8px;border-radius:50%;background:#475569;flex-shrink:0"></span>
     <span id="global-status-label"
-          style="color:#94a3b8;white-space:nowrap">Idle</span>
+          style="color:#94a3b8;white-space:nowrap;flex:1;overflow:hidden;text-overflow:ellipsis">Idle</span>
     <span id="global-status-elapsed"
-          style="color:#64748b;font-variant-numeric:tabular-nums;display:none"></span>
-    <span style="flex:1"></span>
+          style="color:#d97706;font-variant-numeric:tabular-nums;display:none;font-family:monospace;flex-shrink:0"></span>
+    <button id="global-save-settings-btn"
+            style="display:none;padding:3px 10px;background:#1a1a1a;border:1px solid #374151;
+                   border-radius:4px;color:#6b7280;font-size:11px;font-weight:500;cursor:pointer;flex-shrink:0"
+            title="Save project settings">Save settings</button>
     <button id="global-status-expand"
             style="display:none;background:none;border:none;cursor:pointer;
-                   color:#94a3b8;padding:0 4px;font-size:0.9rem"
+                   color:#94a3b8;padding:0 4px;font-size:0.9rem;flex-shrink:0"
             title="Show event log">&#9658;</button>
   </div>
   <!-- Legacy IDs preserved for window.netpiStatus compatibility — not displayed -->
@@ -315,17 +279,24 @@ window.netpiStatus = (function(){
   var _cdCb       = null;
   var _dotState   = '';
 
-  var eBar  = document.getElementById('nsb-bar');
-  var eDot  = document.getElementById('nsb-dot');
-  var eLbl  = document.getElementById('nsb-label');
-  var eTxt  = document.getElementById('nsb-text');
-  var eElap = document.getElementById('nsb-elapsed');
-  var eCd   = document.getElementById('nsb-countdown');
-  var eClock= document.getElementById('nsb-clock');
-  var eLog  = document.getElementById('nsb-log');
-  var eToggle=document.getElementById('nsb-toggle');
+  /* Legacy hidden elements (kept for compat with any direct DOM access) */
+  var eBar   = document.getElementById('nsb-bar');
+  var eDot   = document.getElementById('nsb-dot');
+  var eLbl   = document.getElementById('nsb-label');
+  var eTxt   = document.getElementById('nsb-text');
+  var eElap  = document.getElementById('nsb-elapsed');
+  var eCd    = document.getElementById('nsb-countdown');
+  var eClock = document.getElementById('nsb-clock');
+  var eLog   = document.getElementById('nsb-log');
+  var eToggle= document.getElementById('nsb-toggle');
 
-  /* clock */
+  /* New visible status bar elements */
+  var eGDot    = document.getElementById('global-status-dot');
+  var eGLbl    = document.getElementById('global-status-label');
+  var eGElap   = document.getElementById('global-status-elapsed');
+  var eGExpand = document.getElementById('global-status-expand');
+
+  /* clock (legacy) */
   function _tickClock(){
     if(eClock) eClock.textContent = new Date().toLocaleTimeString('en-GB');
   }
@@ -334,15 +305,31 @@ window.netpiStatus = (function(){
 
   function _dot(state){
     _dotState = state || '';
-    if(eDot) eDot.className = _dotState;
+    if(eDot) eDot.className = _dotState; /* legacy */
+    if(eGDot){
+      if(state === 'running'){
+        eGDot.style.background = '#d97706';
+        eGDot.style.animation  = 'nsb-pulse 1s ease-in-out infinite';
+      } else if(state === 'done'){
+        eGDot.style.background = '#4a7a5a';
+        eGDot.style.animation  = '';
+      } else if(state === 'error'){
+        eGDot.style.background = '#991b1b';
+        eGDot.style.animation  = '';
+      } else {
+        eGDot.style.background = '#475569';
+        eGDot.style.animation  = '';
+      }
+    }
   }
 
   function _setLabel(lbl){
-    if(eLbl) eLbl.textContent = (lbl||'NETPI').toUpperCase();
+    if(eLbl) eLbl.textContent = (lbl||'NETPI').toUpperCase(); /* legacy */
   }
 
   function _setText(msg){
-    if(eTxt) eTxt.textContent = msg||'';
+    if(eTxt) eTxt.textContent = msg||''; /* legacy */
+    if(eGLbl) eGLbl.textContent = msg||'Idle';
   }
 
   function _esc(s){
@@ -350,10 +337,13 @@ window.netpiStatus = (function(){
   }
 
   function _renderLog(){
-    if(!eLog) return;
-    eLog.innerHTML = _logs.map(function(e){
+    var html = _logs.map(function(e){
       return '<div class="nsb-row"><span class="t">'+_esc(e.time)+'</span><span class="m '+_esc(e.type)+'">'+_esc(e.message)+'</span></div>';
     }).join('');
+    if(eLog) eLog.innerHTML = html; /* legacy */
+    var eGContent = document.getElementById('event-log-content');
+    if(eGContent) eGContent.innerHTML = html || '<span style="color:#4b5563">No events yet.</span>';
+    if(eGExpand) eGExpand.style.display = _logs.length ? '' : 'none';
   }
 
   /* public: post a message */
@@ -382,14 +372,16 @@ window.netpiStatus = (function(){
     _dot('running');
     if(pageLabel !== undefined) _setLabel(pageLabel);
     _setText(_timerLabel + ' — starting…');
-    if(eElap){ eElap.style.display=''; eElap.textContent='0s'; }
+    if(eElap)  { eElap.style.display='';  eElap.textContent='0s'; } /* legacy */
+    if(eGElap) { eGElap.style.display=''; eGElap.textContent='0s'; }
     clearInterval(_timerInt);
     _timerInt = setInterval(function(){
       if(!_timerStart) return;
       var e = Math.floor((Date.now()-_timerStart)/1000);
       var m = Math.floor(e/60), s = e%60;
       var txt = m ? m+'m '+s+'s' : e+'s';
-      if(eElap) eElap.textContent = '⏱ '+txt;
+      if(eElap)  eElap.textContent  = '⏱ '+txt; /* legacy */
+      if(eGElap) eGElap.textContent = '⏱ '+txt;
       _setText(_timerLabel + ' — ' + txt + ' elapsed');
     }, 1000);
     var logEntry = _timerLabel + ' started';
@@ -403,7 +395,8 @@ window.netpiStatus = (function(){
     clearInterval(_timerInt);
     _timerInt = null;
     _timerStart = null;
-    if(eElap){ eElap.style.display='none'; eElap.textContent=''; }
+    if(eElap)  { eElap.style.display='none';  eElap.textContent=''; } /* legacy */
+    if(eGElap) { eGElap.style.display='none'; eGElap.textContent=''; }
     if(pageLabel !== undefined) _setLabel(pageLabel);
     if(message) post(message, type||'info');
     else if(_dotState==='running') _dot('');
@@ -452,10 +445,15 @@ window.netpiStatus = (function(){
 
   function _toggleLog(){
     _logOpen = !_logOpen;
-    if(eLog) eLog.style.display = _logOpen ? '' : 'none';
-    if(eToggle) eToggle.textContent = _logOpen ? '▴ Log' : '▾ Log';
+    if(eLog) eLog.style.display = _logOpen ? '' : 'none'; /* legacy */
+    if(eToggle) eToggle.textContent = _logOpen ? '▴ Log' : '▾ Log'; /* legacy */
+    var drawer = document.getElementById('event-log-drawer');
+    if(drawer) drawer.style.transform = _logOpen ? 'translateY(0)' : 'translateY(100%)';
+    if(eGExpand) eGExpand.textContent = _logOpen ? '◀' : '▶';
     if(_logOpen) _renderLog();
   }
+
+  if(eGExpand) eGExpand.addEventListener('click', _toggleLog);
 
   /* initialise */
   _dot('');

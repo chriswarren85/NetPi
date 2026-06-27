@@ -2892,7 +2892,22 @@ async function refingerprintDevice(ip) {
 function removeDeviceFromDrawer(ip) {
   if(!confirm('Remove ' + ip + ' from the device list?')) return;
   closeDeviceDrawer();
-  removeDevice(ip);
+  fetch('/tools/api/devices/remove', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ip})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if(d.ok){
+      removeDevice(ip);
+    } else {
+      window.showToast && window.showToast('Remove failed: ' + (d.error || 'unknown'), 'error');
+    }
+  })
+  .catch(e => {
+    window.showToast && window.showToast('Remove failed: ' + e, 'error');
+  });
 }
 
 // ── W20.1 Config Script Modal ─────────────────────────────────────────────

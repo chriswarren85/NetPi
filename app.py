@@ -5587,7 +5587,7 @@ def settings():
 
 @app.route('/tools/scanner')
 def scanner():
-    return render_template('scanner.html', s=load_settings())
+    return redirect('/tools/intake')
 
 
 @app.route('/tools/dns')
@@ -6618,15 +6618,13 @@ def api_generate_requirements():
 
         # ── Server-side persistence (survives browser session / device changes) ──
         try:
-            import json as _json
             _cache_path = get_project_path("data/requirements_cache.json", ensure_parent=True)
-            with open(_cache_path, "w", encoding="utf-8") as _cf:
-                _json.dump({
-                    "ts": datetime.now().isoformat(),
-                    "summary": summary,
-                    "results": results,
-                    "unmapped": unmapped,
-                }, _cf)
+            safe_write_json(_cache_path, {
+                "ts": datetime.now().isoformat(),
+                "summary": summary,
+                "results": results,
+                "unmapped": unmapped,
+            })
         except Exception:
             pass  # non-fatal — localStorage is the fallback
 
@@ -8107,7 +8105,12 @@ def lan_sheet_scan_ips():
     for entry in ips:
         if not isinstance(entry, str) or not entry.strip():
             return jsonify({"ok": False, "error": "Each IP entry must be a non-empty string", "timestamp": ts}), 400
-        validated_ips.append(entry.strip())
+        ip_str = entry.strip()
+        try:
+            ipaddress.ip_address(ip_str)
+        except ValueError:
+            return jsonify({"ok": False, "error": f"Invalid IP address: {ip_str!r}", "timestamp": ts}), 400
+        validated_ips.append(ip_str)
 
     scan_mode = (data.get("scan_mode") or "av_port_probe").strip().lower()
     target_label = f"targeted: {len(validated_ips)} IP{'s' if len(validated_ips) != 1 else ''}"
@@ -9129,6 +9132,26 @@ def api_devices_save():
     normalized_devices = normalize_devices_for_save(patched_devices, settings=load_settings())
     save_devices_file(normalized_devices)
     return jsonify({'success': True, 'devices': normalized_devices})
+
+
+@app.route('/tools/api/devices/remove', methods=['POST'])
+def api_devices_remove():
+    ts = utc_now_iso()
+    data = request.get_json(silent=True) or {}
+    ip = str(data.get('ip') or '').strip()
+    if not ip:
+        return jsonify({'ok': False, 'error': 'ip is required', 'timestamp': ts}), 400
+    project = get_active_project_id()
+    if not project:
+        return jsonify({'ok': False, 'error': 'No active project', 'timestamp': ts}), 400
+    devices = load_devices()
+    original_count = len(devices)
+    devices = [d for d in devices if str((d or {}).get('ip') or '').strip() != ip]
+    if len(devices) == original_count:
+        return jsonify({'ok': False, 'error': f'Device {ip} not found', 'timestamp': ts}), 404
+    save_devices_file(devices)
+    append_audit_entry('device_removed', f'Removed {ip}')
+    return jsonify({'ok': True, 'removed': ip, 'remaining': len(devices), 'timestamp': ts})
 
 
 # ── LAN Sheet ─────────────────────────────────────────────────────────────────
@@ -10903,6 +10926,12 @@ def _req_get_effective_type(device, req_config):
         or str(device.get("suggested_type") or "").strip().lower()
         or str(device.get("type") or "").strip().lower()
     )
+    if not raw:
+        # Backstop: infer type from vendor/model when no slug is set on the device
+        raw = guess_type_from_vendor(
+            str(device.get("vendor") or device.get("make") or ""),
+            str(device.get("model") or ""),
+        ).lower()
     return _req_resolve_type(raw, req_config) if raw else ""
 
 

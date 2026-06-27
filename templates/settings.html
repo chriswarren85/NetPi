@@ -176,6 +176,40 @@
   {% if request.method == 'POST' %}
   document.getElementById('success').style.display='block';
   {% endif %}
+
+  /* ── Save Settings via AJAX (no page reload) ── */
+  (function(){
+    var btn = document.getElementById('global-save-settings-btn');
+    if(!btn) return;
+    btn.style.display = '';
+    btn.onclick = function(e){
+      e.preventDefault();
+      var form = document.getElementById('settings-form');
+      if(!form) return;
+      btn.disabled = true;
+      window.netpiStatus && window.netpiStatus.startTimer('Saving settings');
+      fetch('/tools/settings', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: new FormData(form),
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        btn.disabled = false;
+        if(d.success || d.saved){
+          document.getElementById('success').style.display='block';
+          window.netpiStatus && window.netpiStatus.stopTimer('Settings saved.', 'success');
+        } else {
+          window.netpiStatus && window.netpiStatus.stopTimer('Save failed: ' + (d.error || 'unknown'), 'error');
+        }
+      })
+      .catch(function(err){
+        btn.disabled = false;
+        window.netpiStatus && window.netpiStatus.stopTimer('Save failed: ' + (err.message || err), 'error');
+      });
+    };
+  })();
+
   function addVlan(){
     const body = document.querySelector('#vlan-panel .panel-body');
     const idx = document.querySelectorAll('.vlan-card').length;

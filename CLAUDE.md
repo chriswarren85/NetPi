@@ -77,8 +77,6 @@ All write endpoints must reject requests with no active project set.
 ### 1. Atomic writes
 All JSON writes via `safe_write_json(path, data)` — writes `.tmp`, `fsync`, rename.
 `open(path, 'w') + json.dump()` is **forbidden** on any file read concurrently.
-**Known violation:** `/tools/api/security-architecture/save` (~L6630) may use plain `json.dump` — fix whenever touched.
-
 ### 2. Subprocess hardening
 All subprocess calls via `_subprocess_run_safe(cmd, timeout=N, **kwargs)`.
 Handles `FileNotFoundError`, `TimeoutExpired`, `CalledProcessError`.
