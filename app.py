@@ -5497,8 +5497,7 @@ def devices():
 
 @app.route('/tools/intake')
 def intake():
-    from flask import redirect
-    return redirect('/tools/devices#intake', code=302)
+    return render_template('intake.html', s=load_settings())
 
 @app.route('/tools/requirements')
 def requirements():
