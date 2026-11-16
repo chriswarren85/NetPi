@@ -1,12 +1,246 @@
 {% extends 'base.html' %}
 {% block title %}- Device Intake{% endblock %}
 {% block content %}
+<style>
+.drawer-section { margin-bottom: 20px; }
+.drawer-section-title {
+  font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: #9ca3af;
+  margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #2e2e2e;
+}
+</style>
+
 <div class="page-title">Device Intake</div>
-<div class="page-sub">Single intake workflow for manual entry, paste import, discovery/check staging, and commit into the active project inventory.</div>
+<div class="page-sub">Scan, inventory, paste, and manually add devices into the active project.</div>
 
 <div id="intake-status" style="display:none;font-size:13px;margin:10px 0 14px 0;padding:10px 12px;border-radius:8px;background:#141414;color:#d1d5db;border:1px solid #374151"></div>
-
 <datalist id="device-type-list"></datalist>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- 1. DEVICE SCANNER                                                   -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="panel" id="run-checks-panel">
+  <div class="panel-header">Device Scanner</div>
+  <div class="panel-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Discovery VLAN</label>
+        <select id="checks-vlan">
+          <option value="">Auto (default)</option>
+          {% for v in s.vlans %}
+          <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
+          {% endfor %}
+          <option value="__custom__">Custom subnet…</option>
+        </select>
+      </div>
+      <div class="form-group" id="custom-subnet-group" style="display:none">
+        <label>Custom Subnet (CIDR)</label>
+        <input id="custom-subnet-input" placeholder="e.g. 192.168.40.0/24" style="width:180px">
+      </div>
+      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:6px">
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.875rem;font-weight:normal">
+          <input type="checkbox" id="scan-all-vlans">
+          Scan all VLANs
+        </label>
+      </div>
+      <div class="form-group">
+        <label>Scan mode</label>
+        <select id="scan-mode-select" style="width:160px">
+          <option value="standard">Standard</option>
+          <option value="av_port_probe">AV Port Probe</option>
+          <option value="arp_only">ARP Only</option>
+          <option value="deep_fingerprint">Deep Fingerprint</option>
+        </select>
+        <span id="scan-mode-hint" style="font-size:0.8em;color:#94a3b8;display:block;margin-top:3px"></span>
+      </div>
+      <div class="form-group">
+        <label>Host / IP</label>
+        <input id="checks-host" placeholder="e.g. 192.168.1.20 or hostname">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-primary" onclick="discoverHostsForIntake()">Discover Hosts</button>
+      <button class="btn" onclick="runPingCheck()">Ping</button>
+      <button class="btn" onclick="runPortScanCheck()">Port Scan</button>
+      <button class="btn" onclick="runTracerouteCheck()">Traceroute</button>
+      <button class="btn" onclick="fingerprintHostForIntake()">Fingerprint Host</button>
+    </div>
+
+    <div id="checks-summary" style="margin-bottom:10px;color:#9ca3af"></div>
+
+    <div id="discovery-inline-card"
+         style="display:none;border:1px solid #2e2e2e;border-radius:6px;
+                padding:12px 16px;margin-bottom:12px;background:#1a1a1a">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span id="dic-label" style="font-size:0.875rem;font-weight:500;color:#e2e8f0">Scanning&#8230;</span>
+        <button id="dic-stop-btn"
+                style="padding:3px 10px;font-size:0.75rem;border-radius:4px;
+                       border:1px solid #7f1d1d;color:#f87171;
+                       background:transparent;cursor:pointer">Stop</button>
+      </div>
+      <div style="background:#2e2e2e;border-radius:3px;height:4px;overflow:hidden;margin-bottom:8px">
+        <div id="dic-progress-bar" style="height:100%;background:#2dd4bf;width:0%;transition:width 0.4s ease"></div>
+      </div>
+      <div id="dic-status-text" style="font-size:0.8rem;color:#94a3b8"></div>
+    </div>
+
+    <div id="discover-wrap" style="display:none;overflow-x:auto;margin-bottom:10px">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="discover-select-all" onchange="toggleAllDiscovered(this.checked)"></th>
+            <th>Hostname</th>
+            <th>IP</th>
+            <th>MAC / Vendor</th>
+            <th>Status</th>
+            <th>Likely Type</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="discover-results"></tbody>
+      </table>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" onclick="stageSelectedDiscovered()">Stage Selected Discovered</button>
+        <button class="btn" onclick="stageAllDiscovered()">Stage All Discovered</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:0">
+      <div class="panel-header">Check Output</div>
+      <div class="panel-body">
+        <pre id="checks-output" style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:0;min-height:110px"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- 2. DEVICE INVENTORY                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="panel" id="inventory-panel">
+  <div class="panel-header">
+    <span>Device Inventory</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="inv-filter-vlan" onchange="renderInventory()" style="width:140px">
+        <option value="">All VLANs</option>
+        {% for v in s.vlans %}
+        <option value="{{ v.name }}">{{ v.name }}</option>
+        {% endfor %}
+      </select>
+      <select id="inv-filter-freshness" onchange="renderInventory()" style="width:130px">
+        <option value="all">All devices</option>
+        <option value="active">Hide stale</option>
+        <option value="stale">Stale only</option>
+      </select>
+      <button id="validate-all-btn" class="btn btn-primary" onclick="validateAllDevices()">Validate All</button>
+      <button class="btn" onclick="loadInventory()">Refresh</button>
+    </div>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <div id="inv-empty-wrap">
+      <table id="inv-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>IP</th>
+            <th>Type</th>
+            <th>VLAN</th>
+            <th>Freshness</th>
+            <th>Validation</th>
+            <th style="width:30px"></th>
+          </tr>
+        </thead>
+        <tbody id="inv-tbody">
+          <tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">Loading inventory…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- 3. PASTE DEVICE LIST                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="panel" id="paste-list-panel">
+  <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
+    <span>Paste Device List</span>
+    <button class="btn" style="font-size:11px;padding:3px 10px;height:auto" onclick="togglePasteHelp()">? Format Help</button>
+  </div>
+  <div class="panel-body">
+
+    <div id="paste-format-help" style="display:none;margin-bottom:14px;padding:12px 14px;background:#0d0d0d;border:1px solid #374151;border-radius:8px;font-size:12px;line-height:1.7">
+      <div style="font-weight:700;color:#d1d5db;margin-bottom:8px">Accepted Formats</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px">With headers (recommended)</div>
+          <pre style="margin:0;font-size:11px;color:#9ca3af;background:#111;padding:8px;border-radius:4px;border:1px solid #374151;overflow-x:auto">Name&#9;IP&#9;Type&#9;VLAN
+DSP-01&#9;192.168.1.20&#9;qsys&#9;AV_Control
+AMP-01&#9;192.168.1.21&#9;amplifier&#9;AV_Control</pre>
+          <div style="color:#6b7280;margin-top:4px;font-size:11px">Tabs, commas, or semicolons all work. Copy from Excel/Sheets with tab separation.</div>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px">Without headers (positional)</div>
+          <pre style="margin:0;font-size:11px;color:#9ca3af;background:#111;padding:8px;border-radius:4px;border:1px solid #374151;overflow-x:auto">192.168.1.20
+DSP-01&#9;192.168.1.20
+DSP-01&#9;192.168.1.20&#9;qsys</pre>
+          <div style="color:#6b7280;margin-top:4px;font-size:11px">Parser anchors on the IP address and assigns surrounding columns by position and pattern.</div>
+        </div>
+      </div>
+      <div style="font-weight:700;color:#d1d5db;margin-bottom:6px">Recognized Column Header Names</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;color:#9ca3af">
+        <div><span style="color:#d1d5db;font-weight:600">IP</span> <span style="color:#ef4444">★ required</span><br><span style="color:#6b7280">ip, ip address, address, ipv4, management ip, static ip</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Name</span><br><span style="color:#6b7280">name, device, equipment, tag, label, asset tag, device id</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Type</span><br><span style="color:#6b7280">type, device type, role, category, class</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">VLAN</span><br><span style="color:#6b7280">vlan, vlan id, vlan name, network segment, av network</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">MAC</span><br><span style="color:#6b7280">mac, mac address, hw address, ethernet</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Vendor</span><br><span style="color:#6b7280">vendor, manufacturer, make, brand, mfr</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Model</span><br><span style="color:#6b7280">model, model number, part number, sku, product</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Room</span><br><span style="color:#6b7280">room, zone, area, room/zone, area/room, av zone</span></div>
+        <div><span style="color:#d1d5db;font-weight:600">Serial / Notes / Switch Port</span><br><span style="color:#6b7280">serial, sn, s/n · notes, comment · switch port, port</span></div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:14% 14% 12% 12% 16% 11% 13% 1fr;background:#111;border:1px solid #374151;border-bottom:2px solid #4b5563;border-radius:6px 6px 0 0;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;overflow:hidden">
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Name</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d;color:#ef4444">IP ★</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Type</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">VLAN</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">MAC</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Vendor</div>
+      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Model</div>
+      <div style="padding:5px 8px">Room</div>
+    </div>
+    <textarea id="pasted-device-text" style="width:100%;min-height:160px;font-family:monospace;font-size:12px;line-height:1.65;border-radius:0 0 6px 6px;border-top:none;box-sizing:border-box;tab-size:12;-moz-tab-size:12;resize:vertical" placeholder="DSP-01&#9;192.168.1.20&#9;qsys&#9;AV_Control&#9;&#9;QSC&#9;Core 110f&#9;Main Hall&#10;AMP-01&#9;192.168.1.21&#9;amplifier&#9;AV_Control&#9;&#9;Crown&#9;DCI8|600N&#9;Stage&#10;SW-CORE&#9;10.0.1.1&#9;switch&#9;Mgmt&#9;AA:BB:CC:DD:EE:FF&#9;Cisco&#9;C9300-48U&#9;IDF-1"></textarea>
+
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" onclick="previewPasteDevices()">Preview Parse</button>
+      <button class="btn" onclick="copyPasteTemplate()" title="Copy TSV header row to clipboard">📋 Copy Template</button>
+      <button class="btn" onclick="clearPaste()">Clear</button>
+    </div>
+
+    <div id="paste-parse-report" style="display:none;margin-top:14px">
+      <div id="paste-summary" style="margin-bottom:10px"></div>
+      <div id="paste-header-mapping" style="margin-bottom:10px;padding:10px 12px;background:#0d0d0d;border:1px solid #374151;border-radius:6px;font-size:12px;line-height:1.7"></div>
+      <div id="paste-preview-table" style="overflow-x:auto;margin-bottom:10px"></div>
+      <div id="paste-invalid"></div>
+    </div>
+
+    <div id="paste-save-section" style="display:none;margin-top:14px;padding:12px;background:#111;border:1px solid #374151;border-radius:8px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;margin-bottom:10px">Save parsed rows</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="commitAll()">Commit All to Device List</button>
+        <button class="btn btn-primary" onclick="savePasteToLanSheet()">Save All to LAN Sheet</button>
+        <button class="btn" onclick="commitSelected()">Commit Selected</button>
+      </div>
+      <div id="paste-save-status" style="margin-top:8px;font-size:12px;color:#9ca3af;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- 4. MANUAL ADD DEVICE                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
 <div class="panel" id="manual-add-panel">
   <div class="panel-header">Manual Add Device</div>
   <div class="panel-body">
@@ -50,203 +284,13 @@
     <div class="form-row">
       <div class="form-group" style="flex:1;min-width:240px"><label>Notes</label><textarea id="manual-notes" placeholder="Optional notes" maxlength="500" style="width:100%;min-height:56px;resize:vertical"></textarea></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="addManualDevice()">Add Manual Device</button>
-      <a class="btn" href="/tools/devices">Open Devices</a>
-    </div>
+    <button class="btn btn-primary" onclick="addManualDevice()">Add Manual Device</button>
   </div>
 </div>
 
-<div class="panel" id="paste-list-panel">
-  <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between">
-    <span>Paste Device List</span>
-    <button class="btn" style="font-size:11px;padding:3px 10px;height:auto" onclick="togglePasteHelp()">? Format Help</button>
-  </div>
-  <div class="panel-body">
-
-    <!-- ── Format Help ─────────────────────────────────────── -->
-    <div id="paste-format-help" style="display:none;margin-bottom:14px;padding:12px 14px;background:#0d0d0d;border:1px solid #374151;border-radius:8px;font-size:12px;line-height:1.7">
-      <div style="font-weight:700;color:#d1d5db;margin-bottom:8px">Accepted Formats</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px">
-        <div>
-          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px">With headers (recommended)</div>
-          <pre style="margin:0;font-size:11px;color:#9ca3af;background:#111;padding:8px;border-radius:4px;border:1px solid #374151;overflow-x:auto">Name&#9;IP&#9;Type&#9;VLAN
-DSP-01&#9;192.168.1.20&#9;qsys&#9;AV_Control
-AMP-01&#9;192.168.1.21&#9;amplifier&#9;AV_Control</pre>
-          <div style="color:#6b7280;margin-top:4px;font-size:11px">Tabs, commas, or semicolons all work. Copy from Excel/Sheets with tab separation.</div>
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:4px">Without headers (positional)</div>
-          <pre style="margin:0;font-size:11px;color:#9ca3af;background:#111;padding:8px;border-radius:4px;border:1px solid #374151;overflow-x:auto">192.168.1.20
-DSP-01&#9;192.168.1.20
-DSP-01&#9;192.168.1.20&#9;qsys</pre>
-          <div style="color:#6b7280;margin-top:4px;font-size:11px">Parser anchors on the IP address and assigns surrounding columns by position and pattern.</div>
-        </div>
-      </div>
-      <div style="font-weight:700;color:#d1d5db;margin-bottom:6px">Recognized Column Header Names</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;color:#9ca3af">
-        <div><span style="color:#d1d5db;font-weight:600">IP</span> <span style="color:#ef4444">★ required</span><br><span style="color:#6b7280">ip, ip address, address, ipv4, management ip, static ip</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">Name</span><br><span style="color:#6b7280">name, device, equipment, tag, label, asset tag, device id</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">Type</span><br><span style="color:#6b7280">type, device type, role, category, class</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">VLAN</span><br><span style="color:#6b7280">vlan, vlan id, vlan name, network segment, av network</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">MAC</span><br><span style="color:#6b7280">mac, mac address, hw address, ethernet</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">Vendor</span><br><span style="color:#6b7280">vendor, manufacturer, make, brand, mfr</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">Model</span><br><span style="color:#6b7280">model, model number, part number, sku, product</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">Room</span><br><span style="color:#6b7280">room, zone, area, room/zone, area/room, av zone</span></div>
-        <div><span style="color:#d1d5db;font-weight:600">Serial / Notes / Switch Port</span><br><span style="color:#6b7280">serial, sn, s/n · notes, comment · switch port, port</span></div>
-      </div>
-    </div>
-
-    <!-- ── Column guide header ─────────────────────────────── -->
-    <div style="display:grid;grid-template-columns:14% 14% 12% 12% 16% 11% 13% 1fr;background:#111;border:1px solid #374151;border-bottom:2px solid #4b5563;border-radius:6px 6px 0 0;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;overflow:hidden">
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Name</div>
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d;color:#ef4444">IP ★</div>
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Type</div>
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">VLAN</div>
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">MAC</div>
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Vendor</div>
-      <div style="padding:5px 8px;border-right:1px solid #2d2d2d">Model</div>
-      <div style="padding:5px 8px">Room</div>
-    </div>
-    <textarea id="pasted-device-text" style="width:100%;min-height:160px;font-family:monospace;font-size:12px;line-height:1.65;border-radius:0 0 6px 6px;border-top:none;box-sizing:border-box;tab-size:12;-moz-tab-size:12;resize:vertical" placeholder="DSP-01&#9;192.168.1.20&#9;qsys&#9;AV_Control&#9;&#9;QSC&#9;Core 110f&#9;Main Hall&#10;AMP-01&#9;192.168.1.21&#9;amplifier&#9;AV_Control&#9;&#9;Crown&#9;DCI8|600N&#9;Stage&#10;SW-CORE&#9;10.0.1.1&#9;switch&#9;Mgmt&#9;AA:BB:CC:DD:EE:FF&#9;Cisco&#9;C9300-48U&#9;IDF-1"></textarea>
-
-    <!-- ── Buttons ─────────────────────────────────────────── -->
-    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-primary" onclick="previewPasteDevices()">Preview Parse</button>
-      <button class="btn" onclick="copyPasteTemplate()" title="Copy TSV header row to clipboard">📋 Copy Template</button>
-      <button class="btn" onclick="clearPaste()">Clear</button>
-    </div>
-
-    <!-- ── Parse Report (shown after Preview) ─────────────── -->
-    <div id="paste-parse-report" style="display:none;margin-top:14px">
-
-      <!-- Summary bar -->
-      <div id="paste-summary" style="margin-bottom:10px"></div>
-
-      <!-- Column mapping / mode indicator -->
-      <div id="paste-header-mapping" style="margin-bottom:10px;padding:10px 12px;background:#0d0d0d;border:1px solid #374151;border-radius:6px;font-size:12px;line-height:1.7"></div>
-
-      <!-- Parsed rows preview table -->
-      <div id="paste-preview-table" style="overflow-x:auto;margin-bottom:10px"></div>
-
-      <!-- Invalid rows -->
-      <div id="paste-invalid"></div>
-    </div>
-
-    <!-- ── Save section ────────────────────────────────────── -->
-    <div id="paste-save-section" style="display:none;margin-top:14px;padding:12px;background:#111;border:1px solid #374151;border-radius:8px">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#6b7280;margin-bottom:10px">Save parsed rows</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="commitAll()">Commit All to Device List</button>
-        <button class="btn btn-primary" onclick="savePasteToLanSheet()">Save All to LAN Sheet</button>
-        <button class="btn" onclick="commitSelected()">Commit Selected</button>
-      </div>
-      <div id="paste-save-status" style="margin-top:8px;font-size:12px;color:#9ca3af;display:none"></div>
-    </div>
-  </div>
-</div>
-
-<div class="panel" id="run-checks-panel">
-  <div class="panel-header">Run Checks / Discovery</div>
-  <div class="panel-body">
-    <div class="form-row">
-      <div class="form-group">
-        <label>Discovery VLAN</label>
-        <select id="checks-vlan">
-          <option value="">Auto (default)</option>
-          {% for v in s.vlans %}
-          <option value="{{ v.name }}">{{ v.name }} (VLAN {{ v.vlan_id }})</option>
-          {% endfor %}
-          <option value="__custom__">Custom subnet…</option>
-        </select>
-      </div>
-      <div class="form-group" id="custom-subnet-group" style="display:none">
-        <label>Custom Subnet (CIDR)</label>
-        <input id="custom-subnet-input" placeholder="e.g. 192.168.40.0/24" style="width:180px">
-      </div>
-      <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:6px">
-        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:0.875rem;font-weight:normal">
-          <input type="checkbox" id="scan-all-vlans">
-          Scan all VLANs
-        </label>
-      </div>
-      <div class="form-group">
-        <label>Scan mode</label>
-        <select id="scan-mode-select" style="width:160px">
-          <option value="standard">Standard</option>
-          <option value="av_port_probe">AV Port Probe</option>
-          <option value="arp_only">ARP Only</option>
-          <option value="deep_fingerprint">Deep Fingerprint</option>
-        </select>
-        <span id="scan-mode-hint"
-              style="font-size:0.8em;color:#94a3b8;display:block;margin-top:3px">
-        </span>
-      </div>
-      <div class="form-group">
-        <label>Host / IP</label>
-        <input id="checks-host" placeholder="e.g. 192.168.1.20 or hostname">
-      </div>
-    </div>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <button class="btn btn-primary" onclick="discoverHostsForIntake()">Discover Hosts</button>
-      <button class="btn" onclick="runPingCheck()">Ping</button>
-      <button class="btn" onclick="runPortScanCheck()">Port Scan</button>
-      <button class="btn" onclick="runTracerouteCheck()">Traceroute</button>
-      <button class="btn" onclick="fingerprintHostForIntake()">Fingerprint Host</button>
-    </div>
-
-    <div id="checks-summary" style="margin-bottom:10px;color:#9ca3af"></div>
-
-    <!-- ── W23.5 Inline discovery progress card ─────────────────────────── -->
-    <div id="discovery-inline-card"
-         style="display:none;border:1px solid #2e2e2e;border-radius:6px;
-                padding:12px 16px;margin-bottom:12px;background:#1a1a1a">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <span id="dic-label"
-              style="font-size:0.875rem;font-weight:500;color:#e2e8f0">Scanning&#8230;</span>
-        <button id="dic-stop-btn"
-                style="padding:3px 10px;font-size:0.75rem;border-radius:4px;
-                       border:1px solid #7f1d1d;color:#f87171;
-                       background:transparent;cursor:pointer">Stop</button>
-      </div>
-      <div style="background:#2e2e2e;border-radius:3px;height:4px;overflow:hidden;margin-bottom:8px">
-        <div id="dic-progress-bar"
-             style="height:100%;background:#2dd4bf;width:0%;transition:width 0.4s ease"></div>
-      </div>
-      <div id="dic-status-text" style="font-size:0.8rem;color:#94a3b8"></div>
-    </div>
-
-    <div id="discover-wrap" style="display:none;overflow-x:auto;margin-bottom:10px">
-      <table>
-        <thead>
-          <tr>
-            <th><input type="checkbox" id="discover-select-all" onchange="toggleAllDiscovered(this.checked)"></th>
-            <th>Hostname</th>
-            <th>IP</th>
-            <th>MAC / Vendor</th>
-            <th>Status</th>
-            <th>Likely Type</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody id="discover-results"></tbody>
-      </table>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button class="btn" onclick="stageSelectedDiscovered()">Stage Selected Discovered</button>
-        <button class="btn" onclick="stageAllDiscovered()">Stage All Discovered</button>
-      </div>
-    </div>
-
-    <div class="panel" style="margin-bottom:0">
-      <div class="panel-header">Check Output</div>
-      <div class="panel-body">
-        <pre id="checks-output" style="white-space:pre-wrap;font-size:11px;color:#9ca3af;margin:0;min-height:110px"></pre>
-      </div>
-    </div>
-  </div>
-</div>
-
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- 5. INTAKE RESULTS + COMMIT                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
 <div class="panel">
   <div class="panel-header">Intake Results</div>
   <div class="panel-body" style="padding:0">
@@ -265,7 +309,7 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
         </tr>
       </thead>
       <tbody id="intake-results">
-        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually, paste, or run checks/discovery above.</td></tr>
+        <tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Scan, paste, or add manually above.</td></tr>
       </tbody>
     </table>
   </div>
@@ -281,109 +325,107 @@ DSP-01&#9;192.168.1.20&#9;qsys</pre>
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- DEVICE DRAWER                                                       -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="device-drawer"
+     style="position:fixed;top:0;right:0;height:100vh;width:380px;
+            background:#1a1a1a;border-left:1px solid #2e2e2e;
+            box-shadow:-4px 0 24px rgba(0,0,0,0.4);z-index:200;
+            transform:translateX(100%);transition:transform 0.2s ease;
+            overflow-y:auto;display:flex;flex-direction:column">
+  <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:16px;border-bottom:1px solid #2e2e2e;flex-shrink:0">
+    <span id="drawer-title" style="font-weight:600;font-size:0.9375rem;color:#e2e8f0">Device</span>
+    <button id="drawer-close"
+            style="background:none;border:none;cursor:pointer;color:#9ca3af;
+                   font-size:1.25rem;padding:4px 8px;line-height:1">×</button>
+  </div>
+  <div id="drawer-body" style="padding:16px;flex:1;font-size:0.875rem"></div>
+  <div id="drawer-footer"
+       style="padding:16px;border-top:1px solid #2e2e2e;
+              display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0"></div>
+</div>
+<div id="drawer-backdrop"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:199"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CONFIG SCRIPT MODAL                                                 -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="config-script-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:16px;">
+  <div id="config-script-content" style="background:#111827;border:1px solid #374151;border-radius:8px;width:100%;max-width:760px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1f2937;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <span style="font-size:10px;background:#1e2433;color:#93c5fd;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;border:1px solid #1e3a5f;white-space:nowrap">CFG</span>
+        <span id="config-script-title" style="font-size:13px;color:#e2e8f0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <span id="config-script-ai-badge" style="display:none;font-size:10px;background:#451a03;color:#fbbf24;padding:1px 7px;border-radius:3px;font-weight:700;letter-spacing:.04em;border:1px solid #92400e;white-space:nowrap">AI-GENERATED</span>
+      </div>
+      <button onclick="closeConfigScriptModal()" style="font-size:16px;background:none;border:none;color:#9ca3af;cursor:pointer;padding:2px 6px;line-height:1;flex-shrink:0;">&times;</button>
+    </div>
+    <div id="config-script-missing-warn" style="display:none;margin:8px 14px 0;padding:7px 10px;background:#451a03;border:1px solid #92400e;border-radius:5px;font-size:11px;color:#fbbf24;flex-shrink:0;"></div>
+    <pre id="config-script-body" style="flex:1;overflow:auto;margin:0;padding:14px;font-family:'Courier New',Courier,monospace;font-size:12px;color:#e2e8f0;background:#0d1117;white-space:pre;tab-size:4;"></pre>
+    <div style="display:flex;gap:8px;padding:10px 14px;border-top:1px solid #1f2937;flex-shrink:0;">
+      <button id="config-script-copy-btn" onclick="copyConfigScript()" style="font-size:12px;padding:5px 14px;background:#1e2433;color:#93c5fd;border:1px solid #1e3a5f;border-radius:4px;cursor:pointer;">Copy</button>
+      <button onclick="downloadConfigScript()" style="font-size:12px;padding:5px 14px;background:#1e2433;color:#93c5fd;border:1px solid #1e3a5f;border-radius:4px;cursor:pointer;">Download .txt</button>
+      <button onclick="closeConfigScriptModal()" style="font-size:12px;padding:5px 14px;background:#1e1e1e;color:#9ca3af;border:1px solid #374151;border-radius:4px;cursor:pointer;margin-left:auto;">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ─── State ────────────────────────────────────────────────────────────────────
 let intakeRows = [];
 let discoveredRows = [];
 let deviceTypeLibrary = [];
 var _discoveryController = null;
 var _activeDiscoveryJobId = null;
 
-/* ── W23.5 Inline discovery progress card ──────────────────────────────── */
-function showDiscoveryCard() {
-  var card = document.getElementById('discovery-inline-card');
-  if (card) card.style.display = '';
-  var bar = document.getElementById('dic-progress-bar');
-  if (bar) { bar.style.width = '0%'; bar.style.transition = 'none'; }
-  setTimeout(function() {
-    if (bar) { bar.style.transition = 'width 0.4s ease'; bar.style.width = '25%'; }
-  }, 50);
-  var stopBtn = document.getElementById('dic-stop-btn');
-  if (stopBtn) stopBtn.onclick = function() { _abortDiscovery(); };
-  window._onGlobalJobUpdate = function(data) { updateDiscoveryCard(data); };
-}
+let deviceList = [];
+let _devicesMap = {};
+const VALIDATION_STATE_KEY = 'netpi.devices.validationState.v1';
+let validationResults = loadValidationState();
 
-function hideDiscoveryCard() {
-  var card = document.getElementById('discovery-inline-card');
-  if (card) card.style.display = 'none';
-  window._onGlobalJobUpdate = null;
-}
-
-function _abortDiscovery() {
-  if (_discoveryController) { _discoveryController.abort(); _discoveryController = null; }
-  if (_activeDiscoveryJobId) {
-    fetch('/tools/api/discover_hosts/cancel/' + _activeDiscoveryJobId, { method: 'POST' }).catch(function(){});
-    _activeDiscoveryJobId = null;
-  }
-  hideDiscoveryCard();
-  window.netpiStatus && window.netpiStatus.stopTimer();
-  var summary = document.getElementById('checks-summary');
-  if (summary) summary.textContent = 'Discovery cancelled.';
-}
-
-function updateDiscoveryCard(data) {
-  if (!data) return;
-  var label  = document.getElementById('dic-label');
-  var bar    = document.getElementById('dic-progress-bar');
-  var txt    = document.getElementById('dic-status-text');
-  var status = data.status || '';
-  var found  = data.devices_found_count || 0;
-  var msg    = data.progress_message || data.message || '';
-  if (label) {
-    if (status === 'running' || status === 'queued') { label.textContent = '⌛ Scanning…'; }
-    else if (status === 'completed') { label.textContent = '✓ Scan complete'; }
-    else if (status === 'failed')    { label.textContent = '✗ Scan failed'; }
-    else if (status === 'cancelled') { label.textContent = '— Cancelled'; }
-  }
-  if (bar) {
-    if (status === 'completed' || status === 'failed') { bar.style.width = '100%'; }
-    else if (found > 0) { bar.style.width = Math.min(90, found * 5) + '%'; }
-  }
-  if (txt) txt.textContent = msg || (found > 0 ? found + ' hosts found' : '');
-  if (status === 'completed' || status === 'cancelled') {
-    setTimeout(function() {
-      hideDiscoveryCard();
-      window.netpiStatus && window.netpiStatus.stopTimer();
-    }, 3000);
-  }
-}
-
-async function loadDeviceTypeLibrary(){
-  try {
-    const res = await fetch('/tools/api/device_types');
-    const data = await res.json();
-    if(!res.ok || !data.ok) return;
-    deviceTypeLibrary = Array.isArray(data.device_types) ? data.device_types : [];
-    const dl = document.getElementById('device-type-list');
-    if(!dl) return;
-    dl.innerHTML = deviceTypeLibrary.map(dt => {
-      const mfr = (dt.manufacturer_examples || []).join(', ');
-      const label = dt.category + ' — ' + dt.display_name + (mfr ? ' (' + mfr + ')' : '');
-      return '<option value="' + escapeHtml(dt.id) + '">' + escapeHtml(label) + '</option>';
-    }).join('');
-  } catch(e) {}
-}
-
-function onDeviceTypeInput(value){
-  const badge = document.getElementById('manual-type-custom-badge');
-  const matched = deviceTypeLibrary.find(dt => dt.id === value.trim());
-  if(matched){
-    if(badge) badge.style.display = 'none';
-    const vendorEl = document.getElementById('manual-vendor');
-    if(vendorEl && !vendorEl.value && matched.manufacturer_examples && matched.manufacturer_examples.length){
-      vendorEl.value = matched.manufacturer_examples[0];
-    }
-  } else {
-    if(badge) badge.style.display = value.trim() ? 'inline' : 'none';
-  }
-}
-
+// ─── Shared helpers ───────────────────────────────────────────────────────────
 function escapeHtml(str){
   return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ── W23.3 empty-state helpers ─────────────────────────────────────────────────
+function renderEmptyState(containerId, config) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
+  var panel = document.createElement('div');
+  panel.className = 'empty-state-panel';
+  panel.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center;gap:12px';
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:0.9375rem;font-weight:600;color:#e2e8f0';
+  title.textContent = config.title;
+  var body = document.createElement('div');
+  body.style.cssText = 'font-size:0.875rem;color:#94a3b8;max-width:360px;line-height:1.5';
+  body.textContent = config.body;
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px';
+  (config.actions || []).forEach(function(action) {
+    var btn = document.createElement('a');
+    btn.href = action.href || '#';
+    if (action.onclick) { btn.setAttribute('onclick', action.onclick + ';return false;'); }
+    btn.textContent = action.label;
+    btn.style.cssText = 'padding:6px 14px;border-radius:4px;font-size:0.8rem;text-decoration:none;cursor:pointer;' + (action.primary ? 'background:#2dd4bf;color:#000;font-weight:600' : 'border:1px solid #2d3748;color:#94a3b8');
+    actions.appendChild(btn);
+  });
+  panel.appendChild(title); panel.appendChild(body); panel.appendChild(actions);
+  container.appendChild(panel);
+}
+function clearEmptyState(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  var existing = container.querySelector('.empty-state-panel');
+  if (existing) existing.remove();
 }
 
 function showIntakeStatus(message, tone){
@@ -392,20 +434,12 @@ function showIntakeStatus(message, tone){
   box.style.display = message ? 'block' : 'none';
   box.textContent = message || '';
   if(tone === 'error'){
-    box.style.background = '#1a1a1a';
-    box.style.color = '#e5e7eb';
-    box.style.borderColor = '#7f1d1d';
-    return;
+    box.style.background = '#1a1a1a'; box.style.color = '#e5e7eb'; box.style.borderColor = '#7f1d1d';
+  } else if(tone === 'success'){
+    box.style.background = '#1a1a1a'; box.style.color = '#d1d5db'; box.style.borderColor = '#2a2a2a';
+  } else {
+    box.style.background = '#141414'; box.style.color = '#d1d5db'; box.style.borderColor = '#374151';
   }
-  if(tone === 'success'){
-    box.style.background = '#1a1a1a';
-    box.style.color = '#d1d5db';
-    box.style.borderColor = '#2a2a2a';
-    return;
-  }
-  box.style.background = '#141414';
-  box.style.color = '#d1d5db';
-  box.style.borderColor = '#374151';
 }
 
 function appendCheckOutput(text){
@@ -426,30 +460,640 @@ function statusBadge(s){
   return map[s] || escapeHtml(s || 'unknown');
 }
 
-function dedupeAndUpsertIntakeRow(nextRow){
-  const ip = String((nextRow && nextRow.ip) || '').trim();
-  if(!ip) return;
-  const idx = intakeRows.findIndex(row => String((row && row.ip) || '').trim() === ip);
-  if(idx >= 0){
-    const merged = {
-      ...intakeRows[idx],
-      ...nextRow,
-      selected: intakeRows[idx].committed ? false : (nextRow.selected !== undefined ? !!nextRow.selected : intakeRows[idx].selected),
-      committed: !!intakeRows[idx].committed
-    };
-    intakeRows[idx] = merged;
-  } else {
-    intakeRows.push({
-      selected: true,
-      committed: false,
-      status: 'Ready',
-      source: 'checks',
-      conflict_reason: '',
-      ...nextRow
+function normalizeTypeValue(value){
+  const text = String(value || '').trim();
+  if(!text) return '';
+  const lower = text.toLowerCase();
+  if(lower === 'unknown' || lower === 'none' || lower === 'n/a' || lower === 'null') return '';
+  return text;
+}
+
+function normalizeMacValue(value){
+  const cleaned = String(value || '').replace(/[^0-9A-Fa-f]/g, '');
+  if(cleaned.length !== 12) return '';
+  const pairs = [];
+  for(let i = 0; i < 12; i += 2) pairs.push(cleaned.slice(i, i + 2).toUpperCase());
+  return pairs.join(':');
+}
+
+function normalizeMacSourceValue(source, hasMac){
+  const token = String(source || '').trim().toLowerCase();
+  const map = {
+    'arp': 'arp-cache', 'arp-cache': 'arp-cache',
+    'snmp': 'snmp-oid', 'snmp-oid': 'snmp-oid', 'ifphysaddress': 'snmp-oid',
+    'lldp': 'lldp', 'cdp': 'lldp', 'lldp/cdp': 'lldp',
+    'manual': 'user-entered', 'user entered': 'user-entered', 'user-entered': 'user-entered',
+    'existing': 'unknown', 'unknown': 'unknown'
+  };
+  return map[token] || 'unknown';
+}
+
+// ─── Validation state ─────────────────────────────────────────────────────────
+function loadValidationState(){
+  try {
+    const raw = localStorage.getItem(VALIDATION_STATE_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch(e){ return {}; }
+}
+
+function saveValidationState(){
+  try { localStorage.setItem(VALIDATION_STATE_KEY, JSON.stringify(validationResults || {})); } catch(e){}
+}
+
+function rememberValidationResult(ip, result){
+  const targetIp = String(ip || '').trim();
+  if(!targetIp || !result || typeof result !== 'object') return;
+  const snapshot = Object.assign({}, result);
+  if(!snapshot.last_validated && !snapshot.last_validated_at && !snapshot.validated_at
+     && !snapshot.validation_time && !snapshot.timestamp && !snapshot.checked_at
+     && !snapshot.run_at && !snapshot._netpi_validated_at){
+    snapshot._netpi_validated_at = new Date().toISOString();
+  }
+  validationResults[targetIp] = snapshot;
+  saveValidationState();
+}
+
+// ─── Freshness helpers ────────────────────────────────────────────────────────
+function normalizeFreshnessLabel(value){
+  const label = String(value || '').trim().toLowerCase();
+  return ['fresh','aging','stale','unknown'].includes(label) ? label : '';
+}
+
+function getFreshnessInfo(device){
+  const firstSeen = String((device && device.first_seen) || '').trim();
+  const lastSeen = String((device && device.last_seen) || '').trim();
+  const lastReachable = String((device && device.last_reachable) || '').trim();
+  const evidence = lastReachable || lastSeen || firstSeen;
+  const evidenceSource = lastReachable ? 'last_reachable' : (lastSeen ? 'last_seen' : (firstSeen ? 'first_seen' : ''));
+
+  let label = normalizeFreshnessLabel(device && device.freshness_label);
+  if(!label){
+    if(!evidence){ label = 'unknown'; }
+    else {
+      const parsed = new Date(evidence);
+      if(Number.isNaN(parsed.getTime())){ label = 'unknown'; }
+      else {
+        const ageMs = Math.max(0, Date.now() - parsed.getTime());
+        if(evidenceSource === 'first_seen'){
+          label = ageMs <= 30 * 86400000 ? 'aging' : 'stale';
+        } else if(ageMs <= 7 * 86400000){ label = 'fresh';
+        } else if(ageMs <= 30 * 86400000){ label = 'aging';
+        } else { label = 'stale'; }
+      }
+    }
+  }
+
+  const tones = {
+    fresh:   { bg: '#1a1a1a', color: '#86efac' },
+    aging:   { bg: '#1a1a1a', color: '#fcd34d' },
+    stale:   { bg: '#1a1a1a', color: '#9ca3af' },
+    unknown: { bg: '#1a1a1a', color: '#6b7280' }
+  };
+  return { label, tone: tones[label] || tones.unknown };
+}
+
+// ─── Validation summary helpers ───────────────────────────────────────────────
+function normalizeValidationStatus(value){
+  const text = String(value || '').trim().toLowerCase();
+  if(!text) return '';
+  if(text.includes('fail') || text.includes('error') || text.includes('not ready')) return 'fail';
+  if(text.includes('warn') || text.includes('warning')) return 'warn';
+  if(text === 'ok' || text.includes('pass') || text.includes('ready') || text.includes('success')) return 'pass';
+  return '';
+}
+
+function toNumericCount(value){
+  const n = Number(value);
+  return (Number.isFinite(n) && n >= 0) ? Math.floor(n) : null;
+}
+
+function readCountField(source, keys){
+  if(!source || typeof source !== 'object') return null;
+  for(let i = 0; i < keys.length; i++){
+    const count = toNumericCount(source[keys[i]]);
+    if(count !== null) return count;
+  }
+  return null;
+}
+
+function extractValidationCounts(result){
+  const sources = [];
+  if(result && typeof result === 'object'){
+    sources.push(result);
+    if(result.counts && typeof result.counts === 'object') sources.push(result.counts);
+    if(result.summary && typeof result.summary === 'object') sources.push(result.summary);
+    if(result.validation_summary && typeof result.validation_summary === 'object') sources.push(result.validation_summary);
+  }
+  let passCount = null, warnCount = null, failCount = null;
+  for(let i = 0; i < sources.length; i++){
+    if(passCount === null) passCount = readCountField(sources[i], ['pass','passed','ok','success']);
+    if(warnCount === null) warnCount = readCountField(sources[i], ['warn','warned','warning','warnings']);
+    if(failCount === null) failCount = readCountField(sources[i], ['fail','failed','error','errors']);
+  }
+  if(passCount !== null || warnCount !== null || failCount !== null){
+    return { pass: Math.max(0, passCount||0), warn: Math.max(0, warnCount||0), fail: Math.max(0, failCount||0), hasCounts: true };
+  }
+  const results = Array.isArray(result && result.results) ? result.results : [];
+  if(!results.length) return { pass: 0, warn: 0, fail: 0, hasCounts: false };
+  let pass = 0, warn = 0, fail = 0;
+  results.forEach(item => {
+    const s = normalizeValidationStatus(item && item.status);
+    if(s === 'fail') fail++; else if(s === 'warn') warn++; else if(s === 'pass') pass++;
+  });
+  return { pass, warn, fail, hasCounts: true };
+}
+
+function extractValidationTimestamp(result){
+  if(!result || typeof result !== 'object') return '';
+  const candidates = [result.last_validated, result.last_validated_at, result.validated_at,
+    result.validation_time, result.timestamp, result.checked_at, result.run_at, result._netpi_validated_at];
+  for(let i = 0; i < candidates.length; i++){
+    const raw = String(candidates[i] || '').trim();
+    if(!raw) continue;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? raw : parsed.toLocaleString();
+  }
+  return '';
+}
+
+function getValidationSummary(result){
+  if(!result || typeof result !== 'object'){
+    return { status: 'unknown', label: 'UNKNOWN', pass: 0, warn: 0, fail: 0, hasCounts: false, lastValidated: '' };
+  }
+  const statusCandidates = [
+    result.overall, result.overall_status, result.status, result.overall_class,
+    result.summary && result.summary.overall, result.summary && result.summary.status,
+    result.validation_summary && result.validation_summary.overall
+  ];
+  let status = '';
+  for(let i = 0; i < statusCandidates.length; i++){
+    status = normalizeValidationStatus(statusCandidates[i]);
+    if(status) break;
+  }
+  const counts = extractValidationCounts(result);
+  if(!status){
+    if(counts.fail > 0) status = 'fail';
+    else if(counts.warn > 0) status = 'warn';
+    else if(counts.pass > 0) status = 'pass';
+    else status = 'unknown';
+  }
+  return { status, label: status.toUpperCase(), pass: counts.pass, warn: counts.warn,
+           fail: counts.fail, hasCounts: counts.hasCounts, lastValidated: extractValidationTimestamp(result) };
+}
+
+// ─── Per-device validation ────────────────────────────────────────────────────
+async function validateDevice(ip){
+  try {
+    const res = await fetch('/tools/api/validate_device', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ip })
     });
+    const data = await res.json();
+    if(data.ok){
+      rememberValidationResult(ip, data.result);
+      renderInventory();
+      alert('Validation complete for ' + ip + ': ' + (data.result.overall || 'done'));
+    } else {
+      alert(data.error || 'Validation failed');
+    }
+  } catch(e){ alert('validateDevice error: ' + e); }
+}
+
+async function validateAllDevices(){
+  const btn = document.getElementById('validate-all-btn');
+  try {
+    if(btn){ btn.disabled = true; btn.textContent = 'Validating…'; }
+    const res = await fetch('/tools/api/validate_all', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
+    });
+    const data = await res.json();
+    if(data.ok){
+      data.results.forEach(r => rememberValidationResult(r.ip, r));
+      renderInventory();
+      showIntakeStatus('Validated ' + (data.count || 0) + ' devices.', 'success');
+    } else {
+      showIntakeStatus(data.error || 'Validation failed', 'error');
+    }
+  } catch(e){ showIntakeStatus('Validate All failed: ' + e, 'error'); }
+  finally { if(btn){ btn.disabled = false; btn.textContent = 'Validate All'; } }
+}
+
+// ─── Inventory load + render ──────────────────────────────────────────────────
+async function loadInventory(){
+  try {
+    const res = await fetch('/tools/api/devices');
+    const data = await res.json();
+    deviceList = Array.isArray(data.devices) ? data.devices : [];
+    _devicesMap = {};
+    deviceList.forEach(d => { if(d.ip) _devicesMap[String(d.ip).trim()] = d; });
+    renderInventory();
+  } catch(e){
+    const tbody = document.getElementById('inv-tbody');
+    if(tbody) tbody.innerHTML = '<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:1rem">Failed to load inventory</td></tr>';
   }
 }
 
+function renderInventory(){
+  const tbody = document.getElementById('inv-tbody');
+  const invTable = document.getElementById('inv-table');
+  if(!tbody) return;
+
+  const filterVlan = (document.getElementById('inv-filter-vlan') || {}).value || '';
+  const filterFreshness = (document.getElementById('inv-filter-freshness') || {}).value || 'all';
+
+  let filtered = deviceList.slice();
+  if(filterVlan) filtered = filtered.filter(d => (d.vlan || '') === filterVlan);
+  if(filterFreshness === 'active') filtered = filtered.filter(d => getFreshnessInfo(d).label !== 'stale');
+  else if(filterFreshness === 'stale') filtered = filtered.filter(d => getFreshnessInfo(d).label === 'stale');
+
+  if(!filtered.length){
+    if(invTable) invTable.style.display = 'none';
+    if(deviceList.length === 0){
+      renderEmptyState('inv-empty-wrap', {
+        title: 'No devices in inventory yet',
+        body: 'Run network discovery to find live hosts on the network, or paste in a device list to get started quickly.',
+        actions: [
+          { label: 'Run Discovery', onclick: "document.getElementById('run-checks-panel').scrollIntoView({behavior:'smooth'})", primary: true },
+          { label: 'Paste Device List', onclick: "document.getElementById('paste-list-panel').scrollIntoView({behavior:'smooth'})" }
+        ]
+      });
+    } else {
+      clearEmptyState('inv-empty-wrap');
+      const tbody2 = document.getElementById('inv-tbody');
+      if(tbody2) tbody2.innerHTML = '<tr><td colspan="7" style="color:#4b5563;text-align:center;padding:1rem">No devices match the current filters.</td></tr>';
+      if(invTable) invTable.style.display = '';
+    }
+    return;
+  }
+
+  clearEmptyState('inv-empty-wrap');
+  if(invTable) invTable.style.display = '';
+
+  const groups = {};
+  filtered.forEach(d => {
+    const key = d.vlan || 'Unassigned';
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(d);
+  });
+
+  const vDotColor = { pass: '#4a7a5a', warn: '#b89050', fail: '#b87a7a', unknown: '#4b5563' };
+
+  let html = '';
+  Object.keys(groups).sort().forEach(groupName => {
+    html += '<tr><td colspan="7" style="background:#141414;color:#e5e7eb;font-weight:600;padding:6px 12px">'
+          + escapeHtml(groupName) + '</td></tr>';
+
+    groups[groupName].forEach(d => {
+      const ip = String(d.ip || '').trim();
+      const safeIp = ip.replace(/'/g, "\\'");
+      const r = validationResults[ip];
+      const vs = getValidationSummary(r);
+      const freshness = getFreshnessInfo(d);
+      const displayName = escapeHtml(d.name || d.hostname || ip || '(unnamed)');
+      const displayType = escapeHtml(normalizeTypeValue(d.type) || '—');
+
+      const freshBadge = '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;'
+        + 'font-weight:600;background:' + freshness.tone.bg + ';color:' + freshness.tone.color + '">'
+        + escapeHtml(freshness.label) + '</span>';
+
+      const dotColor = vDotColor[vs.status] || vDotColor.unknown;
+      const vCell = '<div style="display:flex;align-items:center;gap:6px">'
+        + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + dotColor + ';flex-shrink:0"></span>'
+        + '<span style="font-size:11px;color:#9ca3af">' + escapeHtml(vs.label) + '</span>'
+        + '<button class="btn" style="font-size:10px;padding:2px 7px" onclick="event.stopPropagation();validateDevice(\'' + safeIp + '\')">Validate</button>'
+        + '</div>';
+
+      html += '<tr style="cursor:pointer' + (freshness.label === 'stale' ? ';opacity:0.7' : '') + '" '
+        + 'onclick="openDeviceDrawer(_devicesMap[\'' + safeIp + '\'] || {ip:\'' + safeIp + '\'})">'
+        + '<td style="font-weight:500;color:#e5e7eb">' + displayName + '</td>'
+        + '<td style="font-family:monospace;font-size:12px;color:#9ca3af">'
+        + '<a href="http://' + escapeHtml(ip) + '" target="_blank" rel="noopener" '
+        + 'style="color:#9ca3af;text-decoration:underline dotted;text-underline-offset:3px" '
+        + 'onclick="event.stopPropagation()">' + escapeHtml(ip) + '</a></td>'
+        + '<td style="font-size:12px">' + displayType + '</td>'
+        + '<td style="font-size:12px">' + escapeHtml(d.vlan || '—') + '</td>'
+        + '<td>' + freshBadge + '</td>'
+        + '<td>' + vCell + '</td>'
+        + '<td style="color:#6b7280;text-align:center">›</td>'
+        + '</tr>';
+    });
+  });
+
+  tbody.innerHTML = html;
+}
+
+// ─── Device drawer ────────────────────────────────────────────────────────────
+function openDeviceDrawer(device){
+  if(!device) return;
+  document.getElementById('drawer-title').textContent =
+    device.name || device.hostname || device.ip || 'Device';
+  document.getElementById('drawer-body').innerHTML = buildDrawerBody(device);
+  document.getElementById('drawer-footer').innerHTML = buildDrawerFooter(device);
+  document.getElementById('device-drawer').style.transform = 'translateX(0)';
+  document.getElementById('drawer-backdrop').style.display = 'block';
+}
+
+function closeDeviceDrawer(){
+  document.getElementById('device-drawer').style.transform = 'translateX(100%)';
+  document.getElementById('drawer-backdrop').style.display = 'none';
+}
+
+document.getElementById('drawer-close')?.addEventListener('click', closeDeviceDrawer);
+document.getElementById('drawer-backdrop')?.addEventListener('click', closeDeviceDrawer);
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeDeviceDrawer(); });
+
+function buildDrawerBody(device){
+  var r = validationResults[String(device.ip || '').trim()] || {};
+
+  function row(label, value){
+    if(value === null || value === undefined || value === '') return '';
+    return '<div style="display:flex;gap:8px;margin-bottom:6px">'
+      + '<span style="color:#9ca3af;min-width:90px;flex-shrink:0">' + escapeHtml(label) + '</span>'
+      + '<span style="color:#e2e8f0;word-break:break-all">' + escapeHtml(String(value)) + '</span>'
+      + '</div>';
+  }
+
+  var macRaw = String(((r.mac || r.mac_address) || (device.mac || device.mac_address)) || '').trim();
+  var macDisplay = normalizeMacValue(macRaw) || macRaw;
+  var macSrc = normalizeMacSourceValue(r.mac_source || device.mac_source, !!macDisplay);
+
+  var sections = [];
+
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Identity</div>'
+    + row('IP', device.ip)
+    + row('Hostname', device.hostname)
+    + row('VLAN', device.vlan)
+    + '<div style="display:flex;gap:8px;margin-bottom:6px">'
+    + '<span style="color:#9ca3af;min-width:90px;flex-shrink:0">MAC</span>'
+    + '<span style="color:#e2e8f0;font-family:monospace;word-break:break-all">'
+    + escapeHtml(macDisplay || '—')
+    + (macSrc ? '<span style="margin-left:6px;font-size:10px;color:#6b7280">(' + escapeHtml(macSrc) + ')</span>' : '')
+    + '</span></div>'
+    + row('Vendor', device.vendor)
+    + row('Model', device.model)
+    + row('Firmware', device.firmware_version)
+    + row('Serial', device.serial)
+    + row('Room / Zone', device.room || device.zone)
+    + '</div>');
+
+  var effectiveType = normalizeTypeValue((r.effective_type) || (device._resolved_type) || (device.effective_type) || device.type);
+  var suggestedType = normalizeTypeValue((r.suggested_type) || (device.suggested_type));
+  var confScore = (r.confidence_score !== undefined && r.confidence_score !== null) ? r.confidence_score : device.confidence_score;
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Classification</div>'
+    + row('Type', effectiveType || device.type)
+    + (suggestedType && suggestedType !== effectiveType ? row('Suggested', suggestedType) : '')
+    + (confScore !== null && confScore !== undefined ? row('Confidence', confScore + ' / 100') : '')
+    + '</div>');
+
+  var openPorts = (Array.isArray(r.open_ports) && r.open_ports.length) ? r.open_ports.join(', ')
+    : ((Array.isArray(device.open_ports) && device.open_ports.length) ? device.open_ports.join(', ') : null);
+  var deviceStatus = r.overall ? String(r.overall) : (device.status || (device.reachable ? 'online' : null));
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Network Evidence</div>'
+    + row('Status', deviceStatus)
+    + row('Open ports', openPorts)
+    + row('Last seen', device.last_seen || device.last_reachable)
+    + '</div>');
+
+  var notesVal = device.notes || '';
+  sections.push('<div class="drawer-section">'
+    + '<div class="drawer-section-title">Notes</div>'
+    + '<textarea id="notes-' + escapeHtml(device.ip || '') + '" rows="3"'
+    + ' style="width:100%;background:#222222;border:1px solid #374151;border-radius:5px;'
+    + 'padding:6px 8px;color:#e2e8f0;font-size:12px;resize:vertical;box-sizing:border-box"'
+    + ' placeholder="Add notes for handover / client context...">'
+    + escapeHtml(notesVal)
+    + '</textarea>'
+    + '<button onclick="saveDeviceNotes(' + JSON.stringify(device.ip || '') + ')"'
+    + ' style="margin-top:4px;font-size:11px;padding:3px 10px;background:#1e1e1e;'
+    + 'color:#d1d5db;border:1px solid #4b5563;border-radius:4px;cursor:pointer;">Save notes</button>'
+    + '<span id="notes-status-' + escapeHtml(device.ip || '') + '"'
+    + ' style="margin-left:8px;font-size:11px;color:#9ca3af"></span>'
+    + '</div>');
+
+  return sections.join('');
+}
+
+function buildDrawerFooter(device){
+  var safeIp = JSON.stringify(device.ip || '');
+  var btns = [];
+  btns.push('<button onclick="revalidateFromDrawer(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #374151;'
+    + 'background:transparent;color:#e2e8f0;cursor:pointer;font-size:0.8rem">↺ Re-validate</button>');
+  btns.push('<button onclick="refingerprintDevice(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #374151;'
+    + 'background:transparent;color:#e2e8f0;cursor:pointer;font-size:0.8rem">⟳ Fingerprint</button>');
+  btns.push('<button onclick="openConfigScriptModal(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #374151;'
+    + 'background:transparent;color:#e2e8f0;cursor:pointer;font-size:0.8rem">Config Script</button>');
+  btns.push('<button onclick="removeDeviceFromDrawer(' + safeIp + ')"'
+    + ' style="padding:6px 12px;border-radius:4px;border:1px solid #7f1d1d;'
+    + 'background:transparent;color:#f87171;cursor:pointer;font-size:0.8rem;margin-left:auto">Remove</button>');
+  return btns.join('');
+}
+
+function revalidateFromDrawer(ip){
+  closeDeviceDrawer();
+  validateDevice(ip);
+}
+
+function saveDeviceNotes(ip){
+  const ta = document.getElementById('notes-' + ip);
+  const statusEl = document.getElementById('notes-status-' + ip);
+  if(!ta) return;
+  if(statusEl) statusEl.textContent = 'Saving…';
+  fetch('/tools/api/devices/' + encodeURIComponent(ip) + '/notes', {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ notes: ta.value })
+  }).then(r => r.json()).then(data => {
+    if(statusEl) statusEl.textContent = data.ok ? 'Saved.' : ('Error: ' + (data.error || '?'));
+    if(data.ok){
+      const d = _devicesMap[String(ip).trim()];
+      if(d) d.notes = ta.value;
+      setTimeout(() => { if(statusEl) statusEl.textContent = ''; }, 2000);
+    }
+  }).catch(() => { if(statusEl) statusEl.textContent = 'Failed.'; });
+}
+
+async function refingerprintDevice(ip){
+  const d = _devicesMap[String(ip).trim()] || {};
+  closeDeviceDrawer();
+  try {
+    window.netpiStatus && window.netpiStatus.post('Fingerprinting ' + ip + '…', 'running', 'INTAKE');
+    const res = await fetch('/tools/api/fingerprint_host', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ip, vendor: d.vendor || '' })
+    });
+    const data = await res.json();
+    if(data.ok || data.guessed_type){
+      window.netpiStatus && window.netpiStatus.post('Fingerprint complete: ' + ip, 'success');
+      await loadInventory();
+    } else {
+      window.netpiStatus && window.netpiStatus.post('Fingerprint failed: ' + (data.error || '?'), 'error');
+    }
+  } catch(e){
+    window.netpiStatus && window.netpiStatus.post('Fingerprint error: ' + e, 'error');
+  }
+}
+
+function removeDeviceFromDrawer(ip){
+  if(!confirm('Remove ' + ip + ' from the device list?')) return;
+  closeDeviceDrawer();
+  fetch('/tools/api/devices/remove', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ip })
+  }).then(r => r.json()).then(d => {
+    if(d.ok){ loadInventory(); }
+    else { showIntakeStatus('Remove failed: ' + (d.error || '?'), 'error'); }
+  }).catch(e => showIntakeStatus('Remove failed: ' + e, 'error'));
+}
+
+// ─── Config script modal ──────────────────────────────────────────────────────
+function openConfigScriptModal(ip){
+  const modal = document.getElementById('config-script-modal');
+  const body = document.getElementById('config-script-body');
+  const title = document.getElementById('config-script-title');
+  const warn = document.getElementById('config-script-missing-warn');
+  const aiBadge = document.getElementById('config-script-ai-badge');
+  if(!modal || !body) return;
+  body.textContent = 'Loading…';
+  title.textContent = '';
+  warn.style.display = 'none';
+  aiBadge.style.display = 'none';
+  modal.style.display = 'flex';
+  modal.dataset.ip = ip;
+  fetch('/tools/api/config-script?ip=' + encodeURIComponent(ip))
+    .then(r => r.json())
+    .then(data => {
+      if(!data.ok){ body.textContent = 'Error: ' + (data.error || 'unknown'); return; }
+      title.textContent = data.display_name || data.template_name || '';
+      body.textContent = data.script || '';
+      modal.dataset.script = data.script || '';
+      modal.dataset.hostname = ip;
+      if(data.ai_generated){ aiBadge.style.display = 'inline-block'; document.getElementById('config-script-content').style.borderColor = '#d97706'; }
+      else { document.getElementById('config-script-content').style.borderColor = '#374151'; }
+      const missing = Array.isArray(data.missing_fields) ? data.missing_fields : [];
+      if(missing.length){ warn.style.display = 'block'; warn.textContent = 'Missing fields: ' + missing.join(', '); }
+    })
+    .catch(err => { body.textContent = 'Request failed: ' + err; });
+}
+
+function closeConfigScriptModal(){
+  const modal = document.getElementById('config-script-modal');
+  if(modal) modal.style.display = 'none';
+}
+
+function copyConfigScript(){
+  const body = document.getElementById('config-script-body');
+  if(!body) return;
+  const btn = document.getElementById('config-script-copy-btn');
+  navigator.clipboard.writeText(body.textContent || '').then(() => {
+    if(btn){ btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 1800); }
+  }).catch(() => { if(btn) btn.textContent = 'Failed'; });
+}
+
+function downloadConfigScript(){
+  const modal = document.getElementById('config-script-modal');
+  if(!modal) return;
+  const script = modal.dataset.script || '';
+  const ip = (modal.dataset.hostname || 'device').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const blob = new Blob([script], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = ip + '_config.txt'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Device type library ──────────────────────────────────────────────────────
+async function loadDeviceTypeLibrary(){
+  try {
+    const res = await fetch('/tools/api/device_types');
+    const data = await res.json();
+    if(!res.ok || !data.ok) return;
+    deviceTypeLibrary = Array.isArray(data.device_types) ? data.device_types : [];
+    const dl = document.getElementById('device-type-list');
+    if(!dl) return;
+    dl.innerHTML = deviceTypeLibrary.map(dt => {
+      const mfr = (dt.manufacturer_examples || []).join(', ');
+      const label = dt.category + ' — ' + dt.display_name + (mfr ? ' (' + mfr + ')' : '');
+      return '<option value="' + escapeHtml(dt.id) + '">' + escapeHtml(label) + '</option>';
+    }).join('');
+  } catch(e){}
+}
+
+function onDeviceTypeInput(value){
+  const badge = document.getElementById('manual-type-custom-badge');
+  const matched = deviceTypeLibrary.find(dt => dt.id === value.trim());
+  if(matched){
+    if(badge) badge.style.display = 'none';
+    const vendorEl = document.getElementById('manual-vendor');
+    if(vendorEl && !vendorEl.value && matched.manufacturer_examples && matched.manufacturer_examples.length){
+      vendorEl.value = matched.manufacturer_examples[0];
+    }
+  } else {
+    if(badge) badge.style.display = value.trim() ? 'inline' : 'none';
+  }
+}
+
+// ─── Discovery card ───────────────────────────────────────────────────────────
+function showDiscoveryCard(){
+  var card = document.getElementById('discovery-inline-card');
+  if(card) card.style.display = '';
+  var bar = document.getElementById('dic-progress-bar');
+  if(bar){ bar.style.width = '0%'; bar.style.transition = 'none'; }
+  setTimeout(function(){ if(bar){ bar.style.transition = 'width 0.4s ease'; bar.style.width = '25%'; } }, 50);
+  var stopBtn = document.getElementById('dic-stop-btn');
+  if(stopBtn) stopBtn.onclick = function(){ _abortDiscovery(); };
+  window._onGlobalJobUpdate = function(data){ updateDiscoveryCard(data); };
+}
+
+function hideDiscoveryCard(){
+  var card = document.getElementById('discovery-inline-card');
+  if(card) card.style.display = 'none';
+  window._onGlobalJobUpdate = null;
+}
+
+function _abortDiscovery(){
+  if(_discoveryController){ _discoveryController.abort(); _discoveryController = null; }
+  if(_activeDiscoveryJobId){
+    fetch('/tools/api/discover_hosts/cancel/' + _activeDiscoveryJobId, { method: 'POST' }).catch(function(){});
+    _activeDiscoveryJobId = null;
+  }
+  hideDiscoveryCard();
+  window.netpiStatus && window.netpiStatus.stopTimer();
+  var summary = document.getElementById('checks-summary');
+  if(summary) summary.textContent = 'Discovery cancelled.';
+}
+
+function updateDiscoveryCard(data){
+  if(!data) return;
+  var label = document.getElementById('dic-label');
+  var bar = document.getElementById('dic-progress-bar');
+  var txt = document.getElementById('dic-status-text');
+  var status = data.status || '';
+  var found = data.devices_found_count || 0;
+  var msg = data.progress_message || data.message || '';
+  if(label){
+    if(status === 'running' || status === 'queued') label.textContent = '⌛ Scanning…';
+    else if(status === 'completed') label.textContent = '✓ Scan complete';
+    else if(status === 'failed') label.textContent = '✗ Scan failed';
+    else if(status === 'cancelled') label.textContent = '— Cancelled';
+  }
+  if(bar){
+    if(status === 'completed' || status === 'failed') bar.style.width = '100%';
+    else if(found > 0) bar.style.width = Math.min(90, found * 5) + '%';
+  }
+  if(txt) txt.textContent = msg || (found > 0 ? found + ' hosts found' : '');
+  if(status === 'completed' || status === 'cancelled'){
+    setTimeout(function(){ hideDiscoveryCard(); window.netpiStatus && window.netpiStatus.stopTimer(); }, 3000);
+  }
+}
+
+// ─── Manual add ───────────────────────────────────────────────────────────────
 function collectManualPayload(){
   return {
     name: document.getElementById('manual-name').value.trim(),
@@ -469,59 +1113,36 @@ function collectManualPayload(){
 }
 
 function clearManualForm(){
-  ['manual-name','manual-hostname','manual-ip','manual-mac','manual-vendor','manual-model','manual-serial','manual-firmware','manual-notes']
-    .forEach(id => {
-      const el = document.getElementById(id);
-      if(el) el.value = '';
-    });
-  const typeEl = document.getElementById('manual-type');
-  if(typeEl) typeEl.value = '';
-  const vlanEl = document.getElementById('manual-vlan');
-  if(vlanEl) vlanEl.value = '';
-  const roomEl = document.getElementById('manual-room');
-  if(roomEl) roomEl.value = '';
-  const assignEl = document.getElementById('manual-ip-assignment');
-  if(assignEl) assignEl.value = '';
+  ['manual-name','manual-hostname','manual-ip','manual-mac','manual-vendor',
+   'manual-model','manual-serial','manual-firmware','manual-notes'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  ['manual-type','manual-vlan','manual-room','manual-ip-assignment'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
   const badge = document.getElementById('manual-type-custom-badge');
   if(badge) badge.style.display = 'none';
 }
 
 async function addManualDevice(){
   const payload = collectManualPayload();
-  if(!payload.ip){
-    showIntakeStatus('Manual add requires an IP address.', 'error');
-    return;
-  }
-
+  if(!payload.ip){ showIntakeStatus('Manual add requires an IP address.', 'error'); return; }
   try {
     const res = await fetch('/tools/api/devices/add_manual', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
     });
     const data = await res.json();
-    if(!res.ok || !data.success){
-      showIntakeStatus(data.error || 'Manual add failed.', 'error');
-      return;
-    }
-
+    if(!res.ok || !data.success){ showIntakeStatus(data.error || 'Manual add failed.', 'error'); return; }
     const added = data.device || payload;
-    dedupeAndUpsertIntakeRow({
-      ...added,
-      selected: false,
-      committed: true,
-      source: 'manual',
-      status: 'Committed',
-      conflict_reason: ''
-    });
+    dedupeAndUpsertIntakeRow({ ...added, selected: false, committed: true, source: 'manual', status: 'Committed', conflict_reason: '' });
     renderIntakeResults();
     clearManualForm();
-    showIntakeStatus('Manual device added to active project inventory.', 'success');
-  } catch (e) {
-    showIntakeStatus('Manual add failed: ' + e, 'error');
-  }
+    showIntakeStatus('Device added to inventory.', 'success');
+    loadInventory();
+  } catch(e){ showIntakeStatus('Manual add failed: ' + e, 'error'); }
 }
 
+// ─── Paste helpers ────────────────────────────────────────────────────────────
 function togglePasteHelp(){
   const el = document.getElementById('paste-format-help');
   if(el) el.style.display = el.style.display === 'none' ? '' : 'none';
@@ -539,52 +1160,34 @@ function copyPasteTemplate(){
 async function previewPasteDevices(){
   const pasted = document.getElementById('pasted-device-text').value.trim();
   if(!pasted){ showIntakeStatus('Paste device rows first.', 'error'); return; }
-
   try {
     const res = await fetch('/tools/api/devices/preview_pasted', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text: pasted })
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ text: pasted })
     });
     const data = await res.json();
     if(!res.ok || !data.ok){ showIntakeStatus(data.error || 'Preview failed.', 'error'); return; }
 
-    // ── Build intakeRows ───────────────────────────────────────
     intakeRows = (Array.isArray(data.devices) ? data.devices : []).map((row, idx) => {
-      const duplicate = !!row.duplicate;
-      const duplicateIp = !!row.duplicate_ip;
-      const duplicateMac = !!row.duplicate_mac;
-      let reason = '';
-      if(duplicateIp && duplicateMac) reason = 'duplicate_ip+duplicate_mac';
-      else if(duplicateIp) reason = 'duplicate_ip';
-      else if(duplicateMac) reason = 'duplicate_mac';
-      return { id: idx + 1, selected: !duplicate, source: 'paste', committed: false,
-               status: duplicate ? 'Conflict' : 'Ready', conflict_reason: reason, ...row };
+      const dup = !!row.duplicate, dupIp = !!row.duplicate_ip, dupMac = !!row.duplicate_mac;
+      let reason = dupIp && dupMac ? 'duplicate_ip+duplicate_mac' : dupIp ? 'duplicate_ip' : dupMac ? 'duplicate_mac' : '';
+      return { id: idx + 1, selected: !dup, source: 'paste', committed: false,
+               status: dup ? 'Conflict' : 'Ready', conflict_reason: reason, ...row };
     });
 
-    // ── Show parse report ──────────────────────────────────────
     document.getElementById('paste-parse-report').style.display = '';
 
-    // Summary bar
-    const valid = data.rows_valid || 0;
-    const invalid = data.rows_invalid || 0;
-    const dup = data.rows_duplicate || 0;
-    const dupIp = data.rows_duplicate_ip || 0;
-    const dupMac = data.rows_duplicate_mac || 0;
-    let summaryHtml = '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px">'
+    const valid = data.rows_valid || 0, invalid = data.rows_invalid || 0;
+    const dup = data.rows_duplicate || 0, dupIp = data.rows_duplicate_ip || 0, dupMac = data.rows_duplicate_mac || 0;
+    document.getElementById('paste-summary').innerHTML =
+      '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px">'
       + '<span style="color:#4ade80;font-weight:700">✓ ' + valid + ' valid</span>'
       + (invalid ? '<span style="color:#ef4444;font-weight:700">✗ ' + invalid + ' invalid</span>' : '')
       + (dup ? '<span style="color:#f59e0b;font-weight:600">⚠ ' + dup + ' duplicate'
-              + (dupIp ? ' (' + dupIp + ' IP)' : '')
-              + (dupMac ? ' (' + dupMac + ' MAC)' : '') + '</span>' : '')
+              + (dupIp ? ' (' + dupIp + ' IP)' : '') + (dupMac ? ' (' + dupMac + ' MAC)' : '') + '</span>' : '')
       + '</div>';
-    document.getElementById('paste-summary').innerHTML = summaryHtml;
 
-    // ── Column mapping ─────────────────────────────────────────
-    const headerMap = data.header_map || {};
-    const headerRow = Array.isArray(data.header_row) ? data.header_row : [];
+    const headerMap = data.header_map || {}, headerRow = Array.isArray(data.header_row) ? data.header_row : [];
     let mappingHtml = '';
-
     if(data.headers_detected){
       const recognizedIdxs = new Set(Object.keys(headerMap).map(Number));
       const chips = Object.entries(headerMap).map(([colIdx, field]) => {
@@ -592,97 +1195,67 @@ async function previewPasteDevices(){
         const sameLabel = orig.toLowerCase().replace(/[\s_\-]/g,'') === field.replace(/[\s_\-]/g,'');
         return '<span style="display:inline-flex;align-items:center;gap:4px;background:#1a1a1a;border:1px solid #374151;border-radius:4px;padding:2px 8px;font-size:11px;margin:2px">'
           + (sameLabel ? '' : '<span style="color:#6b7280">' + escapeHtml(orig) + ' →</span> ')
-          + '<strong style="color:#93c5fd">' + escapeHtml(field) + '</strong>'
-          + '</span>';
+          + '<strong style="color:#93c5fd">' + escapeHtml(field) + '</strong></span>';
       }).join('');
-
       const unrecognized = headerRow.filter((_, i) => !recognizedIdxs.has(i) && headerRow[i]);
       const unrecHtml = unrecognized.length
         ? '<div style="margin-top:6px;color:#f59e0b;font-size:11px">⚠ Unrecognized columns (ignored): '
-          + unrecognized.map(h => '<code style="background:#1a1a1a;padding:1px 5px;border-radius:3px">' + escapeHtml(h) + '</code>').join(' ')
-          + '</div>'
+          + unrecognized.map(h => '<code style="background:#1a1a1a;padding:1px 5px;border-radius:3px">' + escapeHtml(h) + '</code>').join(' ') + '</div>'
         : '';
-
       mappingHtml = '<div style="color:#4ade80;font-size:11px;font-weight:700;margin-bottom:6px">✓ Headers detected — columns mapped:</div>'
-        + '<div style="line-height:2">' + chips + '</div>'
-        + unrecHtml;
+        + '<div style="line-height:2">' + chips + '</div>' + unrecHtml;
     } else {
       mappingHtml = '<div style="color:#f59e0b;font-size:12px;font-weight:700;margin-bottom:4px">⚠ No column headers found — positional mode</div>'
         + '<div style="color:#9ca3af;font-size:11px">The parser anchored on the IP address and assigned surrounding columns by position and pattern. '
-        + 'For best results, add a header row first. '
-        + 'Click <strong>📋 Copy Template</strong> to get a header row you can paste into your spreadsheet.</div>';
+        + 'Click <strong>📋 Copy Template</strong> to get a header row.</div>';
     }
     document.getElementById('paste-header-mapping').innerHTML = mappingHtml;
 
-    // ── Parsed rows preview table ──────────────────────────────
     const COLS = ['name','ip','type','vlan','mac','vendor','model','room'];
     const LABELS = {name:'Name',ip:'IP',type:'Type',vlan:'VLAN',mac:'MAC',vendor:'Vendor',model:'Model',room:'Room'};
     const devices = Array.isArray(data.devices) ? data.devices : [];
-
-    let tblHtml = '<table style="font-size:11px;width:100%;border-collapse:collapse">'
-      + '<thead><tr style="background:#111">'
+    let tblHtml = '<table style="font-size:11px;width:100%;border-collapse:collapse"><thead><tr style="background:#111">'
       + COLS.map(c => '<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #374151;white-space:nowrap">' + LABELS[c] + '</th>').join('')
       + '<th style="padding:5px 8px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #374151">Status</th>'
       + '</tr></thead><tbody>';
-
-    if(devices.length){
-      tblHtml += devices.map((row, i) => {
-        const dup = !!row.duplicate;
-        const rowStyle = 'border-bottom:1px solid #1f1f1f' + (dup ? ';opacity:0.55' : '');
-        const statusCell = dup
-          ? '<td style="color:#f59e0b;font-size:11px;white-space:nowrap">⚠ '
-            + (row.duplicate_ip && row.duplicate_mac ? 'Dup IP+MAC' : row.duplicate_ip ? 'Dup IP' : 'Dup MAC')
-            + '</td>'
-          : '<td style="color:#4ade80;font-size:11px">✓ Ready</td>';
-        return '<tr style="' + rowStyle + '">'
-          + COLS.map(c => {
-              const v = escapeHtml(row[c] || '');
-              const mono = (c === 'ip' || c === 'mac') ? 'font-family:monospace;' : '';
-              const dim = !v ? 'color:#374151' : (c === 'ip' ? 'color:#d1d5db;font-weight:600' : '');
-              return '<td style="padding:5px 8px;' + mono + dim + '">' + (v || '—') + '</td>';
-            }).join('')
-          + statusCell
-          + '</tr>';
-      }).join('');
-    } else {
-      tblHtml += '<tr><td colspan="' + (COLS.length + 1) + '" style="padding:14px;text-align:center;color:#6b7280">No valid rows parsed.</td></tr>';
-    }
+    tblHtml += devices.length ? devices.map(row => {
+      const dup = !!row.duplicate;
+      const statusCell = dup
+        ? '<td style="color:#f59e0b;font-size:11px;white-space:nowrap">⚠ ' + (row.duplicate_ip && row.duplicate_mac ? 'Dup IP+MAC' : row.duplicate_ip ? 'Dup IP' : 'Dup MAC') + '</td>'
+        : '<td style="color:#4ade80;font-size:11px">✓ Ready</td>';
+      return '<tr style="border-bottom:1px solid #1f1f1f' + (dup ? ';opacity:0.55' : '') + '">'
+        + COLS.map(c => {
+            const v = escapeHtml(row[c] || '');
+            const mono = (c==='ip'||c==='mac') ? 'font-family:monospace;' : '';
+            const dim = !v ? 'color:#374151' : (c==='ip' ? 'color:#d1d5db;font-weight:600' : '');
+            return '<td style="padding:5px 8px;' + mono + dim + '">' + (v || '—') + '</td>';
+          }).join('') + statusCell + '</tr>';
+    }).join('') : '<tr><td colspan="' + (COLS.length+1) + '" style="padding:14px;text-align:center;color:#6b7280">No valid rows parsed.</td></tr>';
     tblHtml += '</tbody></table>';
     document.getElementById('paste-preview-table').innerHTML = tblHtml;
 
-    // ── Invalid rows table ─────────────────────────────────────
     const invalidRows = Array.isArray(data.invalid_rows) ? data.invalid_rows : [];
-    if(invalidRows.length){
-      let invHtml = '<div style="margin-top:6px">'
-        + '<div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:6px">✗ ' + invalidRows.length + ' row(s) rejected:</div>'
-        + '<table style="font-size:11px;width:100%;border-collapse:collapse">'
-        + '<thead><tr style="background:#111">'
-        + '<th style="padding:4px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #374151;white-space:nowrap">Row #</th>'
-        + '<th style="padding:4px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #374151">Raw content</th>'
-        + '<th style="padding:4px 8px;text-align:left;color:#6b7280;border-bottom:1px solid #374151">Reason</th>'
-        + '</tr></thead><tbody>'
+    document.getElementById('paste-invalid').innerHTML = invalidRows.length
+      ? '<div style="margin-top:6px"><div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:6px">✗ ' + invalidRows.length + ' row(s) rejected:</div>'
+        + '<table style="font-size:11px;width:100%;border-collapse:collapse"><thead><tr style="background:#111">'
+        + '<th style="padding:4px 8px;color:#6b7280;border-bottom:1px solid #374151;white-space:nowrap">Row #</th>'
+        + '<th style="padding:4px 8px;color:#6b7280;border-bottom:1px solid #374151">Raw content</th>'
+        + '<th style="padding:4px 8px;color:#6b7280;border-bottom:1px solid #374151">Reason</th></tr></thead><tbody>'
         + invalidRows.map(r => {
-            const raw = Array.isArray(r.raw) ? r.raw.join('\t') : String(r.raw || '');
+            const raw = Array.isArray(r.raw) ? r.raw.join('\t') : String(r.raw||'');
             return '<tr style="border-bottom:1px solid #1f1f1f">'
-              + '<td style="padding:5px 8px;color:#6b7280;font-family:monospace">' + escapeHtml(String(r.row_index || '')) + '</td>'
+              + '<td style="padding:5px 8px;color:#6b7280;font-family:monospace">' + escapeHtml(String(r.row_index||'')) + '</td>'
               + '<td style="padding:5px 8px;font-family:monospace;color:#9ca3af;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(raw) + '">' + escapeHtml(raw) + '</td>'
-              + '<td style="padding:5px 8px;color:#ef4444">' + escapeHtml(r.reason || 'Unknown') + '</td>'
-              + '</tr>';
+              + '<td style="padding:5px 8px;color:#ef4444">' + escapeHtml(r.reason||'Unknown') + '</td></tr>';
           }).join('')
-        + '</tbody></table></div>';
-      document.getElementById('paste-invalid').innerHTML = invHtml;
-    } else {
-      document.getElementById('paste-invalid').innerHTML = '';
-    }
+        + '</tbody></table></div>'
+      : '';
 
     renderIntakeResults();
     const saveSection = document.getElementById('paste-save-section');
     if(saveSection) saveSection.style.display = (valid > 0) ? '' : 'none';
-    showIntakeStatus(valid + ' row(s) parsed and staged. Review the table below, then commit.', 'success');
-
-  } catch(e) {
-    showIntakeStatus('Preview failed: ' + e, 'error');
-  }
+    showIntakeStatus(valid + ' row(s) parsed and staged. Review below, then commit.', 'success');
+  } catch(e){ showIntakeStatus('Preview failed: ' + e, 'error'); }
 }
 
 function clearPaste(){
@@ -691,8 +1264,7 @@ function clearPaste(){
   const report = document.getElementById('paste-parse-report');
   if(report) report.style.display = 'none';
   ['paste-summary','paste-header-mapping','paste-preview-table','paste-invalid'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.innerHTML = '';
+    const el = document.getElementById(id); if(el) el.innerHTML = '';
   });
   const saveSection = document.getElementById('paste-save-section');
   if(saveSection) saveSection.style.display = 'none';
@@ -705,165 +1277,89 @@ function clearPaste(){
 
 async function savePasteToLanSheet(){
   const entries = intakeRows.filter(r => r.ip).map(r => ({
-    name: r.name || '',
-    ip: r.ip || '',
-    mac: r.mac || r.mac_address || '',
-    type: r.type || '',
-    vlan: r.vlan || '',
-    vendor: r.vendor || '',
-    model: r.model || '',
-    room: r.room || '',
-    notes: r.notes || '',
+    name: r.name||'', ip: r.ip||'', mac: r.mac||r.mac_address||'', type: r.type||'',
+    vlan: r.vlan||'', vendor: r.vendor||'', model: r.model||'', room: r.room||'', notes: r.notes||''
   }));
-  if(!entries.length){
-    showIntakeStatus('No valid rows to save — preview first.', 'error');
-    return;
-  }
+  if(!entries.length){ showIntakeStatus('No valid rows to save — preview first.', 'error'); return; }
   const lanStatus = document.getElementById('paste-save-status');
   if(lanStatus){ lanStatus.style.display = 'block'; lanStatus.textContent = 'Saving to LAN Sheet…'; }
   try {
     const res = await fetch('/tools/api/lan-sheet/add', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({entries})
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({entries})
     });
     const data = await res.json();
-    if(!res.ok || !data.ok){
-      if(lanStatus){ lanStatus.textContent = 'Failed: ' + (data.error || 'unknown error'); }
-      return;
-    }
-    if(lanStatus){ lanStatus.textContent = 'Saved to LAN Sheet: ' + data.total + ' entries (' + data.added + ' new, ' + data.updated + ' updated).'; }
-  } catch(e) {
-    if(lanStatus){ lanStatus.textContent = 'Request failed: ' + e; }
-  }
+    if(!res.ok || !data.ok){ if(lanStatus) lanStatus.textContent = 'Failed: ' + (data.error || 'unknown error'); return; }
+    if(lanStatus) lanStatus.textContent = 'Saved to LAN Sheet: ' + data.total + ' entries (' + data.added + ' new, ' + data.updated + ' updated).';
+  } catch(e){ if(lanStatus) lanStatus.textContent = 'Request failed: ' + e; }
 }
 
-function getChecksHost(){
-  return String((document.getElementById('checks-host') || {}).value || '').trim();
-}
-
-function getChecksVlan(){
-  return String((document.getElementById('checks-vlan') || {}).value || '').trim();
-}
+// ─── Checks ───────────────────────────────────────────────────────────────────
+function getChecksHost(){ return String((document.getElementById('checks-host') || {}).value || '').trim(); }
+function getChecksVlan(){ return String((document.getElementById('checks-vlan') || {}).value || '').trim(); }
 
 async function runPingCheck(){
   const host = getChecksHost();
-  if(!host){
-    showIntakeStatus('Enter Host/IP for Ping.', 'error');
-    return;
-  }
+  if(!host){ showIntakeStatus('Enter Host/IP for Ping.', 'error'); return; }
   try {
     appendCheckOutput('Ping: ' + host + ' ...');
-    const res = await fetch('/tools/api/ping', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ host })
-    });
+    const res = await fetch('/tools/api/ping', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ host }) });
     const data = await res.json();
     appendCheckOutput(data.output || data.error || 'No ping output.');
     showIntakeStatus('Ping completed.', 'success');
-  } catch (e) {
-    showIntakeStatus('Ping failed: ' + e, 'error');
-  }
+  } catch(e){ showIntakeStatus('Ping failed: ' + e, 'error'); }
 }
 
 async function runPortScanCheck(){
   const host = getChecksHost();
-  if(!host){
-    showIntakeStatus('Enter Host/IP for Port Scan.', 'error');
-    return;
-  }
+  if(!host){ showIntakeStatus('Enter Host/IP for Port Scan.', 'error'); return; }
   try {
     appendCheckOutput('Port Scan: ' + host + ' ...');
-    const res = await fetch('/tools/api/portscan', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ host })
-    });
+    const res = await fetch('/tools/api/portscan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ host }) });
     const data = await res.json();
     appendCheckOutput(data.output || data.error || 'No port scan output.');
     showIntakeStatus('Port scan completed.', 'success');
-  } catch (e) {
-    showIntakeStatus('Port scan failed: ' + e, 'error');
-  }
+  } catch(e){ showIntakeStatus('Port scan failed: ' + e, 'error'); }
 }
 
 async function runTracerouteCheck(){
   const host = getChecksHost();
-  if(!host){
-    showIntakeStatus('Enter Host/IP for Traceroute.', 'error');
-    return;
-  }
+  if(!host){ showIntakeStatus('Enter Host/IP for Traceroute.', 'error'); return; }
   try {
     appendCheckOutput('Traceroute: ' + host + ' ...');
-    const res = await fetch('/tools/api/traceroute', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ host })
-    });
+    const res = await fetch('/tools/api/traceroute', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ host }) });
     const data = await res.json();
     appendCheckOutput(data.output || data.error || 'No traceroute output.');
     showIntakeStatus('Traceroute completed.', 'success');
-  } catch (e) {
-    showIntakeStatus('Traceroute failed: ' + e, 'error');
-  }
+  } catch(e){ showIntakeStatus('Traceroute failed: ' + e, 'error'); }
 }
 
 async function fingerprintHostForIntake(){
   const host = getChecksHost();
-  if(!host){
-    showIntakeStatus('Enter Host/IP for Fingerprint.', 'error');
-    return;
-  }
+  if(!host){ showIntakeStatus('Enter Host/IP for Fingerprint.', 'error'); return; }
   try {
-    const res = await fetch('/tools/api/fingerprint_host', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ ip: host, vendor: '' })
-    });
+    const res = await fetch('/tools/api/fingerprint_host', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ip: host, vendor: '' }) });
     const data = await res.json();
-    if(data.error){
-      showIntakeStatus(data.error, 'error');
-      appendCheckOutput('Fingerprint failed for ' + host + ': ' + data.error);
-      return;
-    }
-
-    const summary = {
-      name: host,
-      hostname: '',
-      ip: host,
-      mac: '',
-      type: data.guessed_type || data.suggested_type || 'generic',
-      vlan: '',
-      vendor: '',
-      notes: 'Fingerprint: ' + (data.suggested_type || data.guessed_type || 'generic') + (data.confidence_label ? (' (' + data.confidence_label + ')') : '')
-    };
-    dedupeAndUpsertIntakeRow(summary);
+    if(data.error){ showIntakeStatus(data.error, 'error'); appendCheckOutput('Fingerprint failed for ' + host + ': ' + data.error); return; }
+    dedupeAndUpsertIntakeRow({ name: host, hostname: '', ip: host, mac: '', type: data.guessed_type || data.suggested_type || 'generic', vlan: '', vendor: '',
+      notes: 'Fingerprint: ' + (data.suggested_type || data.guessed_type || 'generic') + (data.confidence_label ? ' (' + data.confidence_label + ')' : '') });
     renderIntakeResults();
-
     const ports = Array.isArray(data.open_ports) ? data.open_ports.join(', ') : '';
-    appendCheckOutput('Fingerprint ' + host + ': guessed=' + (data.guessed_type || 'generic') + ', suggested=' + (data.suggested_type || '-') + ', confidence=' + (data.confidence_label || '-') + (ports ? (', open_ports=' + ports) : ''));
-    showIntakeStatus('Fingerprint completed and staged into intake results.', 'success');
-  } catch (e) {
-    showIntakeStatus('Fingerprint failed: ' + e, 'error');
-  }
+    appendCheckOutput('Fingerprint ' + host + ': guessed=' + (data.guessed_type || 'generic') + ', suggested=' + (data.suggested_type || '-') + ', confidence=' + (data.confidence_label || '-') + (ports ? ', open_ports=' + ports : ''));
+    showIntakeStatus('Fingerprint completed and staged.', 'success');
+  } catch(e){ showIntakeStatus('Fingerprint failed: ' + e, 'error'); }
 }
 
+// ─── Discovery table ──────────────────────────────────────────────────────────
 function renderDiscoveredTable(){
   const wrap = document.getElementById('discover-wrap');
   const tbody = document.getElementById('discover-results');
   if(!wrap || !tbody) return;
-
   wrap.style.display = 'block';
   if(!discoveredRows.length){
     tbody.innerHTML = '<tr><td colspan="7" style="color:#6b7280;text-align:center;padding:1rem">No discovered hosts.</td></tr>';
     return;
   }
-
   tbody.innerHTML = discoveredRows.map((row, index) => {
-    const ipSafe = String((row.ip || '')).replace(/'/g, "\\'");
-    const status = statusBadge(row.status || 'online');
-    const likely = escapeHtml(row.guessed_type || 'generic');
     return '<tr>'
       + '<td><input type="checkbox" class="discover-check" data-idx="' + index + '" ' + (row.selected ? 'checked' : '') + ' onchange="toggleDiscovered(' + index + ')"></td>'
       + '<td>' + (row.hostname ? escapeHtml(row.hostname) : '<span style="color:#6b7280">-</span>') + '</td>'
@@ -872,78 +1368,63 @@ function renderDiscoveredTable(){
       + (row.mac ? '<div style="font-family:monospace">' + escapeHtml(row.mac) + '</div>' : '<div>-</div>')
       + (row.vendor ? '<div>' + escapeHtml(row.vendor) + '</div>' : '')
       + '</td>'
-      + '<td>' + status + '</td>'
-      + '<td>' + likely + '</td>'
+      + '<td>' + statusBadge(row.status || 'online') + '</td>'
+      + '<td>' + escapeHtml(row.guessed_type || 'generic') + '</td>'
       + '<td><button class="btn" onclick="stageDiscoveredByIndex(' + index + ')">Stage</button></td>'
       + '</tr>';
   }).join('');
 }
 
-function toggleDiscovered(index){
-  if(!discoveredRows[index]) return;
-  discoveredRows[index].selected = !discoveredRows[index].selected;
-}
+function toggleDiscovered(index){ if(!discoveredRows[index]) return; discoveredRows[index].selected = !discoveredRows[index].selected; }
+function toggleAllDiscovered(nextValue){ discoveredRows = discoveredRows.map(row => ({ ...row, selected: !!nextValue })); renderDiscoveredTable(); }
 
-function toggleAllDiscovered(nextValue){
-  discoveredRows = discoveredRows.map(row => ({ ...row, selected: !!nextValue }));
-  renderDiscoveredTable();
+function dedupeAndUpsertIntakeRow(nextRow){
+  const ip = String((nextRow && nextRow.ip) || '').trim();
+  if(!ip) return;
+  const idx = intakeRows.findIndex(row => String((row && row.ip) || '').trim() === ip);
+  if(idx >= 0){
+    intakeRows[idx] = { ...intakeRows[idx], ...nextRow,
+      selected: intakeRows[idx].committed ? false : (nextRow.selected !== undefined ? !!nextRow.selected : intakeRows[idx].selected),
+      committed: !!intakeRows[idx].committed };
+  } else {
+    intakeRows.push({ selected: true, committed: false, status: 'Ready', source: 'checks', conflict_reason: '', ...nextRow });
+  }
 }
 
 function stageDiscoveredByIndex(index){
   const row = discoveredRows[index];
   if(!row) return;
-  dedupeAndUpsertIntakeRow({
-    name: row.hostname || row.ip,
-    hostname: row.hostname || '',
-    ip: row.ip || '',
-    mac: row.mac || row.mac_address || '',
-    type: row.guessed_type || 'generic',
-    vlan: getChecksVlan(),
-    vendor: row.vendor || '',
-    notes: 'Discovered host'
-  });
+  dedupeAndUpsertIntakeRow({ name: row.hostname || row.ip, hostname: row.hostname || '', ip: row.ip || '',
+    mac: row.mac || row.mac_address || '', type: row.guessed_type || 'generic', vlan: getChecksVlan(), vendor: row.vendor || '', notes: 'Discovered host' });
   renderIntakeResults();
-  showIntakeStatus('Discovered host staged into intake results.', 'success');
+  showIntakeStatus('Discovered host staged.', 'success');
 }
 
 function stageSelectedDiscovered(){
   let staged = 0;
-  discoveredRows.forEach((row, idx) => {
-    if(row.selected){
-      stageDiscoveredByIndex(idx);
-      staged += 1;
-    }
-  });
-  if(!staged){
-    showIntakeStatus('No discovered rows selected to stage.', 'error');
-  }
+  discoveredRows.forEach((row, idx) => { if(row.selected){ stageDiscoveredByIndex(idx); staged++; } });
+  if(!staged) showIntakeStatus('No discovered rows selected to stage.', 'error');
 }
 
 function stageAllDiscovered(){
-  if(!discoveredRows.length){
-    showIntakeStatus('No discovered rows available to stage.', 'error');
-    return;
-  }
+  if(!discoveredRows.length){ showIntakeStatus('No discovered rows available to stage.', 'error'); return; }
   discoveredRows.forEach((_, idx) => stageDiscoveredByIndex(idx));
 }
 
-async function _runDiscoveryWithVlan(vlan) {
+async function _runDiscoveryWithVlan(vlan){
   _discoveryController = new AbortController();
   const signal = _discoveryController.signal;
   document.getElementById('checks-summary').textContent = 'Discovering hosts...';
   window.netpiStatus && window.netpiStatus.startTimer('Discovery');
   showDiscoveryCard();
-
   try {
     const scanMode = document.getElementById('scan-mode-select')?.value || 'standard';
     const startRes = await fetch('/tools/api/discover_hosts/start', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ vlan, scan_mode: scanMode }),
-      signal
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ vlan, scan_mode: scanMode }), signal
     });
     const startData = await startRes.json();
-    if (!startRes.ok || !startData.ok || !startData.job_id) {
+    if(!startRes.ok || !startData.ok || !startData.job_id){
       const err = (startData && startData.error) || 'Discovery failed to start.';
       showIntakeStatus(err, 'error');
       document.getElementById('checks-summary').textContent = err;
@@ -951,28 +1432,18 @@ async function _runDiscoveryWithVlan(vlan) {
       window.netpiStatus && window.netpiStatus.stopTimer();
       return;
     }
-
     _activeDiscoveryJobId = startData.job_id;
-
-    // Poll for progress — each update drives the inline card so per-subnet
-    // progress ("Scanning subnet 2 of 3: 10.110.60.0/24") is shown live.
-    const MAX_POLLS = 360; // 3 min at 500 ms
-    for (let i = 0; i < MAX_POLLS; i++) {
+    const MAX_POLLS = 360;
+    for(let i = 0; i < MAX_POLLS; i++){
       await new Promise(r => setTimeout(r, 500));
-      if (signal.aborted) return;
-
+      if(signal.aborted) return;
       let d;
       try {
         const r = await fetch('/tools/api/discover_hosts/status/' + _activeDiscoveryJobId, { signal });
         d = await r.json();
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        continue; // transient network error — keep polling
-      }
-
+      } catch(err){ if(err.name === 'AbortError') return; continue; }
       updateDiscoveryCard(d);
-
-      if (d.status === 'completed') {
+      if(d.status === 'completed'){
         _activeDiscoveryJobId = null;
         discoveredRows = (Array.isArray(d.devices) ? d.devices : []).map(item => ({ ...item, selected: true }));
         renderDiscoveredTable();
@@ -980,11 +1451,10 @@ async function _runDiscoveryWithVlan(vlan) {
         const subnet = d.subnet || (d.subnets || []).join(', ') || 'configured subnets';
         document.getElementById('checks-summary').textContent = 'Discovery found ' + foundCount + ' host(s) on ' + subnet + '.';
         showIntakeStatus('Discovery completed. Stage rows into Intake Results as needed.', 'success');
-        appendCheckOutput && appendCheckOutput('Discovery complete: ' + foundCount + ' hosts.');
-        appendEventLog && appendEventLog('Discovery complete: ' + foundCount + ' host(s) on ' + subnet);
+        appendCheckOutput('Discovery complete: ' + foundCount + ' hosts.');
         return;
       }
-      if (d.status === 'failed') {
+      if(d.status === 'failed'){
         _activeDiscoveryJobId = null;
         const msg = d.message || 'Discovery failed.';
         showIntakeStatus(msg, 'error');
@@ -992,51 +1462,38 @@ async function _runDiscoveryWithVlan(vlan) {
         window.netpiStatus && window.netpiStatus.stopTimer();
         return;
       }
-      if (d.status === 'cancelled') { _activeDiscoveryJobId = null; return; }
+      if(d.status === 'cancelled'){ _activeDiscoveryJobId = null; return; }
     }
-
-    // Timed out
     _activeDiscoveryJobId = null;
     document.getElementById('checks-summary').textContent = 'Discovery timed out.';
     window.netpiStatus && window.netpiStatus.stopTimer();
-
-  } catch (e) {
+  } catch(e){
     _activeDiscoveryJobId = null;
-    if (e && e.name === 'AbortError') return;
+    if(e && e.name === 'AbortError') return;
     showIntakeStatus('Discover hosts failed: ' + e, 'error');
     document.getElementById('checks-summary').textContent = 'Discovery failed.';
     updateDiscoveryCard({ status: 'failed', message: String(e) });
     window.netpiStatus && window.netpiStatus.stopTimer();
-  } finally {
-    _discoveryController = null;
-  }
+  } finally { _discoveryController = null; }
 }
 
 async function discoverHostsForIntake(){
   const scanAllVlans = document.getElementById('scan-all-vlans')?.checked;
-  if (scanAllVlans) { return _runDiscoveryWithVlan(''); }
+  if(scanAllVlans) return _runDiscoveryWithVlan('');
   const sel = (document.getElementById('checks-vlan')?.value || '').trim();
-  if (sel === '__custom__') {
+  if(sel === '__custom__'){
     const cidr = (document.getElementById('custom-subnet-input')?.value || '').trim();
-    if (!cidr) {
-      showIntakeStatus('Enter a CIDR subnet (e.g. 192.168.40.0/24).', 'error');
-      return;
-    }
+    if(!cidr){ showIntakeStatus('Enter a CIDR subnet (e.g. 192.168.40.0/24).', 'error'); return; }
     const parts = cidr.split('/');
     const prefix = parts.length === 2 ? parseInt(parts[1], 10) : NaN;
-    if (isNaN(prefix) || prefix < 0 || prefix > 32) {
-      showIntakeStatus('Invalid CIDR — prefix must be 0–32.', 'error');
-      return;
-    }
-    if (prefix < 24) {
-      const proceed = await showWideSubnetWarning(cidr);
-      if (!proceed) return;
-    }
+    if(isNaN(prefix) || prefix < 0 || prefix > 32){ showIntakeStatus('Invalid CIDR — prefix must be 0–32.', 'error'); return; }
+    if(prefix < 24){ const proceed = await showWideSubnetWarning(cidr); if(!proceed) return; }
     return _runDiscoveryWithVlan(cidr);
   }
   return _runDiscoveryWithVlan(sel);
 }
 
+// ─── Intake results + commit ──────────────────────────────────────────────────
 function selectAllRows(nextValue){
   intakeRows = intakeRows.map(row => ({ ...row, selected: !!nextValue && !row.committed && row.status !== 'Conflict' }));
   renderIntakeResults();
@@ -1050,93 +1507,54 @@ function toggleRow(index){
 
 function buildCommitPayload(rows){
   return rows.map(row => ({
-    name: row.name || '',
-    hostname: row.hostname || '',
-    ip: row.ip || '',
-    mac: row.mac || row.mac_address || '',
-    type: row.type || '',
-    vlan: row.vlan || '',
-    room: row.room || '',
-    vendor: row.vendor || '',
-    model: row.model || '',
-    serial: row.serial || '',
-    firmware_version: row.firmware_version || '',
-    addressing_mode: row.addressing_mode || '',
-    notes: row.notes || ''
+    name: row.name||'', hostname: row.hostname||'', ip: row.ip||'', mac: row.mac||row.mac_address||'',
+    type: row.type||'', vlan: row.vlan||'', room: row.room||'', vendor: row.vendor||'',
+    model: row.model||'', serial: row.serial||'', firmware_version: row.firmware_version||'',
+    addressing_mode: row.addressing_mode||'', notes: row.notes||''
   }));
 }
 
 async function commitRows(rows){
-  if(!rows.length){
-    showIntakeStatus('No intake rows selected for commit.', 'error');
-    return;
-  }
-
+  if(!rows.length){ showIntakeStatus('No intake rows selected for commit.', 'error'); return; }
   try {
     const res = await fetch('/tools/api/devices/import_pasted', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ devices: buildCommitPayload(rows) })
     });
     const data = await res.json();
-    if(!res.ok || !data.ok){
-      showIntakeStatus(data.error || 'Commit failed.', 'error');
-      return;
-    }
-
+    if(!res.ok || !data.ok){ showIntakeStatus(data.error || 'Commit failed.', 'error'); return; }
     const skipped = Array.isArray(data.skipped) ? data.skipped : [];
     const skippedByIp = new Map(skipped.map(item => [String(item.ip || ''), String(item.reason || 'skipped')]));
     intakeRows = intakeRows.map(row => {
       if(!rows.includes(row)) return row;
       const reason = skippedByIp.get(String(row.ip || ''));
-      if(reason){
-        return { ...row, selected: false, committed: false, status: 'Conflict', conflict_reason: reason };
-      }
+      if(reason) return { ...row, selected: false, committed: false, status: 'Conflict', conflict_reason: reason };
       return { ...row, selected: false, committed: true, status: 'Committed', conflict_reason: '' };
     });
-
     renderIntakeResults();
     showIntakeStatus(
-      'Commit complete. Added: ' + (data.added || 0)
-      + ' | Skipped: ' + (data.skipped_count || 0)
-      + ' | Duplicate IP: ' + (((data.conflicts || {}).duplicate_ip) || 0)
-      + ' | Duplicate MAC: ' + (((data.conflicts || {}).duplicate_mac) || 0),
-      'success'
-    );
-  } catch (e) {
-    showIntakeStatus('Commit failed: ' + e, 'error');
-  }
+      'Commit complete. Added: ' + (data.added || 0) + ' | Skipped: ' + (data.skipped_count || 0)
+      + ' | Dup IP: ' + (((data.conflicts || {}).duplicate_ip) || 0)
+      + ' | Dup MAC: ' + (((data.conflicts || {}).duplicate_mac) || 0), 'success');
+    loadInventory();
+  } catch(e){ showIntakeStatus('Commit failed: ' + e, 'error'); }
 }
 
-function commitSelected(){
-  const rows = intakeRows.filter(row => row.selected && !row.committed && row.status !== 'Conflict');
-  commitRows(rows);
-}
-
-function commitAll(){
-  const rows = intakeRows.filter(row => !row.committed && row.status !== 'Conflict');
-  commitRows(rows);
-}
+function commitSelected(){ commitRows(intakeRows.filter(row => row.selected && !row.committed && row.status !== 'Conflict')); }
+function commitAll(){ commitRows(intakeRows.filter(row => !row.committed && row.status !== 'Conflict')); }
 
 function renderIntakeResults(){
   const tbody = document.getElementById('intake-results');
   if(!tbody) return;
-
   if(!intakeRows.length){
-    tbody.innerHTML = '<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Add manually, paste, or run checks/discovery above.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="color:#6b7280;text-align:center;padding:1rem">No staged intake rows yet. Scan, paste, or add manually above.</td></tr>';
     return;
   }
-
   tbody.innerHTML = intakeRows.map((row, index) => {
-    const statusTone = row.status === 'Committed'
-      ? 'color:#d1d5db'
-      : (row.status === 'Conflict' ? 'color:#e5e7eb' : 'color:#d1d5db');
+    const statusTone = row.status === 'Committed' ? 'color:#d1d5db' : (row.status === 'Conflict' ? 'color:#e5e7eb' : 'color:#d1d5db');
     const disabled = (row.committed || row.status === 'Conflict') ? 'disabled' : '';
     const checked = row.selected ? 'checked' : '';
-    const statusText = row.status === 'Conflict' && row.conflict_reason
-      ? 'Conflict (' + row.conflict_reason + ')'
-      : row.status;
-
+    const statusText = row.status === 'Conflict' && row.conflict_reason ? 'Conflict (' + row.conflict_reason + ')' : row.status;
     const vendorModel = [row.vendor, row.model].filter(Boolean).join(' / ');
     return '<tr>'
       + '<td><input type="checkbox" ' + checked + ' ' + disabled + ' onchange="toggleRow(' + index + ')"></td>'
@@ -1152,36 +1570,28 @@ function renderIntakeResults(){
   }).join('');
 }
 
-renderIntakeResults();
-loadDeviceTypeLibrary();
-
-/* ─── Scan-all-VLANs toggle ─────────────────────────────────────────────── */
-/* ─── Wide-subnet warning modal ─────────────────────────────────────────── */
-function showWideSubnetWarning(cidr) {
+// ─── Wide-subnet warning ──────────────────────────────────────────────────────
+function showWideSubnetWarning(cidr){
   return new Promise(resolve => {
     const overlay = document.createElement('div');
-    overlay.id = 'wide-subnet-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;display:flex;align-items:center;justify-content:center';
-    overlay.innerHTML = `
-      <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
-        <div style="font-size:1rem;font-weight:600;margin-bottom:10px;color:#f8fafc">Wide Subnet Warning</div>
-        <div style="font-size:0.875rem;color:#94a3b8;margin-bottom:20px">
-          <strong style="color:#fbbf24">${cidr}</strong> covers a large address space.
-          Scanning a broad subnet can take a very long time and may impact the network.
-          Are you sure you want to continue?
-        </div>
-        <div style="display:flex;gap:10px;justify-content:flex-end">
-          <button id="wide-cancel" class="btn" style="min-width:80px">Cancel</button>
-          <button id="wide-proceed" class="btn btn-primary" style="min-width:80px">Scan anyway</button>
-        </div>
-      </div>`;
+    overlay.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+      <div style="font-size:1rem;font-weight:600;margin-bottom:10px;color:#f8fafc">Wide Subnet Warning</div>
+      <div style="font-size:0.875rem;color:#94a3b8;margin-bottom:20px">
+        <strong style="color:#fbbf24">${cidr}</strong> covers a large address space.
+        Scanning a broad subnet can take a very long time and may impact the network. Continue?
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="wide-cancel" class="btn" style="min-width:80px">Cancel</button>
+        <button id="wide-proceed" class="btn btn-primary" style="min-width:80px">Scan anyway</button>
+      </div></div>`;
     document.body.appendChild(overlay);
     overlay.querySelector('#wide-cancel').onclick = () => { overlay.remove(); resolve(false); };
     overlay.querySelector('#wide-proceed').onclick = () => { overlay.remove(); resolve(true); };
   });
 }
 
-/* ─── Scan mode selector ─────────────────────────────────────────────────── */
+// ─── Scan mode ────────────────────────────────────────────────────────────────
 const SCAN_MODE_HINTS = {
   standard:        'Fast ping sweep. May show false positives if ICMP is blocked.',
   av_port_probe:   'Probes AV ports directly. Best choice on managed networks.',
@@ -1190,70 +1600,60 @@ const SCAN_MODE_HINTS = {
 };
 const SCAN_MODE_KEY = 'netpi.scan_mode';
 
-function updateScanModeHint() {
+function updateScanModeHint(){
   const sel = document.getElementById('scan-mode-select');
   const hint = document.getElementById('scan-mode-hint');
-  if (!sel || !hint) return;
+  if(!sel || !hint) return;
   hint.textContent = SCAN_MODE_HINTS[sel.value] || '';
-  hint.style.color = (sel.value === 'arp_only' || sel.value === 'deep_fingerprint')
-    ? '#f59e0b' : '#94a3b8';
+  hint.style.color = (sel.value === 'arp_only' || sel.value === 'deep_fingerprint') ? '#f59e0b' : '#94a3b8';
 }
 
-document.getElementById('scan-mode-select')
-  ?.addEventListener('change', function() {
-    localStorage.setItem(SCAN_MODE_KEY, this.value);
-    updateScanModeHint();
-  });
+document.getElementById('scan-mode-select')?.addEventListener('change', function(){
+  localStorage.setItem(SCAN_MODE_KEY, this.value);
+  updateScanModeHint();
+});
 
-(function() {
+(function(){
   const saved = localStorage.getItem(SCAN_MODE_KEY);
   const sel = document.getElementById('scan-mode-select');
-  if (sel && saved && sel.querySelector(`option[value="${saved}"]`)) {
-    sel.value = saved;
-  }
+  if(sel && saved && sel.querySelector(`option[value="${saved}"]`)) sel.value = saved;
   updateScanModeHint();
 })();
 
 const SCAN_ALL_KEY = 'netpi.scan_all_vlans';
 
-(function() {
+(function(){
   const saved = localStorage.getItem(SCAN_ALL_KEY);
   const toggle = document.getElementById('scan-all-vlans');
   const vlanSelect = document.getElementById('checks-vlan');
-  if (toggle && saved === 'true') {
+  if(toggle && saved === 'true'){
     toggle.checked = true;
-    if (vlanSelect) {
-      vlanSelect.disabled = true;
-      vlanSelect.style.opacity = '0.4';
-    }
+    if(vlanSelect){ vlanSelect.disabled = true; vlanSelect.style.opacity = '0.4'; }
   }
 })();
 
-document.getElementById('scan-all-vlans')
-  ?.addEventListener('change', function() {
-    localStorage.setItem(SCAN_ALL_KEY, this.checked ? 'true' : 'false');
-    const vlanSelect = document.getElementById('checks-vlan');
-    if (!vlanSelect) return;
-    vlanSelect.disabled = this.checked;
-    vlanSelect.style.opacity = this.checked ? '0.4' : '';
-    if (this.checked) {
-      document.getElementById('custom-subnet-group').style.display = 'none';
-    }
-  });
+document.getElementById('scan-all-vlans')?.addEventListener('change', function(){
+  localStorage.setItem(SCAN_ALL_KEY, this.checked ? 'true' : 'false');
+  const vlanSelect = document.getElementById('checks-vlan');
+  if(!vlanSelect) return;
+  vlanSelect.disabled = this.checked;
+  vlanSelect.style.opacity = this.checked ? '0.4' : '';
+  if(this.checked) document.getElementById('custom-subnet-group').style.display = 'none';
+});
 
-document.getElementById('checks-vlan')
-  ?.addEventListener('change', function() {
-    const isCustom = this.value === '__custom__';
-    document.getElementById('custom-subnet-group').style.display = isCustom ? '' : 'none';
-    const toggle = document.getElementById('scan-all-vlans');
-    if (toggle) {
-      toggle.disabled = isCustom;
-      toggle.style.opacity = isCustom ? '0.4' : '';
-      if (isCustom) {
-        toggle.checked = false;
-        localStorage.setItem(SCAN_ALL_KEY, 'false');
-      }
-    }
-  });
+document.getElementById('checks-vlan')?.addEventListener('change', function(){
+  const isCustom = this.value === '__custom__';
+  document.getElementById('custom-subnet-group').style.display = isCustom ? '' : 'none';
+  const toggle = document.getElementById('scan-all-vlans');
+  if(toggle){
+    toggle.disabled = isCustom; toggle.style.opacity = isCustom ? '0.4' : '';
+    if(isCustom){ toggle.checked = false; localStorage.setItem(SCAN_ALL_KEY, 'false'); }
+  }
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+renderIntakeResults();
+loadDeviceTypeLibrary();
+loadInventory();
 </script>
 {% endblock %}

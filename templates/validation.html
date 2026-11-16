@@ -585,18 +585,24 @@ function renderValidationRows(){
   tbody.innerHTML = '';
   if(!rows.length){
     const hasFetched = dataset.validateAll && dataset.validateAll.ok === true;
+    if(_valTable) _valTable.style.display = 'none';
     if(hasFetched){
-      if(_valTable) _valTable.style.display = 'none';
       renderEmptyState('val-empty-wrap', {
         title: 'No validation results yet',
         body: 'Run Validate All to check port reachability and service availability for every device in the project.',
         actions: [
-          { label: 'Validate All',   onclick: "setValidationMode('Live', document.querySelector('#validation-mode-tabs button'))", primary: true },
-          { label: 'Go to Devices',  href: '/tools/devices' }
+          { label: 'Validate All',    onclick: "setValidationMode('Live', document.querySelector('#validation-mode-tabs button'))", primary: true },
+          { label: 'View Inventory',  href: '/tools/intake' }
         ]
       });
     } else {
-      tbody.innerHTML = '<tr><td colspan="6" style="color:#6b7280;text-align:center;padding:1rem">No validation rows available for this mode/view.</td></tr>';
+      renderEmptyState('val-empty-wrap', {
+        title: 'No validation run yet',
+        body: 'Select Live to check port reachability and service availability, or Logical to validate system relationships from your LAN sheet.',
+        actions: [
+          { label: 'Run Live Validation', onclick: "setValidationMode('Live', document.querySelector('#validation-mode-tabs button'))", primary: true }
+        ]
+      });
     }
     return;
   }

@@ -14,3 +14,15 @@ app.py.bak*
 PROJECT_STATE.md.bak*
 PROJECT_STATE.bak*
 *_snapshot_*.json
+
+# --- W36.0: project data and local clutter (never commit) ---
+data/*/
+data/current_project.json
+data/*.restore_tmp_*
+data/*.pyc.*
+*.restore_tmp_*
+settings.json.tmp
+.pycache_tmp/
+server.out.txt
+server.err.txt
+.claude/settings.local.json

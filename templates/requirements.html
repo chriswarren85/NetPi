@@ -1004,10 +1004,10 @@ function renderRequirementRows(){
     if(_reqTable) _reqTable.style.display = 'none';
     renderEmptyState('req-empty-wrap', {
       title: 'No communication profiles yet',
-      body: 'Communication profiles are generated from your device types. Classify your devices first, then generate profiles here.',
+      body: 'Communication profiles are derived from the device types assigned on your LAN sheet. Assign types there first, then generate profiles here.',
       actions: [
         { label: 'Generate profiles', onclick: 'startRequirementsGeneration()', primary: true },
-        { label: 'Classify devices',  href: '/tools/devices' }
+        { label: 'View LAN Sheet',    href: '/tools/lan-sheet' }
       ]
     });
     return;

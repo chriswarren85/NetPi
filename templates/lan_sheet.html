@@ -10,7 +10,7 @@
     <button class="btn btn-primary" onclick="syncFromDeviceList()">Sync from Device List</button>
     <button class="btn" onclick="createVlanGroups()">Create VLAN Groups for Project</button>
     <a class="btn" href="/tools/intake#paste-list-panel">Paste Import</a>
-    <a class="btn" href="/tools/devices">Device List</a>
+    <a class="btn" href="/tools/intake">Device Intake</a>
     <select id="ls-scan-mode-select" style="width:140px" title="Scan mode">
       <option value="av_port_probe">AV Port Probe</option>
       <option value="standard">Standard</option>
@@ -377,10 +377,10 @@ function renderSheet(){
       if(_lanTable) _lanTable.style.display = 'none';
       renderEmptyState('lan-empty-wrap', {
         title: 'No LAN sheet entries yet',
-        body: 'The LAN sheet is your design register and the source of truth for all generated deliverables. Add devices manually or import from the intake workflow.',
+        body: 'The LAN sheet is your design register and source of truth for all generated deliverables. Discover devices on the Intake page first, then sync them here.',
         actions: [
           { label: '+ Add device',  onclick: 'lcAddRow()', primary: true },
-          { label: 'Paste Import',  href: '/tools/devices#intake' }
+          { label: 'Go to Intake',  href: '/tools/intake' }
         ]
       });
       return;
