@@ -18,6 +18,12 @@ def tmp_data_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(netpi_app, "DATA_DIR", str(tmp_path))
     monkeypatch.setattr(netpi_app, "_ACTIVE_PROJECT_ID", "default")
 
+    # These are built from DATA_DIR at import time, so DATA_DIR alone isn't enough —
+    # without this they keep pointing at the real repo's data/ files.
+    monkeypatch.setattr(netpi_app, "CURRENT_PROJECT_STATE_FILE", str(tmp_path / "current_project.json"))
+    monkeypatch.setattr(netpi_app, "LEGACY_FINGERPRINTS_FILE", str(tmp_path / "fingerprints.json"))
+    monkeypatch.setattr(netpi_app, "LEGACY_DEVICE_EVIDENCE_FILE", str(tmp_path / "device_evidence.json"))
+
     # Create the default project directory with empty device/settings files
     project_dir = tmp_path / "default"
     project_dir.mkdir(parents=True, exist_ok=True)
