@@ -12545,6 +12545,11 @@ def _port_is_free(port):
             return False
 
 
+def _resolve_bind_host():
+    """W36.8: localhost by default; set NETPI_HOST=0.0.0.0 to allow LAN access deliberately."""
+    return (os.environ.get("NETPI_HOST") or "127.0.0.1").strip()
+
+
 def startup_checks(port=5000):
     """Validate the environment before binding Flask.  Exits on fatal errors."""
     import logging
@@ -12684,6 +12689,13 @@ if __name__ == '__main__':
     startup_checks()
     tool_check()
     _start_stale_scheduler()
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    host = _resolve_bind_host()
+    if host not in ("127.0.0.1", "localhost"):
+        logging.getLogger("netpi.startup").warning(
+            "NetPi is reachable from other devices on this network (NETPI_HOST=%s). No login is enforced.",
+            host,
+        )
+    logging.getLogger("netpi.startup").info("Listening on http://%s:5000/tools/", host)
+    app.run(host=host, port=5000, debug=False)
 
 
