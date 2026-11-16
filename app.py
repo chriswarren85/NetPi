@@ -12647,6 +12647,31 @@ def err_unhandled(exc):
     raise exc
 
 
+@app.after_request
+def _enforce_api_error_shape(response):
+    # W36.2 (AF-05): additive only — never removes or renames keys.
+    if not request.path.startswith('/tools/api/'):
+        return response
+    if response.direct_passthrough or not response.is_json:
+        return response
+    body = response.get_json(silent=True)
+    if not isinstance(body, dict):
+        return response
+    is_error = response.status_code >= 400 or body.get("ok") is False
+    if not is_error:
+        return response
+    changed = False
+    if "ok" not in body and response.status_code >= 400:
+        body["ok"] = False; changed = True
+    if "timestamp" not in body:
+        body["timestamp"] = utc_now_iso(); changed = True
+    if "error" not in body and response.status_code >= 400:
+        body["error"] = body.get("message") or f"HTTP {response.status_code}"; changed = True
+    if changed:
+        response.set_data(json.dumps(body))
+    return response
+
+
 if __name__ == '__main__':
     import atexit, logging
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
