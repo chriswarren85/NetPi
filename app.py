@@ -4919,15 +4919,24 @@ def _load_project_json_artifact(candidates):
     return None, ""
 
 
-def _normalize_validation_status(value):
+def _normalize_export_status(value):
     token = str(value or "").strip().lower()
-    if token in {"pass", "ok"}:
+    if token in {"pass", "ok", "info"}:
         return "PASS"
     if token in {"warn", "warning"}:
         return "WARN"
     if token in {"fail", "error"}:
         return "FAIL"
     return "UNKNOWN"
+
+
+EXPORT_INFO_NOTE = "Passed; VLAN scope not confirmed. Confirm device VLANs on the LAN sheet."
+
+
+def _export_recommended_action(raw_status, status):
+    if str(raw_status or "").strip().lower() == "info":
+        return EXPORT_INFO_NOTE
+    return _validation_recommended_action(status)
 
 
 def _vlan_lookup(settings):
@@ -7044,7 +7053,8 @@ def _build_validation_export_rows(validate_all_results, validate_system_results)
         checks = list(row.get("results") or [])
         if checks:
             for check in checks:
-                status = _normalize_validation_status(check.get("status"))
+                raw_status = check.get("status")
+                status = _normalize_export_status(raw_status)
                 device_rows.append({
                     "system": "",
                     "device": device_name,
@@ -7053,12 +7063,13 @@ def _build_validation_export_rows(validate_all_results, validate_system_results)
                     "result": status,
                     "method used": check.get("check") or "",
                     "confidence": row.get("confidence_score") or "",
-                    "recommended action": _validation_recommended_action(status),
+                    "recommended action": _export_recommended_action(raw_status, status),
                     "evidence source": "validate_all.results",
                     "sign-off": "",
                 })
         else:
-            status = _normalize_validation_status(row.get("overall"))
+            raw_status = row.get("overall")
+            status = _normalize_export_status(raw_status)
             device_rows.append({
                 "system": "",
                 "device": device_name,
@@ -7067,14 +7078,15 @@ def _build_validation_export_rows(validate_all_results, validate_system_results)
                 "result": status,
                 "method used": "overall",
                 "confidence": row.get("confidence_score") or "",
-                "recommended action": _validation_recommended_action(status),
+                "recommended action": _export_recommended_action(raw_status, status),
                 "evidence source": "validate_all.results",
                 "sign-off": "",
             })
 
     system_rows = []
     for row in validate_system_results or []:
-        status = _normalize_validation_status(row.get("status"))
+        raw_status = row.get("status")
+        status = _normalize_export_status(raw_status)
         system_rows.append({
             "system": row.get("system_check") or "",
             "device": row.get("from_device") or row.get("from_ip") or "",
@@ -7083,7 +7095,7 @@ def _build_validation_export_rows(validate_all_results, validate_system_results)
             "result": status,
             "method used": row.get("relationship_type") or "system_validation",
             "confidence": row.get("confidence") or "",
-            "recommended action": _validation_recommended_action(status),
+            "recommended action": _export_recommended_action(raw_status, status),
             "evidence source": "validate_systems.results",
             "sign-off": "",
         })
