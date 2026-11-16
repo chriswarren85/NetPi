@@ -4615,8 +4615,7 @@ def save_run(results):
     ts = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     path = os.path.join(runs_dir, f'{ts}.json')
 
-    with open(path, 'w') as f:
-        json.dump(results, f, indent=2)
+    safe_write_json(path, results)
 
     return path
 
@@ -12304,8 +12303,7 @@ def api_ai_baseline_record():
                 existing = {}
 
         updated = update_baseline(existing, snapshot)
-        with open(baseline_file, "w") as f:
-            json.dump(updated, f, indent=2)
+        safe_write_json(baseline_file, updated)
 
         return jsonify({
             "ok": True,
